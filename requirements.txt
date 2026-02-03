@@ -1,0 +1,8 @@
+invoke
+pytest
+numpy
+pandas
+matplotlib
+scipy
+seaborn
+cruft

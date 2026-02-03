@@ -1,0 +1,16 @@
+{
+  "template": "https://github.com/lelegod/cookiecutter-course-template.git",
+  "commit": "5907deb71c760c9870d47b9e7bd7f7986c7399e3",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "Python HPC",
+      "project_slug": "python_hpc",
+      "author_name": "Kyle Nathan Yahya",
+      "python_version": "3.12",
+      "_template": "https://github.com/lelegod/cookiecutter-course-template.git",
+      "_commit": "5907deb71c760c9870d47b9e7bd7f7986c7399e3"
+    }
+  },
+  "directory": null
+}

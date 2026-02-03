@@ -1,0 +1,38 @@
+# gitignore
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+.env
+.venv/
+env/
+venv/
+.idea/
+notebooks/.ipynb_checkpoints
+
+# LaTeX generated files
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.dvi
+*.bbl
+*.blg
+*.pdf
+
+# OS / System / IDE items
+.DS_Store
+.DS_Store?
+._*
+.Trashes
+ehthumbs.db
+Thumbs.db
+.Spotlight-V100
+Desktop.ini
+$RECYCLE.BIN/
