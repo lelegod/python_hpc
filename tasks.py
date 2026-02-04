@@ -44,19 +44,3 @@ def sync(c: Context):
         c.run(f"conda run -n {COURSE_NAME} cruft update", echo=True, pty=not WINDOWS)
     else:
         c.run("cruft update", echo=True, pty=not WINDOWS)
-
-@task
-def hpc_get(c: Context, week_num: int, file_name: str):
-    """Transfer files from HPC to local"""
-    hpc_path = f"Documents/python_hpc/week{week_num}/{file_name}"
-    if not WINDOWS:
-        local_path = f"/Users/kyleelyk/Documents/DTU/SEM2/python_hpc/week{week_num}/{file_name}"
-    c.run(f"scp s252786@login.hpc.dtu.dk:{hpc_path} {local_path}", echo=True, pty=not WINDOWS)
-
-@task
-def hpc_send(c: Context, week_num: int, file_name: str):
-    """Send files from local to HPC"""
-    hpc_path = f"Documents/python_hpc/week{week_num}/{file_name}"
-    if not WINDOWS:
-        local_path = f"/Users/kyleelyk/Documents/DTU/SEM2/python_hpc/week{week_num}/{file_name}"
-    c.run(f"scp {local_path} s252786@login.hpc.dtu.dk:{hpc_path}", echo=True, pty=not WINDOWS)
