@@ -24,7 +24,7 @@ notebooks/.ipynb_checkpoints
 *.dvi
 *.bbl
 *.blg
-*.pdf
+notes/*.pdf
 
 # OS / System / IDE items
 .DS_Store
