@@ -6,3 +6,4 @@ matplotlib
 scipy
 seaborn
 cruft
+ipykernel
