@@ -29,7 +29,7 @@ This project manages dependencies using `conda` and `invoke`.
    ```bash
    invoke install
    ```
-   *Note: This automatically installs packages from `requirements.txt`.*
+   *Note: This automatically installs packages from `requirements.txt` and `requirements_project.txt`.*
 
 ### 2. LaTeX Setup (for Notes)
 
@@ -59,4 +59,5 @@ Install the **LaTeX Workshop** extension by James Yu.
 ## 📂 Project Structure
 - `notes/`: LaTeX notes and weekly summaries.
 - `tasks.py`: Automation scripts.
-- `requirements.txt`: Python dependencies.
+- `requirements.txt`: Basic Python dependencies.
+- `requirements_project.txt`: Course Specific Python dependencies.

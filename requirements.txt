@@ -7,3 +7,5 @@ scipy
 seaborn
 cruft
 ipykernel
+simple-term-menu
+questionary
