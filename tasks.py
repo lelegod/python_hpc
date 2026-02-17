@@ -55,6 +55,8 @@ def hpc_get(c: Context, week_num: int, file_name: str):
     hpc_path = f"Documents/{COURSE_NAME}/week{week_num}/{file_name}"
     if not WINDOWS:
         local_path = f"/Users/kyleelyk/Documents/DTU/SEM2/{COURSE_NAME}/week{week_num}/{file_name}"
+    else:
+        local_path = f"week{week_num}/{file_name}"
     c.run(f"scp s252786@login.hpc.dtu.dk:{hpc_path} {local_path}", echo=True, pty=not WINDOWS)
 
 @task
@@ -63,6 +65,8 @@ def hpc_post(c: Context, week_num: int, file_name: str):
     hpc_path = f"Documents/{COURSE_NAME}/week{week_num}/{file_name}"
     if not WINDOWS:
         local_path = f"/Users/kyleelyk/Documents/DTU/SEM2/{COURSE_NAME}/week{week_num}/{file_name}"
+    else:
+        local_path = f"week{week_num}/{file_name}"
     c.run(f"scp {local_path} s252786@login.hpc.dtu.dk:{hpc_path}", echo=True, pty=not WINDOWS)
 
 @task(help={
