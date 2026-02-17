@@ -1,5 +1,9 @@
-def squarecubes(arr):
-    return (list(map(lambda n: n**2, arr)), list(map(lambda n: n**3, arr)))
+import sys
+
+def grades_check():
+    grades = [int(g) for g in sys.argv[1:]]
+    average = sum(grades) / len(grades)
+    return f"{average} {'Pass' if average >= 5 else 'Fail'}"
 
 if __name__ == "__main__":
-    print(f"Output: {squarecubes([1, 2, 3, 4])}")
+    print(f"{grades_check()}")
