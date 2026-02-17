@@ -33,7 +33,7 @@ def create_env(c: Context, path=None):
         c.run(f'"{pip_exe}" install -r requirements.txt', echo=True, pty=not WINDOWS)
         c.run(f'"{pip_exe}" install -r requirements_project.txt', echo=True, pty=not WINDOWS)
         if SPECIAL_PACKAGES:
-            c.run(f'"{pip_exe}" install {' '.join(SPECIAL_PACKAGES)}', echo=True, pty=not WINDOWS)
+            c.run(f'"{pip_exe}" install {" ".join(SPECIAL_PACKAGES)}', echo=True, pty=not WINDOWS)
     else:
         c.run(f'conda create -n {COURSE_NAME} python={PYTHON_VERSION} pip --no-default-packages --yes', echo=True, pty=not WINDOWS)
         c.run(f"conda run -n {COURSE_NAME} pip install -r requirements.txt", echo=True, pty=not WINDOWS)
