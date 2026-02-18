@@ -1,11 +1,10 @@
 #!/bin/bash
 #BSUB -J python
 #BSUB -q hpc
-#BSUB -W 1
-#BSUB -R "rusage[mem=512MB]"
+#BSUB -W 10
+#BSUB -R "rusage[mem=16384MB]"
 #BSUB -n 1
 #BSUB -R "span[hosts=1]"
-#BSUB -R "select[model==XeonGold6226R]"
 #BSUB -o python%J.out
 #BSUB -e python_%J.err
 
