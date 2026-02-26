@@ -129,6 +129,6 @@ def run_file(c: Context, folder: str, args: str = ""):
     cmd_args = f" {args}" if args else ""
     
     if os.environ.get("CONDA_DEFAULT_ENV") == COURSE_NAME:
-        c.run(f"python {file_path}{cmd_args}", echo=True, pty=not WINDOWS)
+        c.run(f"python -u {file_path}{cmd_args}", echo=True, pty=not WINDOWS)
     else:
-        c.run(f'conda run -n {COURSE_NAME} python "{file_path}"{cmd_args}', echo=True, pty=not WINDOWS)
+        c.run(f'conda run --no-capture-output -n {COURSE_NAME} python -u "{file_path}"{cmd_args}', echo=True, pty=not WINDOWS)
