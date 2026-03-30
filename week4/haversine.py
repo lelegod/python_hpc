@@ -13,17 +13,17 @@ def distance_matrix(p1, p2):
     #         D[i, j] = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
     
     # No loop
-    # dsin2 = np.sin(0.5 * (p1[:, None, :] - p2[None, :, :])) ** 2
-    # cosprod = np.cos(p1[:, None, 0]) * np.cos(p2[None, :, 0])
-    # a = dsin2[:, :, 0] + cosprod * dsin2[:, :, 1]
-    # D = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    dsin2 = np.sin(0.5 * (p1[:, None, :] - p2[None, :, :])) ** 2
+    cosprod = np.cos(p1[:, None, 0]) * np.cos(p2[None, :, 0])
+    a = dsin2[:, :, 0] + cosprod * dsin2[:, :, 1]
+    D = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
     # One loop
-    for i in range(len(p1)):
-        dsin2 = np.sin(0.5 * (p1[i] - p2)) ** 2
-        cosprod = np.cos(p1[i, 0]) * np.cos(p2[:, 0])
-        a = dsin2[:, 0] + cosprod * dsin2[:, 1]
-        D[i, :] = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+    # for i in range(len(p1)):
+    #     dsin2 = np.sin(0.5 * (p1[i] - p2)) ** 2
+    #     cosprod = np.cos(p1[i, 0]) * np.cos(p2[:, 0])
+    #     a = dsin2[:, 0] + cosprod * dsin2[:, 1]
+    #     D[i, :] = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
     
     D *= 6371  # Earth radius in km
     return D
