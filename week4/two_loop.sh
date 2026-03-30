@@ -12,7 +12,7 @@
 source /dtu/projects/02613_2025/conda/conda_init.sh
 conda activate 02613
 
-# python haversine.py /dtu/projects/02613_2025/data/locations/locations_1000.csv
+# python -m cProfile -s cumulative haversine.py /dtu/projects/02613_2025/data/locations/locations_1000.csv
 
 # Autolab
 python -m cProfile -s cumulative haversine.py input.csv
