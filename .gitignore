@@ -36,3 +36,10 @@ Thumbs.db
 .Spotlight-V100
 Desktop.ini
 $RECYCLE.BIN/
+
+# Data
+project/data
+project/*.tar.gz
+
+# Claude Docs
+docs/

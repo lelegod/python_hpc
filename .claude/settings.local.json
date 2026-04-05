@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import pdfplumber; pdf = pdfplumber.open\\('D:/Program Files/SEM2/python_hpc/project/project_exercises.pdf'\\); print\\(pdf.pages[0].extract_text\\(\\)\\)\")",
+      "Bash(python -c \"import fitz; doc = fitz.open\\('D:/Program Files/SEM2/python_hpc/project/project_exercises.pdf'\\); print\\(doc[0].get_text\\(\\)\\)\")",
+      "Bash(conda run -n python-hpc python -c ':*)",
+      "Bash(conda run:*)",
+      "Read(//d/Program Files/SEM2/**)",
+      "Bash(mkdir -p \"D:/Program Files/SEM2/python_hpc/project/data\")",
+      "Bash(tar -xzf \"D:/Program Files/SEM2/python_hpc/project/swiss_data.tar.gz\" -C \"D:/Program Files/SEM2/python_hpc/project/data/\")",
+      "Bash(mkdir -p \"/d/Program Files/SEM2/python_hpc/project/data\")",
+      "Bash(tar -xzf \"/d/Program Files/SEM2/python_hpc/project/swiss_data.tar.gz\" -C \"/d/Program Files/SEM2/python_hpc/project/data/\")"
+    ]
+  }
+}
