@@ -6,8 +6,10 @@
 #BSUB -n 16
 #BSUB -R "span[hosts=1]"
 #BSUB -R "select[model==XeonGold6226R]"
-#BSUB -o mandelbrot_%J.out
-#BSUB -e mandelbrot_%J.err
+#BSUB -o logs/mandelbrot/mandelbrot_%J.out
+#BSUB -e logs/mandelbrot/mandelbrot_%J.err
+
+mkdir -p logs/mandelbrot
 
 export NUMBA_DISABLE_CUDA=1
 source /dtu/projects/02613_2025/conda/conda_init.sh
