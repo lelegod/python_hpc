@@ -12,12 +12,10 @@ def mandelbrot_escape_time(c):
             return i
     return 100
 
-def generate_mandelbrot_set(points, num_processes):
-    chunk_size = len(points) // num_processes
-    pool = multiprocessing.Pool(num_processes)
-    escape_times = pool.map(mandelbrot_escape_time, points, chunksize=chunk_size)
-    pool.close()
-    pool.join()
+def generate_mandelbrot_set_chunks(points, num_processes):
+    chunk_size = 100
+    with multiprocessing.Pool(num_processes) as pool:
+        escape_times = pool.map(mandelbrot_escape_time, points, chunksize=chunk_size)
     return np.array(escape_times)
 
 def plot_mandelbrot(escape_times):
@@ -37,7 +35,7 @@ if __name__ == "__main__":
     points = np.array([complex(x, y) for x in x_values for y in y_values])
 
     t0 = time.time()
-    mandelbrot_set = generate_mandelbrot_set(points, num_proc)
+    mandelbrot_set = generate_mandelbrot_set_chunks(points, num_proc)
     elapsed = time.time() - t0
 
     print(f"{num_proc},{elapsed:.4f}")
