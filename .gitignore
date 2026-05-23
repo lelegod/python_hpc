@@ -18,7 +18,6 @@ notebooks/.ipynb_checkpoints
 *.fdb_latexmk
 *.fls
 *.log
-*.out
 *.synctex.gz
 *.toc
 *.dvi
