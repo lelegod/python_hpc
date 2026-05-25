@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="exercises-for-week-6">Exercises for Week 6</h1>
+<hr>
+<h2 id="1-mean-faces">1. Mean Faces</h2>
+<p><img alt="CelebA Preview" src="figs/week0506/celeba_preview.png"></p>
+<p>In this exercise we will use the <a href="http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html">CelebA</a> dataset of celebrity images as our data source. Examples are shown above.</p>
+<p>You can find it at: <code>/dtu/projects/02613_2025/data/celeba/</code>. We have also created smaller subsets for fast testing. To begin with use the 'celeba_200.npy' file for testing and then work your way up to at least the 'celeba_100K.npy' version.</p>
+<p>Each image is <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>128</mn><mi>×</mi><mn>128</mn></mrow></math> RGB pixels. They are stored in an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi><mi>×</mi><mn>128</mn><mi>×</mi><mn>128</mn><mi>×</mi><mn>3</mn></mrow></math> array, such that <code>array[i]</code> is a <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>128</mn><mi>×</mi><mn>128</mn><mi>×</mi><mn>3</mn></mrow></math> image. The goal is to compute the mean (i.e., average) face by summing all the images and then dividing by the number of images. Since CelebA contains over 200,0000 images, we want the sum to be parallel, i.e., we want a parallel reduction.</p>
+<p>In order to get good performance, we need to minimize data transferred between processes. We can do this by creating an array of shared memory and then performing the reduction in place. The template below sets up a shared array and performs a 'dummy' operation. Adapt it for this exercise.</p>
+<pre><code>import ctypes
+import multiprocessing as mp
+import sys
+from time import perf_counter as time
+import numpy as np
+from PIL import Image
+
+
+def init(shared_arr_):
+    global shared_arr
+    shared_arr = shared_arr_
+
+
+def tonumpyarray(mp_arr):
+    return np.frombuffer(mp_arr, dtype='float32')
+
+
+def reduce_step(args):
+    b, e, s, elemshape = args
+    arr = tonumpyarray(shared_arr).reshape((-1,) + elemshape)
+    # Change the code below to compute a step of the reduction
+    # ---------------------------8&lt;---------------------------
+    arr[b:e:s] = 1.0 - arr[b:e:s]  # &lt;-- Dummy op. Replace with correct
+
+
+if __name__ == '__main__':
+    n_processes = 1
+    chunk = 2
+
+    # Create shared array
+    data = np.load(sys.argv[1])
+    elemshape = data.shape[1:]
+    shared_arr = mp.RawArray(ctypes.c_float, data.size)
+    arr = tonumpyarray(shared_arr).reshape(data.shape)
+    np.copyto(arr, data)
+    del data
+
+    # Run parallel sum
+    t = time()
+    pool = mp.Pool(n_processes, initializer=init, initargs=(shared_arr,))
+
+    # Change the code below to compute a step of the reduction
+    # ---------------------------8&lt;---------------------------
+    pool.map(reduce_step,
+             [(i, i + chunk, 1, elemshape) for i in range(0, len(arr), chunk)],
+             chunksize=1)
+
+    # Write output
+    print(time() - t)
+    final_image = arr[0]
+    # final_image /= len(arr) # For mean
+    Image.fromarray(
+        (255 * final_image.astype(float)).astype('uint8')
+    ).save('result.png')
+</code></pre>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Reduction-Step-1" class="autolablink" target="_self">Autolab</a> Modify the provided example to compute the first step of a parallel reduction, i.e., every second element is summed with its neighbor. For example, after this step, an input of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">[</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>4</mn><mo stretchy="false">]</mo></mrow></math> should be <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mo stretchy="false">[</mo><mn>1</mn><mo>+</mo><mn>2</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo>+</mo><mn>4</mn><mo>,</mo><mn>4</mn><mo stretchy="false">]</mo><mo>=</mo><mo stretchy="false">[</mo><mn>3</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>7</mn><mo>,</mo><mn>4</mn><mo stretchy="false">]</mo></mrow></math>.<br>Hint: for testing, make some dummy data like:</p>
+<pre><code>import numpy as np
+arr = np.arange(10)  # 0 to 9
+arr = arr.astype('float32')
+arr = arr[:, None, None, None]  # (10, 1, 1, 1)
+np.save('dummydata.npy', arr)
+</code></pre>
+<p>Then, comment out the lines saving the image and instead just print the array to manually inspect the results.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Reduction-Full" class="autolablink" target="_self">Autolab</a> Further modify the example to compute the full reduction. Remember to divide by the number images at the end to compute the mean. Hint: each step of the reduction should be a separate call to \texttt{pool.map}.</p>
+</li>
+<li>
+<p>Play with the chunk size (the <code>chunk</code> variable in the code). What value gives the best performance for you? Note, this will depend on the size of the subset you use, so make sure to try the program for at least the 100,000 subset.</p>
+</li>
+<li>
+<p>Run your program as a batch job for varying number of processes and create a speedup plot. Run the program for at least the 100,000 subset. For consistent results, you should run the program 3 times and use the average time. What do you see? Is anything surprising? Hint: <strong>this will take time</strong> for the 100K subset or above. While you wait, start the next exercise.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Reduction-Quiz" class="autolablink" target="_self">Autolab</a> Repeat the previous exercise, but run Python under <code>numactl --interleave=all</code>. What changed? Hint: see lecture slides for examples with <code>numactl</code>.</p>
+</li>
+<li>
+<p>Compare your fastest runtime with <code>np.sum</code>. Do you manage to compute the sum faster? If so, by how much?</p>
+</li>
+</ol></body></html>
