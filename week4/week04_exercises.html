@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="exercises-for-week-4">Exercises for Week 4</h1>
+<hr>
+<h2 id="1-broadcasting">1. Broadcasting</h2>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Broadcasting-1" class="autolablink" target="_self">Autolab</a> Write a Python function <code>standardize_rows</code> which receives three inputs: <code>data</code> with shape <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mi>×</mi><mi>d</mi></mrow></math>, <code>mean</code> with shape <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi></mrow></math>, <code>std</code> with shape <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi></mrow></math>. It must then subtract <code>mean</code> from each row of <code>data</code> and then divide by <code>std</code>. Finally, it must return the result. Do not use any NumPy functions.<br><em>Input:</em> Three arrays: <code>data</code> with shape <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mi>×</mi><mi>d</mi></mrow></math>, <code>mean</code> with shape <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi></mrow></math>, <code>std</code> with shape <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>d</mi></mrow></math>.<br><em>Output:</em> a new array <code>output</code> where <code>output[i] = (data[i] - mean) / std</code>.<br><em>Example:</em> For inputs <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mtext mathvariant="monospace">data</mtext><mo>=</mo><mo>[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>3</mn></mtd></mtr><mtr><mtd><mn>4</mn></mtd><mtd><mn>5</mn></mtd><mtd><mn>6</mn></mtd></mtr></mtable><mo>]</mo><mo>,</mo><mspace width="0.167em"></mspace><mtext mathvariant="monospace">mean</mtext><mo>=</mo><mo>[</mo><mtable><mtr><mtd><mn>0.5</mn></mtd><mtd><mn>1</mn></mtd><mtd><mn>3</mn></mtd></mtr></mtable><mo>]</mo><mtext>&nbsp;and&nbsp;</mtext><mtext mathvariant="monospace">std</mtext><mo>=</mo><mo>[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>3</mn></mtd></mtr></mtable><mo>]</mo></mrow></math> the output should be <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>0.5</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>3.5</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>1</mn></mtd></mtr></mtable><mo>]</mo><mspace width="0.167em"></mspace><mo>.</mo></mrow></math></p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Broadcasting-2" class="autolablink" target="_self">Autolab</a> Write a Python function <code>outer</code> that receives two vectors as input and returns the <a href="https://en.wikipedia.org/wiki/Outer_product">outer product</a> of the two. Do not use any NumPy functions.<br><em>Input:</em> Two vectors as NumPy arrays of lenght <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi></mrow></math> respectively.<br><em>Output:</em> The <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mi>×</mi><mi>m</mi></mrow></math> matrix giving the outer product.<br><em>Example:</em> The outer product of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>x</mi><mo>=</mo><mo stretchy="false">[</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo stretchy="false">]</mo></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>y</mi><mo>=</mo><mo stretchy="false">[</mo><mn>3</mn><mo>,</mo><mn>4</mn><mo>,</mo><mn>5</mn><mo stretchy="false">]</mo></mrow></math> is <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>3</mn></mtd><mtd><mn>4</mn></mtd><mtd><mn>5</mn></mtd></mtr><mtr><mtd><mn>6</mn></mtd><mtd><mn>8</mn></mtd><mtd><mn>10</mn></mtd></mtr></mtable><mo>]</mo><mspace width="0.167em"></mspace><mo>.</mo></mrow></math></p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Broadcasting-3" class="autolablink" target="_self">Autolab</a> Write a Python function <code>distmat_1d</code> that receives two vectors as input and returns the distance matrix between them. Do not use for loops or any NumPy functions except for <code>abs</code>.<br><em>Input:</em> Two vectors <code>x</code> and <code>y</code> of length <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi></mrow></math> respectively.<br><em>Output:</em> An <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mi>×</mi><mi>m</mi></mrow></math> matrix <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>D</mi></mrow></math> where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>D</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo><mo stretchy="false">|</mo><msub><mi>x</mi><mi>i</mi></msub><mo>−</mo><msub><mi>y</mi><mi>j</mi></msub><mo stretchy="false">|</mo></mrow></math>.<br><em>Example:</em> For inputs <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>x</mi><mo>=</mo><mo stretchy="false">[</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo stretchy="false">]</mo></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>y</mi><mo>=</mo><mo stretchy="false">[</mo><mn>3</mn><mo>,</mo><mn>0.5</mn><mo>,</mo><mn>1</mn><mo stretchy="false">]</mo></mrow></math> the output should be <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>2</mn></mtd><mtd><mn>0.5</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>1</mn></mtd><mtd><mn>1.5</mn></mtd><mtd><mn>1</mn></mtd></mtr></mtable><mo>]</mo><mspace width="0.167em"></mspace><mo>.</mo></mrow></math></p>
+</li>
+</ol>
+<h2 id="2-high-performance-haversine">2. High Performance Haversine</h2>
+<p>In this exercise, we will expand on the example from section 2.2 in Fast Python about profiling code for the Haversine distance. Consider the following Python program:</p>
+<pre><code>import sys
+import numpy as np
+
+def distance_matrix(p1, p2):
+    p1, p2 = np.radians(p1), np.radians(p2)
+
+    D = np.empty((len(p1), len(p2)))
+    for i in range(len(p1)):
+        for j in range(len(p2)):
+            dsin2 = np.sin(0.5 * (p1[i] - p2[j])) ** 2
+            cosprod = np.cos(p1[i, 0]) * np.cos(p2[j, 0])
+            a = dsin2[0] + cosprod * dsin2[1]
+            D[i, j] = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+
+    D *= 6371  # Earth radius in km
+    return D
+
+
+def load_points(fname):
+    data = np.loadtxt(fname, delimiter=',', skiprows=1, usecols=(1, 2))
+    return data
+
+
+def distance_stats(D):
+    # Extract upper triangular part to avoid duplicate entries
+    assert D.shape[0] == D.shape[1], 'D must be square'
+    idx = np.triu_indices(D.shape[0], k=1)
+    distances = D[idx]
+    return {
+        'mean': float(distances.mean()),
+        'std': float(distances.std()),
+        'max': float(distances.max()),
+        'min': float(distances.min()),
+    }
+
+
+fname = sys.argv[1]
+points = load_points(fname)
+D = distance_matrix(points, points)
+stats = distance_stats(D)
+print(stats)
+</code></pre>
+<p>This program loads a set of latitude and longitude coordinates, computes a distance matrix using the Haversine distance, and finally prints some summary statistics.</p>
+<p>The goal of this exercise is to optimize the program through the use of profiling and NumPy. For testing we use the same weather station data as in Fast Python. We have prepared smaller subsets for fast testing. You can find all the data and subsets at <code>/dtu/projects/02613_2025/data/locations/</code>.</p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Two-Loop-Distance-Matrix" class="autolablink" target="_self">Autolab</a> Make a job script that runs the above program on the <code>hpc</code> queue. Request a single core and specify a CPU model so the results are repeatable. For the Autolab submission, assume that the input is always a file with path <code>input.csv</code>.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Profile-Quiz" class="autolablink" target="_self">Autolab</a> Modify your job script so it runs the program under the builtin <code>cProfile</code> profiler. What do you see? In what functions does the program spend the most time?\ Hint: See section 2.1.2 and 2.2.1 in Fast Python.\ Hint: Search for the name of your Python script in the profiler output to focus on the relevant functions. For the second question, use one of the larger datasets.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/One-Loop-Distance-Matrix" class="autolablink" target="_self">Autolab</a> Let us optimize the <code>distance\_matrix</code> function. Using NumPy array operations and broadcasting, rewrite the function so there is only one loop instead of two nested ones.</p>
+</li>
+<li>
+<p>Rerun the profiler. What has changed? Did it get faster? How much / little?</p>
+</li>
+<li>
+<p>Let us now zoom in on the <code>distance_matrix</code> function using line profiling. Using the <code>line_profiler</code>, modify your Python program and job script to run with line profiling enabled on <code>distance_matrix</code>. Inspect the results. What do you see? On what lines should we focus? Hint: See section 2.2.2 in Fast Python.</p>
+</li>
+<li>
+<p>Optimize <code>distance_matrix</code> to improve its performance. There are at least two optimizations you can make:</p>
+<ol>
+<li>Moving a repeated calculation out of the loop to pre-compute once.</li>
+<li>The fact that <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>\arctantwo</mi><mrow><mo stretchy="true" fence="true">(</mo><msqrt><mrow><mi>a</mi></mrow></msqrt><mo>,</mo><msqrt><mrow><mn>1</mn><mo>−</mo><mi>a</mi></mrow></msqrt><mo stretchy="true" fence="true">)</mo></mrow><mo>=</mo><mi>arcsin</mi><mrow><mo stretchy="true" fence="true">(</mo><msqrt><mrow><mi>a</mi></mrow></msqrt><mo stretchy="true" fence="true">)</mo></mrow></mrow></math>. Re-run the profiler. Did it make the code faster? Did it change where time is spent in <code>distance_matrix</code>?</li>
+</ol>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/No-Loop-Distance-Matrix" class="autolablink" target="_self">Autolab</a> Finally, let us see what happens if we eliminate for loops completely. Rewrite <code>distance\_matrix</code> to perform all calculations with NumPy array operations and broadcasting. What happened? Did it get faster?</p>
+</li>
+<li>
+<p>Measure the performance in MFLOP/S for the optimized single loop and the no-loop version of <code>distance_matrix</code>. Use random points as input and vary the number of points from <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>10</mn><mn>1</mn></msup></mrow></math> to <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mn>10</mn><mn>4</mn></msup></mrow></math>. Plot the results and explain what you observe.</p>
+<ol>
+<li>Plot the run time in a loglog plot as a function of the size of the distance matrix in kilobytes. Include CPU cache sizes in your plot. Is one always faster? If yes, which one? If not, when do they switch?</li>
+</ol>
+</li>
+</ol></body></html>

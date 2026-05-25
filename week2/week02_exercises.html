@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="exercises-for-week-2">Exercises for Week 2</h1>
+<hr>
+<p>It is recommended to solve these exercises on the HPC platform, so you gain some experience. Remember to activate the course conda conda environment first (see guide <a href="/d2l/le/lessons/296270/topics/1116695" target="_self">Initializing the 02613 Conda Environment</a> on Learn).</p>
+<h2 id="1-basic-python">1. Basic Python</h2>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Python-1" class="autolablink" target="_self">Autolab</a> Write a Python function called <code>listsum</code> that sums numbers in a list.<br><em>Input:</em> A Python list of numbers.<br><em>Output:</em> A single number which is the sum of the numbers in the input list.<br><em>Example:</em> The input [1, 2, 3, 4] should return 10.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Python-2" class="autolablink" target="_self">Autolab</a> Write a Python function called <code>deduplicate</code> that removes duplicates from a list. Hint: you can use the Python builtin <a href="https://docs.python.org/3.11/library/stdtypes.html#set"><code>set</code></a>.<br><em>Input:</em> A Python list which may contain duplicate elements.<br><em>Output:</em> A Python list containing the unique elements of the input list.<br><em>Example:</em> The input [1, 2, 3, 3, 2, 2, 4] should return [1, 2, 3, 4].</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Python-3" class="autolablink" target="_self">Autolab</a> Write a Python function called <code>sorttuples</code> that sorts a list of tuples according to their last element. Hint: you may use the builtin function <a href="https://docs.python.org/3.11/library/functions.html#sorted"><code>sorted</code></a>. Look at the <code>key</code> parameter.<br><em>Input:</em> A Python list of tuples.<br><em>Output:</em> The input list with elements sorted according to the last element in each tuple.<br><em>Example:</em> The input [(2, 5), (1, 2), (4, 4), (2, 3), (2, 1)] should return [(2, 1), (1, 2), (2, 3), (4, 4), (2, 5)].</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Python-4" class="autolablink" target="_self">Autolab</a> Write a Python function <code>squarecubes</code> which recieves a Python list of numbers and returns two lists containing, respectively, the squares and cubes of each number.<br><em>Input:</em> A Python list of numbers. <br><em>Output:</em> A tuple of two Python lists. The first list contains the squares of the numbers in the input list. The second list contains the cubes.<br><em>Example:</em> The input [1, 2, 3, 4] should return ([1, 4, 9, 16], [1, 8, 27, 64]).</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Python-5" class="autolablink" target="_self">Autolab</a> Write a Python <em>program</em> that will receive any number of numerical grades as command line arguments. It must then compute the mean and print it back to the user followed by "Pass" if the mean is at least 5 and "Fail" otherwise. Hint: you can use <a href="https://docs.python.org/3.11/library/sys.html#sys.argv"><code>sys.argv</code></a> to access the commandline arguments.<br><em>Input:</em> Any number grades given as command line arguments. Each grade will be a number. <br><em>Output:</em> The mean grade, followed by a space, followed by <code>Pass", if the mean is at least 5, otherwise</code>Fail". <br><em>Example:</em> For the input 0, 2, 4 the program should print the string <code>4.0 Fail". For the input [4, 7, 10, 12] the program should print the string</code>8.25 Pass".</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Python-6" class="autolablink" target="_self">Autolab</a> Write a Python <em>program</em> that will receive any amount of numbers as command line arguments. It must then remove all odd numbers and print out the list of even numbers. Hint: you can use the builtin function <a href="https://docs.python.org/3.11/library/functions.html#filter"><code>filter</code></a> or a list comprehension (see example in link). <br><em>Input:</em> Any amount of numbers as command line arguments. <br><em>Output:</em> All even numbers in the input. <br><em>Example:</em> For the input 0, 1, 4, 2, 3, -2 the program should print the string ``[0, 4, 2, -2]".</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Python-7" class="autolablink" target="_self">Autolab</a> Write a Python class <code>Student</code>, that has the student name and a list of courses the student is attending as attributes <code>name</code> and <code>courses</code>. These should given as argument to the class constructor. The class should also have a method&nbsp;<code>attends</code> that receives a course name and returns <code>True</code> if the student is attending that course and <code>False</code> if not.<br><em>Constructor input:</em> The first argument is a string with the student's name. The second is a list of course names, where each course name is a string.<br><em><code>attends</code> input:</em> A string with a course name.<br><em><code>attends</code> output:</em> <code>True</code> if the student attends that course, i.e., it is in the list of courses the student attends. <code>False</code> if not.<br><em>Example</em>: If we create a student as <br><code>s = Student('X', ['01005', '02613'])</code>, we expect that<br><code>s.attends('01005')</code> and <code>s.attends('02613')</code> returns <code>True</code> and<br><code>s.attends('02510')</code> returns <code>False</code>.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Python-8" class="autolablink" target="_self">Autolab</a> Write a Python function <code>coursestudents</code> that a list of <code>Student</code> classes as well as a course name. It must return a new list containing the names of the students that attends that course.<br><em>Input:</em> The first argument is a Python list of <code>Student</code>s. The second is a string specifying a course name.<br><em>Output:</em> A list containing the names of the students that attends the given course.<br><em>Example:</em> Given the list of <code>Student</code>s:<br><code>students = [Student('A', ['01005']), Student('B', ['02613']), &lt;br&gt;Student('C', ['01005', '02613'])]</code>, we expect that<br><code>coursestudents(students, '02613')</code> returns <code>['B', 'C']</code>.<br>Note: Autolab expects the attributes in the Student class to be called <code>name</code> and <code>courses</code>.</p>
+</li>
+</ol>
+<h2 id="2-basic-numpy">2. Basic Numpy</h2>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Numpy-1" class="autolablink" target="_self">Autolab</a> Write a Python function <code>magnitude</code>, which takes an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math>-dimensional vector stored as a NumPy array as input and return its magnitude, i.e., norm.<br><em>Input:</em> An <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math>-dimensional vector stored as a NumPy array.<br><em>Output:</em> A number giving the magnitude of the input vector.<br><em>Example:</em> For the input [1, 1, 3, 3, 4] we expect the output 6.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Numpy-2" class="autolablink" target="_self">Autolab</a> Write a Python <em>program</em> that will receive any amount of numbers as command line arguments. These numbers are the components of an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math>-dimensional vector. The program must then print the magnitude of that vector.<br><em>Input:</em> An <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math>-dimensional vector where each component is given as a command line argument.<br><em>Output:</em> A number giving the magnitude of the input vector.<br><em>Example:</em> For the input 1, 1, 3, 3, 4 we expect the output 6.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Numpy-3" class="autolablink" target="_self">Autolab</a> Write a Python <em>program</em> that will receive any amount of numbers as command line arguments. These numbers are the diagonal of an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mi>×</mi><mi>n</mi></mrow></math> matrix. The program must then save this matrix as a .npy file. Hint: use the <a href="https://numpy.org/devdocs/reference/generated/numpy.save.html">numpy.save</a> function.<br><em>Input:</em> The diagonal of an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mi>×</mi><mi>n</mi></mrow></math> matrix where each component is given as a command line argument.<br><em>Output:</em> A new .npy file containing a matrix with the input numbers as the diagonal.<br><em>Example:</em> For the input 1 8 4 5, we expect the program to create a .npy file with the matrix</p>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>8</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>4</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>5</mn></mtd></mtr></mtable><mo>]</mo><mo>.</mo></mrow></math></p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Numpy-4" class="autolablink" target="_self">Autolab</a> Write a Python <em>program</em> that receives the path to a .npy file as a command line argument. This file will contain an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mi>×</mi><mi>m</mi></mrow></math> matrix. The program must then save two new files:</p>
+<ol>
+<li>'cols.npy' containing an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>m</mi></mrow></math>-dimensional vector with the means of each column</li>
+<li>'rows.npy' containing an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math>-dimensional vector with the means of each row.</li>
+</ol>
+<p>Hint: use the <a href="https://numpy.org/devdocs/reference/generated/numpy.load.html">numpy.load</a> function.<br><em>Input:</em> The path to an .npy file containing an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mi>×</mi><mi>m</mi></mrow></math> matrix. <br><em>Output:</em> Two new files 'cols.npy' and 'rows.npy' containing, respectively, the column and row means. <br><em>Example:</em> For a file containing the matrix</p>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>3</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>5</mn></mtd><mtd><mn>7</mn></mtd><mtd><mn>3</mn></mtd><mtd><mn>9</mn></mtd></mtr><mtr><mtd><mn>9</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>4</mn></mtd><mtd><mn>6</mn></mtd></mtr></mtable><mo>]</mo><mo>.</mo></mrow></math></p>
+<p>we expect 'cols.npy' to contain the vector [5, 4, 3, 5] and 'rows.npy' to contain the vector [1.5, 6, 5.25].</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Numpy-5" class="autolablink" target="_self">Autolab</a> Write a Python program that receives the path to a .npy file as well as a strictly positive integer <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi></mrow></math> as a command line argument. The .npy files will contain a matrix <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>A</mi></mrow></math>, and the program must create a new .npy file containing the results of multiplying <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>A</mi></mrow></math> with itself <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi></mrow></math> times, i.e., <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>A</mi><mrow><mi>p</mi><mo>+</mo><mn>1</mn></mrow></msup></mrow></math>. The program must <em>also</em> print the time (in seconds) that it took to perform these multiplications. Hint: you can use <a href="https://docs.python.org/3/library/time.html#time.perf_counter"><code>perf_counter</code></a> from the <a href="https://docs.python.org/3/library/time.html"><code>time</code></a> module.<br><em>Input:</em> The path to an .npy file containing a matrix <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>A</mi></mrow></math> and a strictly positive integer <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi></mrow></math> given as command line arguments.<br><em>Output:</em> A .npy file containing <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>A</mi><mrow><mi>p</mi><mo>+</mo><mn>1</mn></mrow></msup></mrow></math>. Also, the time (in seconds) it took to compute <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>A</mi><mrow><mi>p</mi><mo>+</mo><mn>1</mn></mrow></msup></mrow></math> must be printed.<br><em>Example:</em> For a file containing the matrix</p>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>3</mn></mtd></mtr><mtr><mtd><mn>5</mn></mtd><mtd><mn>7</mn></mtd></mtr></mtable><mo>]</mo><mo>.</mo></mrow></math></p>
+<p>and for <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi><mo>=</mo><mn>2</mn></mrow></math>, we expect the output to contain the matrix</p>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>3</mn></mtd></mtr><mtr><mtd><mn>5</mn></mtd><mtd><mn>7</mn></mtd></mtr></mtable><mo>]</mo><msup><mspace width="0.167em"></mspace><mrow><mn>2</mn><mo>+</mo><mn>1</mn></mrow></msup><mo>=</mo><mo>[</mo><mtable><mtr><mtd><mn>136</mn></mtd><mtd><mn>216</mn></mtd></mtr><mtr><mtd><mn>360</mn></mtd><mtd><mn>568</mn></mtd></mtr></mtable><mo>]</mo><mo>.</mo></mrow></math></p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Basic-Numpy-6" class="autolablink" target="_self">Autolab</a> Run the above program as a batch job. Assume the input file always has the path ./input.npy and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi></mrow></math> is always 10. Submit the job to the hpc' queue and request 1 core. Remember to show good etiquette and also specify a job name, expected run time, memory usage and files for stdout and stderr. The autolab handin must be a zip-file containing both your submit script and your Python script. Hint: remember to initialize the course conda environment in the job script (see&nbsp;<a href="/d2l/le/lessons/296270/topics/1116695" target="_self">Initializing the 02613 Conda Environment</a>).</p>
+</li>
+</ol></body></html>

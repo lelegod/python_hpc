@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="answers-for-week-5-6">Answers for Week 5 &amp; 6</h1>
+<hr>
+<h2 id="1-amdahls-law">1. Amdahl's Law</h2>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Amdahl-Quiz" class="autolablink" target="_self">Autolab</a> Suppose that a specific task consists of two subtasks. The first subtask retrieves data from a file; it takes 20 seconds to execute on a given system, and it cannot be parallelized. The second subtask processes a large number of data records; it takes 100 seconds to execute sequentially. Each data record can be processed independently, so the second subtask is easily parallelized.</p>
+<ol>
+<li>
+<p>What is the parallel fraction of the task consisting of the two subtasks?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - answer omitted</p>
+</div>
+</li>
+<li>
+<p>What is the theoretical speedup for <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi><mo>=</mo><mn>10</mn></mrow></math> processors?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - answer omitted</p>
+</div>
+</li>
+<li>
+<p>What is the theoretical maximum speedup?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - answer omitted</p>
+</div>
+</li>
+<li>
+<p>Imagine we currently have 4 processors available for parallization. To improve performance, we have two options:</p>
+<ol>
+<li>
+<p>Optimize the first subtask so we can retrieve the data from the file in 5 seconds instead of 20.</p>
+</li>
+<li>
+<p>Purchase more processors so we have 8 processors available instead of 4.</p>
+</li>
+</ol>
+<p>Which option will provide the shortest runtime?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - answer omitted</p>
+</div>
+</li>
+</ol>
+</li>
+</ol>
+<h2 id="2-parallel">2. Parallel <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>π</mi></mrow></math></h2>
+<p>The goal of this exercise is to use parallelization to improve the performance of our code. We will use the Monte Carlo approximation of pi from Advanced Python Programming, Chapter 7. Let's take a look at the three different implementations from Advanced Python Programming:</p>
+<ul>
+<li>
+<p>Implementation 1: Fully serial</p>
+<pre><code>import random
+
+samples = 1000000
+hits = 0
+
+for i in range(samples):
+    x = random.uniform(-1.0, 1.0)
+    y = random.uniform(-1.0, 1.0)
+    if x**2 + y**2 &lt;= 1:
+        hits += 1
+
+pi = 4.0 * hits/samples
+</code></pre>
+</li>
+<li>
+<p>Implementation 2: Fully parallel</p>
+<pre><code>import random
+import multiprocessing
+
+def sample():
+    x = random.uniform(-1.0, 1.0)
+    y = random.uniform(-1.0, 1.0)
+    if x**2 + y**2 &lt;= 1:
+        return 1
+    else:
+        return 0
+
+if __name__ == '__main__':
+    samples = 1000000
+    hits = 0
+
+    n_proc = 10
+    pool = multiprocessing.Pool(n_proc)
+    results_async = [pool.apply_async(sample) for i in range(samples)]
+    hits = sum(r.get() for r in results_async)
+    pi = 4.0 * hits/samples
+</code></pre>
+</li>
+<li>
+<p>Implementation 3: Chunked parallel</p>
+<pre><code>import random
+import multiprocessing
+
+def sample():
+    x = random.uniform(-1.0, 1.0)
+    y = random.uniform(-1.0, 1.0)
+    if x**2 + y**2 &lt;= 1:
+        return 1
+    else:
+        return 0
+
+def sample_multiple(samples_partial):
+    return sum(sample() for i in range(samples_partial))
+
+if __name__ == '__main__':
+    samples = 1000000
+    hits = 0
+
+    n_proc = 10
+    chunk_size = samples//n_proc
+    pool = multiprocessing.Pool(n_proc)
+    results_async = [pool.apply_async(sample_multiple, (chunk_size,))
+                    for i in range(n_proc)]
+    hits = sum(r.get() for r in results_async)
+    pi = 4.0 * hits/samples
+</code></pre>
+</li>
+</ul>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Pi-Job-Script" class="autolablink" target="_self">Autolab</a> Run the three implementations as a batch job and measure their run time using the <code>time</code> command. Remember to select a CPU model for repeatable results and to select multiple cores.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - answer omitted</p>
+</div>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Pi-Quiz" class="autolablink" target="_self">Autolab</a> Which implementation was fastest? Did some perform slower than expected? Why? Can you relate it to the output of the `time' command?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - answer omitted</p>
+</div>
+</li>
+<li>
+<p>Run the fastest parallel implementation for <code>n_proc</code> varying from 1 to the maximum number of threads on your CPU. Plot the speedup as a function of the number of processes.</p>
+<p>Hint: Use the <code>lscpu</code> command to check the number of threads available.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> The exact results will depend on the hardware you run on. Running the implementation on a Xeon Gold 6226R I get the following speedup plot:</p>
+<p><img alt="Pi approximation speedup" src="figs/week0506/piapprox_speedup.svg"></p>
+</div>
+</li>
+<li>
+<p>Estimate the parallel fraction of the program by fitting the theoretical speedup curve from Amdahl's law to your results. Nothing fancy, just play with the numbers until it looks okay. What is the estimated parallal fraction? Given this, what is your theoretical maximum speedup?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Playing with the fit, I settled on a parallel fraction of 0.945, which looks like this:</p>
+<p><img alt="Pi approximation speedup with Amdahl's law" src="figs/week0506/piapprox_amdahl.svg"></p>
+<p>The maximum theoretical speedup will then be 18.2.</p>
+</div>
+</li>
+<li>
+<p>(Optional) Rewrite the code using <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.map"><code>pool.map()</code></a> instead of <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.apply_async"><code>pool.apply_async()</code></a> to perform the computation of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>π</mi></mrow></math>. What do you observe? What are pros and cons of <code>pool.map()</code>?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> An easy re-write would be</p>
+<pre><code>import random
+import multiprocessing
+import sys
+
+def sample(_):  # Must take an argument because of map
+    x = random.uniform(-1.0, 1.0)
+    y = random.uniform(-1.0, 1.0)
+    if x**2 + y**2 &lt;= 1:
+        return 1
+    else:
+        return 0
+
+if __name__ == '__main__':
+    samples = 10000000
+    hits = 0
+    n_tasks = int(sys.argv[1])
+    chunk_size = samples // n_tasks
+    pool = multiprocessing.Pool(n_tasks)
+    res = pool.map(sample, range(samples), chunksize=chunk_size)
+    hits = sum(res)
+    pi = 4.0 * hits/samples
+    print(pi)
+</code></pre>
+<p>This is a lot easier to write and understand, which is a pro. However, the performance is not as good as the more "manual" <code>apply_async</code> version, since we do so little work per iteration. For tasks with more computation per iteration, the convenience of <code>map</code> might be worth it.</p>
+</div>
+</li>
+</ol>
+<h2 id="3-the-mandelbrot-set">3. The Mandelbrot Set</h2>
+<p><img alt="Mandelbrot Set" src="figs/week0506/mandelbrot.png"></p>
+<p>The Mandelbrot Set is a famous mathematical set of complex numbers defined by iterating a simple mathematical function. Given a complex number, <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>c</mi></mrow></math>, the iteration is defined by the formula:</p>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><msub><mi>z</mi><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo><msubsup><mi>z</mi><mi>n</mi><mn>2</mn></msubsup><mo>+</mo><mi>c</mi><mo>.</mo></mrow></math></p>
+<p>The Mandelbrot Set is the set of complex numbers for which the iteration remains bounded as <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math> approaches infinity. Points outside the set exhibit chaotic and complex behavior when iterated.</p>
+<p>In this exercise, we'll explore the computation of the Mandelbrot Set using parallel processing. The task is to generate an image of the Mandelbrot Set by calculating the escape time for each point in the complex plane. The escape time is the number of iterations it takes for a point to achieve an absolute value over 2 - if that happens, it's been shown that it must eventually escape to infinity.</p>
+<p>Use the following template for your code:</p>
+<pre><code>import multiprocessing
+import numpy as np
+import matplotlib.pyplot as plt
+
+def mandelbrot_escape_time(c):
+    z = 0
+    for i in range(100):
+        z = z**2 + c
+        if np.abs(z) &gt; 2.0:
+            return i
+    return 100
+
+def generate_mandelbrot_set(points, num_processes):
+    ########################
+    # YOUR CODE HERE #
+    ########################
+    return escape_times
+
+def plot_mandelbrot(escape_times):
+    plt.imshow(escape_times, cmap='hot', extent=(-2, 2, -2, 2))
+    plt.axis('off')
+    plt.savefig('mandelbrot.png', bbox_inches='tight', pad_inches=0)
+
+if __name__ == "__main__":
+    width = 800
+    height = 800
+    xmin, xmax = -2, 2
+    ymin, ymax = -2, 2
+    num_proc = 4
+
+    # Precompute points
+    x_values = np.linspace(xmin, xmax, width)
+    y_values = np.linspace(ymin, ymax, height)
+    points = np.array([complex(x, y) for x in x_values for y in y_values])
+
+    # Compute set
+    mandelbrot_set = generate_mandelbrot_set(points, num_proc)
+
+    # Save set as image
+    mandelbrot_set = mandelbrot_set.reshape((height, width))
+    plot_mandelbrot(mandelbrot_set)
+</code></pre>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Mandelbrot-Function-1" class="autolablink" target="_self">Autolab</a> Implement the function <code>generate_mandelbrot_set</code> to compute the escape times for each complex number in parallel. The function must return a NumPy array. Distribute the points equally between all the processors. Hint: adapt the chunked parallel implementation from the previous exercise.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - answer omitted</p>
+</div>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Mandelbrot-Job-Script" class="autolablink" target="_self">Autolab</a> As before, run the program as a batch job where you vary the number of processes <code>num_proc</code>. Make a speedup plot.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - Job script omitted.</p>
+<p>The exact plot will depend on your hardware. Using a Xeon Gold 6226R, I get:</p>
+<p><img alt="Mandelbrot Speed-up plot v1" src="figs/week0506/mandelbrot_speedup_v1.svg"></p>
+<p>The performance keeps increasing as we add more cores, which is good. However, the speedup is not great considering the amount of hardware we are throwing at the problem. Lets solve that!</p>
+</div>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Mandelbrot-Function-2" class="autolablink" target="_self">Autolab</a> Implement a new function <code>generate_mandelbrot_set_chunks</code>, that distributes the points in smaller chunks to the workers. Make sure there are more chunks than workers. Hint: adapt the chunk parallel implementation by setting <code>chunk_size</code> to a fixed number.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - answer omitted</p>
+</div>
+</li>
+<li>
+<p>Run the new function for varying processes, make a speedup plot and estimate the parallel fraction with Amdahl's law. What do you see? Why does the chunked version achieve a higher speedup? Hint: does all parts of the Mandelbrot set require the same amount of computation?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Using the improved program, I get the following speedup plot:</p>
+<p><img alt="Mandelbrot Speed-up plot v2" src="figs/week0506/mandelbrot_speedup_v2.svg"></p>
+<p>We now get a much better speedup and the parallel fraction is now <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>p</mi><mo>=</mo><mn>0.98</mn></mrow></math> so almost everything is fully parallellized. The maximum theoretical speedup will be 50, which is quite good. The runtime (not shown here) is also improved.</p>
+<p>The reason is the time required to compute the escape time varies a lot depending on the location of the point. For the points inside the Mandelbrot set, we must perform all 100 iterations. However, some points will escape almost immediately. When distributing the points evenly at the start, some processes will finish fast and must then wait for the unfortunate ones that got the slow points. Distributing the work in smaller chunks means that processes which finish a chunk quickly can then move on to another chunk. This results in a more even distribution of work and thus a better speedup.</p>
+</div>
+</li>
+</ol></body></html>

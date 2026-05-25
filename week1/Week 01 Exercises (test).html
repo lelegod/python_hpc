@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="answers-for-week-1">Answers for Week 1</h1>
+<hr>
+<h2 id="1-connecting-and-transferring-files-to-the-hpc">1. Connecting and transferring files to the HPC</h2>
+<p>The focus of this exercise is to learn how to connect to the HPC nodes, transfer files and run code on the HPC, preferably using the terminal.</p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Hello-World" class="autolablink" target="_self">Autolab</a> Write a Python program that writes "Hello world" to a file (e.g., called 'content.txt'). It should also print the same text to the screen.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - answer omitted.</p>
+</div>
+</li>
+<li>
+<p>Transfer your Python file to the HPC using scp, sftp, FileZilla, or other (see guide <a href="/d2l/common/dialogs/quickLink/quickLink.d2l?ou=296270&amp;type=content&amp;rcode=dtu-523611" target="_blank" rel="noopener">File Transfer to/from HPC</a>&nbsp;on Learn).</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Assume the script is called <code>helloworld.py</code>. We can transfer it to HPC with the following SCP command:</p>
+<pre><code>scp helloworld.py s123456@login.hpc.dtu.dk:helloworld.py
+</code></pre>
+<p>If you already have directory you would like to store the file, you may upload directly to that directory with</p>
+<pre><code>scp helloworld.py s123456@login.hpc.dtu.dk:Documents/02613/w01/helloworld.py
+</code></pre>
+<p>assuming you have a directory named `Documents/02613/w01/' in your home directory.</p>
+</div>
+</li>
+<li>
+<p>Connect to an HPC terminal (see guide <a href="/d2l/common/dialogs/quickLink/quickLink.d2l?ou=296270&amp;type=content&amp;rcode=dtu-523691" target="_blank" rel="noopener">Connecting to an HPC Terminal</a>&nbsp;on Learn). If you are <em>not on a DTU network</em>, you may need to use a VPN or set up SSH keys - see the guide. If you used SSH, make sure you called <code>linuxsh</code> so you are <em>not</em> on a login node.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> With SSH, log on to the cluster with:</p>
+<pre><code>ssh s123456@login.hpc.dtu.dk
+</code></pre>
+<p>Type in your password to log on. Then, run:</p>
+<pre><code>linuxsh
+</code></pre>
+</div>
+</li>
+<li>
+<p>Create and/or navigate to your working directory (on the HPC) for this exercise (see guide <a href="/d2l/common/dialogs/quickLink/quickLink.d2l?ou=296270&amp;type=content&amp;rcode=dtu-523657" target="_blank" rel="noopener">Linux Terminal Cheat Sheet</a>&nbsp;on Learn).</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Let's assume we didn't already have a directory when we uploaded the file. The following three commands creates a new directory at <code>Documents/02613/w01', moves the</code>helloworld.py` file to the new directory and navigates to it:</p>
+<pre><code>mkdir -p Documents/02613/w01
+mv helloworld.py -t Documents/02613/w01
+cd Documents/02613/w01
+</code></pre>
+<p>If you already had the directory and uploaded the file directly to it, just run the <code>cd</code> command</p>
+<pre><code>cd Documents/02613/w01
+</code></pre>
+</div>
+</li>
+<li>
+<p>Initialize the course conda environment (see guide <a href="/d2l/common/dialogs/quickLink/quickLink.d2l?ou=296270&amp;type=content&amp;rcode=dtu-523793" target="_blank" rel="noopener">Initializing the 02613 Conda Environment</a>&nbsp;on Learn).</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> First, activate the shared Anaconda installation by running</p>
+<pre><code>source /dtu/projects/02613_2025/conda/conda_init.sh
+</code></pre>
+<p>Then, activate the conda environment by running</p>
+<pre><code>conda activate 02613
+</code></pre>
+</div>
+</li>
+<li>
+<p>Run your Python program.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Run your program with</p>
+<pre><code>python helloworld.py
+</code></pre>
+</div>
+</li>
+<li>
+<p>Transfer the generated file (e.g., <code>content.txt</code>) back to your local computer.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Exit your SSH connection (e.g., by running <code>exit</code> until you are back in your own terminal). Then, run</p>
+<pre><code>scp s123456@login.hpc.dtu.dk:Documents/02613/w01/helloworld.py helloworld.py
+</code></pre>
+</div>
+</li>
+</ol>
+<h2 id="2-job-scripts">2. Job Scripts</h2>
+<p>For all scripts below, use <code>/bin/sleep 60</code> (or a longer period, like 100 or 120 seconds) as the command to run, and use ‘hpc’ as the queue name (except if stated otherwise).</p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Scripts-1" class="autolablink" target="_self">Autolab</a> Write a simple job script, like the one shown in the lectur and submit it.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - Job script omitted.</p>
+</div>
+<ol>
+<li>
+<p>Check the status with bstat and/or bjobs. Use 'man bjobs', to get information about the options or check the <a href="https://www.ibm.com/docs/en/spectrum-lsf/10.1.0?topic=bjobs-options">online documentation</a>.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Running <code>bstat</code> just after submitted will print something like:</p>
+<pre><code>$ bstat
+JOBID     USER    QUEUE   JOB_NAME  NALLOC STAT  START_TIME    ELAPSED
+19882525  patmjen hpc     sleeper        0 PEND       -        0:00:00
+</code></pre>
+<p>We can find the status under the \texttt{STAT} column. We can see it is \texttt{PEND} for <code>pending</code> and there is no start time as it has not started. We can get the same information from <code>bjobs</code>:</p>
+<pre><code>$ bjobs
+JOBID     USER    QUEUE   JOB_NAME   SLOTS STAT  START_TIME   TIME_LEFT
+19882525  patmjen hpc     sleeper      -   PEND       -
+</code></pre>
+<p>Once the, job has started, the output of <code>bstat</code> will change to:</p>
+<pre><code>$ bstat
+JOBID     USER    QUEUE   JOB_NAME  NALLOC STAT  START_TIME    ELAPSED
+19882525  patmjen hpc     sleeper        1 RUN   Jan 10 16:39  0:00:07
+</code></pre>
+<p>The status is now <code>RUN</code> for <code>running</code> and there is a start time. A similar change occurs for <code>bjobs</code>:</p>
+<pre><code>$ bjobs
+JOBID     USER    QUEUE   JOB_NAME   SLOTS STAT  START_TIME   TIME_LEFT
+19882525  patmjen hpc     sleeper        1 RUN   Jan 10 16:39 00:01:53 L
+</code></pre>
+</div>
+</li>
+<li>
+<p>You can add a walltime limit to the script. Can you see that limit in the bstat or the bjobs output?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> The <code>bstat</code> output does not include information about the wall time limit. The <code>bjobs</code> output includes the <code>TIME_LEFT</code> column, which tells us how time is left before we hit the wall time limit we set.</p>
+</div>
+</li>
+</ol>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Scripts-2" class="autolablink" target="_self">Autolab</a> Write a job script that sends you notifications when the job starts and ends - see 'man bsub' for the details or check the <a href="https://www.ibm.com/docs/en/spectrum-lsf/10.1.0?topic=bsub-options">online documentation</a>. Take a look at the job summary, i.e. what information can you retrieve from that?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - Job script omitted.</p>
+<p>The most important part of the summary is the last part. It should say "Successfully completed" indicating the job finished as expected. Following that is a summary of the resource use. <strong>Note:</strong> If 'Run time' or 'Max Memory' differs significantly from the requested, consider changing it if it's a job you will be running again.</p>
+<p>In the top, we may also see what directories were used as the home and working directories. This can be useful for debugging. Finally, in the middle part, out job script is repeated so we may see what we submitted.</p>
+</div>
+<ol>
+<li>
+<p>To test, increase the period in the sleep command to be longer than the wall time limit, and submit the job again. What happens?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> The job will start as before, but after the wall time limit is reached it will be terminated. In the job summary, instead of "Successfully completed." it will say something like "TERM_RUNLIMIT: job killed after reaching LSF run time limit."</p>
+</div>
+</li>
+</ol>
+</li>
+<li>
+<p>The default <code>hpc</code> queue has nodes of different type, e.g. with different CPUs. The CPU type can be requested as a feature in a command script.</p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Scripts-3" class="autolablink" target="_self">Autolab</a> Use the <code>nodestat</code> command to check which CPU types are available in the <code>hpc</code> queue, and then submit a job script that requests one of the types. See the <a href="http://www.hpc.dtu.dk/?page_id=1416">Batch Jobs under LSF 10</a> webpage for information on how to do that.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> To see the nodes in the <code>hpc</code> queue with their CPU types, run:</p>
+<pre><code>nodestat -f hpc
+</code></pre>
+<p>Autolab exercise - Job script omitted.</p>
+</div>
+</li>
+<li>
+<p>Add the necessary commands to your job script, to print the CPU type - and check in the job output that your job did indeed run on a node with the requested feature. Note: there is slight difference in the type request and the type variable: the variable contains a '-', while LSF uses a '_'.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Add <code>lscpu</code> to the job script in order to print information on the CPU type. You can then check what was printed in `sleeper_XXXXXX.out' after the job finishes.</p>
+</div>
+</li>
+</ol>
+</li>
+</ol>
+<p>The next exercises are a preparation for later weeks, where we want to submit multi-core jobs to the batch system:</p>
+<ol start="4">
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Scripts-4" class="autolablink" target="_self">Autolab</a> Write a job script that requests 1 node and 4 cores.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - Job script omitted.</p>
+</div>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Scripts-5" class="autolablink" target="_self">Autolab</a> Write a job script, requesting 1 node and 16 cores. Does it run? If the job doesn't start, use `bjobs -p' to check for the reason.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - Job script omitted.</p>
+<p>It will start, as the <code>hpc</code> queue includes nodes with processors that have more than 16 cores available.</p>
+</div>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Scripts-6" class="autolablink" target="_self">Autolab</a> Write a job script, requesting 1 node and 64 cores. Does it run? If the job doesn't start, use the <code>bjobs -p</code> command to check for the reason.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - Job script omitted.</p>
+<p>It will not start, as the 'hpc' queue does not includes nodes with processors that have 64 cores. Running <code>bjobs -p</code> will show something like:</p>
+<pre><code>JOBID     USER    STAT  QUEUE   FROM_HOST   EXEC_HOST  JOB_NAME  SUBMIT_TIME
+19882618  patmjen PEND  hpc     hpclogin2              sleeper   Jan 10 16:33
+Not enough job slot(s): 10 hosts;
+</code></pre>
+<p>The message <code>Not enough job slot(s)</code> is what indicates that no node has enough CPU cores available to run our job.</p>
+</div>
+</li>
+</ol>
+<p>Clean up:</p>
+<ol start="7">
+<li>
+<p>Check all your submitted jobs with 'bstat' again. If there are any left, that still are in status 'PEND', please remove them with 'bkill JOBID' (the JOBID is the number in the first column of the 'bstat'/'bjobs' output).</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> For example, assume the <code>bstat</code> output is:</p>
+<pre><code>JOBID      USER    QUEUE    JOB_NAME  NALLOC STAT  START_TIME    ELAPSED
+19882618   patmjen hpc      sleeper        0 PEND       -        0:00:00
+</code></pre>
+<p>Then, run:</p>
+<pre><code>bkill 19882618
+</code></pre>
+<p>to kill the pending job.</p>
+</div>
+</li>
+</ol>
+<p>Hints: to get the informations needed, use the 'man' command and take a look at the DTU Computing Center webpages <a href="https://www.hpc.dtu.dk/?page_id=2534">https://www.hpc.dtu.dk/?page_id=2534</a></p></body></html>
