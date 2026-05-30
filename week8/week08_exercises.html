@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="exercises-for-week-8">Exercises for Week 8</h1>
+<hr>
+<h2 id="1-dataframe-chunking">1. Dataframe Chunking</h2>
+<p>Sometimes, you need to analyze tabular data in a CSV file which is too large to load into memory. In this exercise, we'll build on the last exercise in the previous week and adapt it for a memory constrained environment. Specifically, we will use the chunking functionality from Pandas and PyArrow to process a dataframe in small bits without losing significant performance.</p>
+<p>Briefly, the last exercise involved taking a dataframe with weather data from DMI (Danmarks Metereologiske Institut) and computing the total amount of precipitation across all measurement stations. You may find an example solution to this in <a href="/d2l/le/lessons/296270/topics/1116757" target="_self">last week's solutions file on Learn</a>.</p>
+<p>The dataframe is at: <code>/dtu/projects/02613_2025/data/dmi/2023_01.csv.zip</code></p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Pandas-Chunks" class="autolablink" target="_self">Autolab</a> Make a Python program which takes two command line arguments: a path to a Pandas data frame and a chunk size. Compute the total precipitation where you process the dataframe in chunks of the given size - do <em>not</em> load the entire dataframe. Also, do <em>not</em> perform any memory reducing operations (like in week 7). Finally, print the result (and only the result).</p>
+</li>
+<li>
+<p>Measure the run time and memory use for chunk sizes 1,000, 10,000, 100,000 and 1,000,000. You can measure the run time and memory use using the <code>/usr/bin/time</code> command as</p>
+<pre><code>/usr/bin/time -f"mem=%M KB runtime=%e s" python scipt.py
+</code></pre>
+<p>Perform the measurement as a batch job. Select 1 core and a specific CPU so the results are repeatable. What do you observe? How does the run time compare to the non-chunked version?<br>Hint: <strong><code>time</code> prints its output to <code>stderr</code></strong> and will be added to the '.err' file. If you want, you can redirect it to <code>stdout</code> by adding <code>2&gt;&amp;1</code> at the end of your timing command, e.g, <code>/usr/bin/time &lt;stuff&gt; 2&gt;&amp;1</code>.</p>
+</li>
+<li>
+<p>Convert the CSV file to a chunked parquet file. Use a chunksize of 100,000. Hint: See section 8.3.2 in Fast Python.</p>
+</li>
+<li>
+<p>Modify your Python program from the previous exercise to receive the path to a chunked parquet file instead of a path to a CSV file. What is the new run time and memory use? As before, perform your measurement with a batch script and make sure you select the <em>same</em> CPU model.</p>
+</li>
+<li>
+<p>Finally, modify your program further to only load the relevant columns. What is your final run time?</p>
+</li>
+</ol>
+<h2 id="2-mandelbrot-memmap">2. Mandelbrot memmap</h2>
+<p>In this exercise, we expand on the exercise from weeks 5 and 6 where we generated the Mandelbrot set by modifying the code to work in a memory constrained environment. We will now store the data in a memory mapped array, which would allow us to generate results larger than memory. For these exercises however, we will stick to sizes which can still fit in order to make the run times manageable.</p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Mandelbrot-memmap" class="autolablink" target="_self">Autolab</a> Make a Python program that creates an <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi><mi>×</mi><mi>N</mi></mrow></math> array with the Mandelbrot set. It must take the number <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi></mrow></math> as a command line argument. The limits for the real and imaginary values must be the same as in weeks 5 &amp; 6. The program must store the data for the Mandelbrot array in a memory mapped array.</p>
+</li>
+<li>
+<p>Parallelize your program for computing the Mandelbrot set in a memory mapped array by modifying your solution from weeks 5 and 6. Each process should write its part of the Mandelbrot array directly to the memory mapped array.</p>
+<ol>
+<li>Run the program for a 1000 x 1000 array. What is your speed-up? What is your run time compared to the in-memory version from weeks 5 and 6. Run your measurement as a batch job. Select a specific CPU model so your results are repeatable.</li>
+</ol>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Mandelbrot-Downscale" class="autolablink" target="_self">Autolab</a> Make a Python program which reads the saved Mandelbrot array, downsamples it, and saves the result as a PNG image. It must take three command line arguments: the path to the saved Mandelbrot array from exercise 2.1, the size <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi></mrow></math> of the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi><mi>×</mi><mi>N</mi></mrow></math> array and an integer step length <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math>. It must then open the specified array as a NumPy memmap, load every <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math>th row and column, and then save the resulting array as a PNG file. Hint: see the example code from exercise 3 in week 5.<br><em>Example:</em> Assume the path is to the following <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>5</mn><mi>×</mi><mn>5</mn></mrow></math> array: <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>3</mn></mtd><mtd><mn>4</mn></mtd><mtd><mn>5</mn></mtd></mtr><mtr><mtd><mn>6</mn></mtd><mtd><mn>7</mn></mtd><mtd><mn>8</mn></mtd><mtd><mn>9</mn></mtd><mtd><mn>10</mn></mtd></mtr><mtr><mtd><mn>11</mn></mtd><mtd><mn>12</mn></mtd><mtd><mn>13</mn></mtd><mtd><mn>14</mn></mtd><mtd><mn>15</mn></mtd></mtr><mtr><mtd><mn>16</mn></mtd><mtd><mn>17</mn></mtd><mtd><mn>18</mn></mtd><mtd><mn>19</mn></mtd><mtd><mn>20</mn></mtd></mtr><mtr><mtd><mn>21</mn></mtd><mtd><mn>22</mn></mtd><mtd><mn>23</mn></mtd><mtd><mn>24</mn></mtd><mtd><mn>25</mn></mtd></mtr></mtable><mo>]</mo></mrow></math> Given a step length of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>3</mn></mrow></math>, the downsampled array is <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>4</mn></mtd></mtr><mtr><mtd><mn>16</mn></mtd><mtd><mn>19</mn></mtd></mtr></mtable><mo>]</mo></mrow></math> Given a step length of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>2</mn></mrow></math>, the downsampled array is <math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mo>[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>3</mn></mtd><mtd><mn>5</mn></mtd></mtr><mtr><mtd><mn>11</mn></mtd><mtd><mn>13</mn></mtd><mtd><mn>15</mn></mtd></mtr><mtr><mtd><mn>21</mn></mtd><mtd><mn>23</mn></mtd><mtd><mn>25</mn></mtd></mtr></mtable><mo>]</mo></mrow></math></p>
+</li>
+<li>
+<p>At <code>/dtu/projects/02613_2025/data/mandelbrot/mandelbrot.raw</code> is a file with a <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>4000</mn><mi>×</mi><mn>4000</mn></mrow></math> Mandelbrot set array. Run the downsampling program on this array for the step lengths 1, 2, 4, 8, 16. If you hardcoded the size of the memory mapped array <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>1000</mn><mi>×</mi><mn>1000</mn></mrow></math>, remember to change it.</p>
+<p>Measure the run time and peak memory use with the <code>/usr/bin/time</code> command. Plot the results. Perform the measurements as a batch job and select a CPU model so the results are repeatable. What happens to the memory and run time as the step length <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math> increases?</p>
+</li>
+</ol>
+<h2 id="3-mandelbrot-zarr">3. Mandelbrot Zarr</h2>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Mandelbrot-Zarr" class="autolablink" target="_self">Autolab</a> Make a Python program that creates a Zarr array containing the Mandelbrot set. The size of the array must be <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi><mi>×</mi><mi>N</mi></mrow></math>. The program must take two command line arguments. The size of the array <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi></mrow></math> and a positive integer <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>C</mi></mrow></math> which is the size of the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>C</mi><mi>×</mi><mi>C</mi></mrow></math> chunks. Structure your program so it fills out the chunks one at a time.</p>
+</li>
+<li>
+<p>Parallelize your program using multiprocessing. Each process should fill one chunk of the Zarr array.</p>
+</li>
+<li>
+<p>Time the runtime of the program for array size 1000 and chunk sizes 10, 25, 50, 100 and 200. Your program should make a process for each available core, e.g., for a processor with 32 cores use 32 processes. Run your timing as a batch job where you specify a CPU model so your result is repeatable.</p>
+<ol>
+<li>
+<p>What happens with the run times? What chunk size gives the fastest execution?</p>
+</li>
+<li>
+<p>What happens with the size of the saved Zarr array? What chunk size gives the smallest result? Hint: since the Zarr array is saved in a directory you can measure its size with the command <code>du -sh &lt;filename&gt;.zarr</code>.</p>
+</li>
+</ol>
+</li>
+<li>
+<p>How does the performance compare with your memmap implementation?</p>
+</li>
+</ol></body></html>

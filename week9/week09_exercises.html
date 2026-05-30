@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="exercises-for-week-9">Exercises for Week 9</h1>
+<hr>
+<h2 id="1-cpu-matrix-multiplication">1. CPU Matrix Multiplication</h2>
+<p>Before using the GPU, we will warm up with a CPU exercise to get used to Numba and JIT compliled code. In this exercise, we will explore implementations of matrix multiplication, checking the performance of each implementation and how it is related with how the CPU caches. Consider the following Python implementation of matrix multiplication:</p>
+<pre><code>import numpy as np
+
+def matmul(A, B):
+    C = np.zeros((A.shape[0],B.shape[1]))
+    for i in range(A.shape[0]):
+        for j in range(B.shape[1]):
+            for k in range(A.shape[1]):
+                C[i,j] += A[i,k] * B[k,j]
+    return C
+</code></pre>
+<ol>
+<li>
+<p>Using the <code>@jit(nopython=True)</code> decorator, add Numba JIT compilation to the above function.</p>
+</li>
+<li>
+<p>Measure the wall time of the original and JIT compiled version for two <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>100</mn><mi>×</mi><mn>100</mn></mrow></math> matrices. How much faster is the JIT compiled version? Remember to run the JIT compiled version once before timing so it can compile.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Matrix-Multiplication-Quiz" class="autolablink" target="_self">Autolab</a> Assuming <code>A</code>, <code>B</code> and <code>C</code> are stored row-wise, the innermost loop (over <code>k</code>) is not accessing <code>B</code> in a cache efficient manner. Make a new version of <code>matmul</code> where you re-order the loops such that access is cache efficient.</p>
+</li>
+<li>
+<p>Measure the performance of your optimized version for <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi><mi>×</mi><mi>N</mi></mrow></math> matrices, where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi></mrow></math> is at least 200. What do you observe?</p>
+</li>
+<li>
+<p>(Optional) Measure the performance of your optimized version in MFLOP/s for <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi></mrow></math> x <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi></mrow></math> matrices where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>N</mi></mrow></math> goes from 20 to 2000. Plot the performance against the size of the matrix in kilobytes. Run the measurement as a batch job where you specify a CPU model so your results are repeatable. Mark the sizes of each cache level on your plot. What do you observe?<br>Hint: the matrix multiplication uses <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msup><mi>N</mi><mn>3</mn></msup></mrow></math> FLOPs.<br>Hint: recall how you measured performance from the exercises in week 3.</p>
+</li>
+</ol>
+<h2 id="2-cuda-vector-addition">2. CUDA Vector Addition</h2>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Add-Kernel" class="autolablink" target="_self">Autolab</a> Make a CUDA kernel <code>add_kernel</code> that takes two vectors <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>x</mi></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>y</mi></mrow></math> as input and returns a new vector <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>a</mi></mrow></math> where <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><msub><mi>a</mi><mi>i</mi></msub><mo>=</mo><msub><mi>x</mi><mi>i</mi></msub><mo>+</mo><msub><mi>y</mi><mi>i</mi></msub></mrow></math>, i.e., <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>a</mi></mrow></math> is the element-wise sum of <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>x</mi></mrow></math> and <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>y</mi></mrow></math>.</p>
+</li>
+<li>
+<p>Write a Python program that measures the run time of your kernel with two random vectors. Each input vector should be a NumPy array of length 1,000,000.<br>Hint: Run the kernel once before timing so it has been JIT compiled.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Gpu-Job-Script" class="autolablink" target="_self">Autolab</a> Run your timing program as a batch job so results are repeatable. Use the queue <code>c02613</code>.</p>
+</li>
+<li>
+<p>Repeat your time measurements where you ensure the arrays reside in pinned memory before passing them to your CUDA kernel. What do you observe and why?<br>Hint: To get pinned memory, use <a href="https://numba.pydata.org/numba-doc/dev/cuda-reference/memory.html?highlight=pinned#numba.cuda.pinned_array"><code>numba.cuda.pinned_array</code></a>, <a href="https://numba.pydata.org/numba-doc/dev/cuda-reference/memory.html?highlight=pinned#numba.cuda.pinned_array_like">numba.cuda.pinned_array_like</a> or <a href="https://numba.pydata.org/numba-doc/dev/cuda-reference/memory.html?highlight=pinned#numba.cuda.pinned">numba.cuda.pinned</a>.</p>
+</li>
+<li>
+<p>Repeat your time measurements where you ensure the arrays reside in GPU memory before passing them to your CUDA kernel. What do you observe and why? Based on your results, how much time is spent on data transfer vs. computation?</p>
+</li>
+</ol>
+<h2 id="3-cuda-matrix-multiplication">3. CUDA Matrix Multiplication</h2>
+<ol>
+<li>
+<p>Make a CUDA kernel <code>matmul_kernel(A, B, C)</code> that multiplies two matrices together. Let <code>A</code> and <code>B</code> be the input matrices and <code>C</code> be the output matrix you write to. You may assume the dimensions of <code>A</code> and <code>B</code> match so they can be multiplied. Structure your kernel such that you use a 2D compute grid where thread (<code>i</code>, <code>j</code>) computes the value of <code>C[i,j]</code>.<br>Hint: use <code>cuda.grid(2)</code> to get 2D grid position of the current thread.</p>
+</li>
+<li>
+<p>Measure the run time of your kernel for <code>A</code> and <code>B</code> being <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>2048</mn><mi>×</mi><mn>2048</mn></mrow></math> matrices and use <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mn>16</mn><mi>×</mi><mn>16</mn></mrow></math> threads per block. Compare the run time with NumPy (e.g., by timing <code>A @ B</code>). What do you observe?</p>
+</li>
+<li>
+<p>Repeat your measurements where the matrices reside pinned and device memory. What fraction of time is spent on memory transfers to and from the GPU with and without pinned memory?</p>
+</li>
+<li>
+<p>Repeat your measurements using 256 x 1 and 1 x 256 threads per block. Let the matrices be in GPU memory before passing them to the kernel. What do you observe and why? Run your measurements as a batch job so results are repeatable.</p>
+</li>
+</ol></body></html>

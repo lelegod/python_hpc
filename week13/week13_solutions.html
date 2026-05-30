@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="answers-for-week-13">Answers for Week 13</h1>
+<hr>
+<h2 id="1-execessive-io">1. Execessive I/O</h2>
+<p>Consider the following Python program that prints a short story about a number for the first 100,000 integers:</p>
+<pre><code>for i in range(100_000):
+    # Story by ChatGPT
+    print(
+        f"Once upon a time, {i} felt lonely, being just one among many. "
+        f"Dreaming of distinction, {i} doubled itself, becoming 2*{i}. "
+        f"Still, it wasn't enough, so {i} squared itself, turning into {i}^2. "
+        f" Realizing every transformation retained its essence, "
+        f"{i} learned to cherish its identity, understanding it was unique, "
+        f"infinite, essential-forever {i}, the protagonist of its own "
+        f"mathematical saga."
+    )
+</code></pre>
+<ol>
+<li>
+<p>Make a job script that runs the above Python program. Add the <code>-u</code> option to Python to run with unbuffered output. You must submit the job to the <code>hpc</code> queue, request 1 core and a CPU model for repeatability. Also, make sure you specify output files with the <code>-o/-e</code> options and that the files are under <code>/work3/02613/dump/</code>.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong></p>
+<pre><code>#!/bin/bash
+#BSUB -J print
+#BSUB -q hpc
+#BSUB -W 00:10
+#BSUB -n 1
+#BSUB -R "select[model==XeonE5_2650v4]"
+#BSUB -R "rusage[mem=512MB]"
+#BSUB -o /work3/02613/dump/printlots_%J.out
+#BSUB -e /work3/02613/dump/printlots_%J.err
+
+# Initialize Python environment
+source /dtu/projects/02613_2024/conda/conda_init.sh
+conda activate 02613
+
+python -u printlots.py
+</code></pre>
+</div>
+</li>
+<li>
+<p>Make another job script where you manually redirect the output of the Python program to a separate set of files. Again, make sure these files are also under <code>/work3/02613/dump/</code>.<br>Hint: see the slides.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Assuming one has access to a directory under <code>/work3</code>:</p>
+<pre><code>#!/bin/bash
+#BSUB -J print
+#BSUB -q hpc
+#BSUB -W 00:10
+#BSUB -n 1
+#BSUB -R "select[model==XeonE5_2650v4]"
+#BSUB -R "rusage[mem=512MB]"
+#BSUB -o /work3/02613/dump/printlots_%J.out
+#BSUB -e /work3/02613/dump/printlots_%J.err
+
+# Initialize Python environment
+source /dtu/projects/02613_2024/conda/conda_init.sh
+conda activate 02613
+
+python -u printlots.py \
+    1&gt; /work3/02613/dump/output_${LSB_JOBID}.txt \
+    2&gt; /work3/02613/dump/error_${LSB_JOBID}.txt
+</code></pre>
+</div>
+</li>
+<li>
+<p>Submit both jobs. Check the job resource summaries at the end of the output files. Did the output get redirected as expected? What is the run time difference?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> The resource summary for the job <em>without</em> manual output redirection was:</p>
+<pre><code>------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   7.37 sec.
+    Max Memory :                                 6 MB
+    Average Memory :                             4.00 MB
+    Total Requested Memory :                     512.00 MB
+    Delta Memory :                               506.00 MB
+    Max Swap :                                   -
+    Max Processes :                              4
+    Max Threads :                                5
+    Run time :                                   80 sec.
+    Turnaround time :                            78 sec.
+
+The output (if any) is above this job summary.
+</code></pre>
+<p>The resource summary for the job <em>with</em> manual out redirection was:</p>
+<pre><code>------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   1.48 sec.
+    Max Memory :                                 -
+    Average Memory :                             -
+    Total Requested Memory :                     512.00 MB
+    Delta Memory :                               -
+    Max Swap :                                   -
+    Max Processes :                              -
+    Max Threads :                                -
+    Run time :                                   3 sec.
+    Turnaround time :                            4 sec.
+
+The output (if any) is above this job summary.
+</code></pre>
+<p>From the <code>Run time :</code> lines, we can see that without manual redirection, the job took 80 seconds. With manual redirection, where we don't rely on the <code>-o/-e</code> channels, the run time decreased to only 3 seconds. That is 26 times faster!</p>
+</div>
+</li>
+</ol>
+<h2 id="2-multi-threaded-numpy">2. Multi-Threaded NumPy</h2>
+<p>Consider the following Python program, which creates two sets of 100 random 1000 x 1000 matrices and then multiplies them together. At the end, it prints out the time it took.</p>
+<pre><code>from time import perf_counter as time
+import numpy as np
+
+def matmuls(A, B):
+    assert A.shape[0] == B.shape[0], "A and B must hold same number of matrices"
+    assert A.shape[2] == B.shape[1], "A and B must hold compatible matrices"
+    n = A.shape[0]
+    C = np.empty((n, A.shape[1], B.shape[2]))
+    for i in range(n):
+        C[i] = np.matmul(A[i], B[i])
+    return C
+
+A = np.random.rand(100, 1000, 1000)
+B = np.random.rand(100, 1000, 1000)
+t0 = time()
+C = matmuls(A, B)
+t1 = time()
+print(t1 - t0)
+</code></pre>
+<ol>
+<li>
+<p>Write a job script that runs the Python program. You must submit the job to the <code>hpc</code> queue, request 1 core and a CPU model for repeatability. Submit the job. What is the run time?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong></p>
+<pre><code>#!/bin/bash
+#BSUB -J matmuls
+#BSUB -q hpc
+#BSUB -W 00:10
+#BSUB -n 1
+#BSUB -R "span[hosts=1]"
+#BSUB -R "select[model==XeonE5_2650v4]"
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -o batch_output/matmuls_%J.out
+#BSUB -e batch_output/matmuls_%J.err
+
+# Initialize Python environment
+source /dtu/projects/02613_2024/conda/conda_init.sh
+conda activate 02613
+
+python -u matmuls.py
+</code></pre>
+<p>The exact run time will vary depending on the chosen CPU model. With the above job script, I got 5.87 seconds.</p>
+</div>
+</li>
+<li>
+<p>Change the number of cores to 8 cores and submit again. Did the run time change?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Change the <code>\#BSUB -n 1</code> line to <code>\#BSUB -n 8</code>. With this, my run time was 5.96 seconds, so there is effectively no change. NumPy has <em>not</em> automatically taken advantage of the extra available cores.</p>
+</div>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Matrix-Multiplication-Job-Script" class="autolablink" target="_self">Autolab</a> Change the job script to enable NumPy multi threading with 8 threads (one for each requested core). Submit again. Did the run time change?<br>Hint: see the slides.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> Autolab exercise - Job script omitted.</p>
+<p>Telling NumPy (or, rather, the NumPy backend) to use 8 threads decreased the run time to 1.28 seconds - which is 4.6 times faster. Not quite a perfect speed-up, but still good!</p>
+</div>
+</li>
+<li>
+<p>Change the Python program such that the <code>matmuls</code> function is parallelized with multi-threading using a <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.ThreadPool"><code>ThreadPool</code></a> from the <code>multiprocessing</code> module. Submit again. What is the run time now? Why can we use multi-threading for this program instead of using multi-<em>processing</em>?<br>Hint: see the slides from week 5.</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> A simple way is to use the <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool.starmap"><code>starmap</code></a> method of the <code>ThreadPool</code> class to parallelize the for loop in the <code>matmuls</code> function. The Python program will then be:</p>
+<pre><code>from time import perf_counter as time
+import numpy as np
+from multiprocessing.pool import ThreadPool
+
+def matmuls(A, B):
+    assert A.shape[0] == B.shape[0], "A and B must hold same number of mats"
+    assert A.shape[2] == B.shape[1], "A and B must hold compatible matrices"
+    n = A.shape[0]
+    with ThreadPool(8) as p:
+        C = np.concatenate(p.starmap(np.matmul, zip(A, B)))
+    return C
+
+A = np.random.rand(100, 1000, 1000)
+B = np.random.rand(100, 1000, 1000)
+t0 = time()
+C = matmuls(A, B)
+t1 = time()
+print(t1 - t0)
+</code></pre>
+<p>Running the job with the modified Python program now gives a run time of 1.87 seconds. It is now slower than before, since we are using multi-threading with NumPy <em>and</em> with a thread pool. Now, each thread in the pool also tries to run a multi-threaded matrix multiplication, which means we are running many more threads than we have cores available. This means a lot of time is wasted on scheduling the threads and we end up running slower overall.</p>
+<p>The reason we can make use of a thread pool instead of a process pool is because NumPy releases the GIL. Since most of the time is spent on running the matrix multiplications, each thread spends most of its time with the GIL released.</p>
+</div>
+</li>
+<li>
+<p>Change your job script to disable NumPy multi-threading (i.e., remove what you added in exercise 2.3). Submit the job one last time. What is the run time now?</p>
+<div class="answer-block">
+<p><strong>Answer:</strong> With the NumPy multi-threading disabled again (but still using the thread pool), the time is now back down to 1.33 seconds - more or less the same as with multi-threaded NumPy.</p>
+<p>The moral of this exercise is to be careful when you are writing parallel code - whether it be multi processing or multi threading. While <em>you</em> may not be creating too many threads/processes, you are maybe using a package which <em>is</em>. And, as a result, you are leaving free performance on the table. So, check what your packages are doing!</p>
+</div>
+</li>
+</ol></body></html>

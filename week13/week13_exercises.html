@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="exercises-for-week-13">Exercises for Week 13</h1>
+<hr>
+<h2 id="1-execessive-io">1. Execessive I/O</h2>
+<p>Consider the following Python program that prints a short story about a number for the first 100,000 integers:</p>
+<pre><code>for i in range(100_000):
+    # Story by ChatGPT
+    print(
+        f"Once upon a time, {i} felt lonely, being just one among many. "
+        f"Dreaming of distinction, {i} doubled itself, becoming 2*{i}. "
+        f"Still, it wasn't enough, so {i} squared itself, turning into {i}^2. "
+        f" Realizing every transformation retained its essence, "
+        f"{i} learned to cherish its identity, understanding it was unique, "
+        f"infinite, essential-forever {i}, the protagonist of its own "
+        f"mathematical saga."
+    )
+</code></pre>
+<ol>
+<li>
+<p>Make a job script that runs the above Python program. Add the <code>-u</code> option to Python to run with unbuffered output. You must submit the job to the <code>hpc</code> queue, request 1 core and a CPU model for repeatability. Also, make sure you specify output files with the <code>-o/-e</code> options and that the files are under <code>/work3/02613/dump/</code>.</p>
+</li>
+<li>
+<p>Make another job script where you manually redirect the output of the Python program to a separate set of files. Again, make sure these files are also under <code>/work3/02613/dump/</code>.<br>Hint: see the slides.</p>
+</li>
+<li>
+<p>Submit both jobs. Check the job resource summaries at the end of the output files. Did the output get redirected as expected? What is the run time difference?</p>
+</li>
+</ol>
+<h2 id="2-multi-threaded-numpy">2. Multi-Threaded NumPy</h2>
+<p>Consider the following Python program, which creates two sets of 100 random 1000 x 1000 matrices and then multiplies them together. At the end, it prints out the time it took.</p>
+<pre><code>from time import perf_counter as time
+import numpy as np
+
+def matmuls(A, B):
+    assert A.shape[0] == B.shape[0], "A and B must hold same number of matrices"
+    assert A.shape[2] == B.shape[1], "A and B must hold compatible matrices"
+    n = A.shape[0]
+    C = np.empty((n, A.shape[1], B.shape[2]))
+    for i in range(n):
+        C[i] = np.matmul(A[i], B[i])
+    return C
+
+A = np.random.rand(100, 1000, 1000)
+B = np.random.rand(100, 1000, 1000)
+t0 = time()
+C = matmuls(A, B)
+t1 = time()
+print(t1 - t0)
+</code></pre>
+<ol>
+<li>
+<p>Write a job script that runs the Python program. You must submit the job to the <code>hpc</code> queue, request 1 core and a CPU model for repeatability. Submit the job. What is the run time?</p>
+</li>
+<li>
+<p>Change the number of cores to 8 cores and submit again. Did the run time change?</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Matrix-Multiplication-Job-Script" class="autolablink" target="_self">Autolab</a> Change the job script to enable NumPy multi threading with 8 threads (one for each requested core). Submit again. Did the run time change?<br>Hint: see the slides.</p>
+</li>
+<li>
+<p>Change the Python program such that the <code>matmuls</code> function is parallelized with multi-threading using a <a href="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.ThreadPool"><code>ThreadPool</code></a> from the <code>multiprocessing</code> module. Submit again. What is the run time now? Why can we use multi-threading for this program instead of using multi-<em>processing</em>?<br>Hint: see the slides from week 5.</p>
+</li>
+<li>
+<p>Change your job script to disable NumPy multi-threading (i.e., remove what you added in exercise 2.3). Submit the job one last time. What is the run time now?</p>
+</li>
+</ol></body></html>

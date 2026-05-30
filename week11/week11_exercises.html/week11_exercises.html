@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="exercises-for-week-11">Exercises for Week 11</h1>
+<hr>
+<h2 id="1-job-script-workflows">1. Job Script Workflows</h2>
+<p>To begin with, we will warm by just making some simple job scripts. For all exercises in this section, your job scripts must submit to the `hpc' queue, use 1 core on 1 node and specify a job name, output file and error file.</p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Arrays-1" class="autolablink" target="_self">Autolab</a> Make a job script that creates a job array with job indices running from 1 to 10.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Arrays-2" class="autolablink" target="_self">Autolab</a> Make a job script that creates a job array with job indices 2, 29, 71, 73 and 127.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Dependencies-1" class="autolablink" target="_self">Autolab</a> Make a job script that waits until another job with id 1234567 exits successfully.</p>
+</li>
+<li>
+<p>Assume we have the following output from <code>bstat</code> for a job array which is already submitted:</p>
+<pre><code>$ bstat
+JOBID      USER    QUEUE      JOB_NAME   NALLOC STAT  START_TIME      ELAPSED
+21241475   patmjen hpc        array[1]        1 RUN   Apr  9 13:40    0:00:09
+21241475   patmjen hpc        array[2]        1 RUN   Apr  9 13:40    0:00:09
+21241475   patmjen hpc        array[3]        1 RUN   Apr  9 13:40    0:00:09
+21241475   patmjen hpc        array[4]        1 RUN   Apr  9 13:40    0:00:09
+21241475   patmjen hpc        array[5]        1 RUN   Apr  9 13:40    0:00:09
+</code></pre>
+<p>Make job script that creates a job array, where each job in the array waits for the corresponding job in the already submitted array to finish successfully.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Job-Dependencies-2" class="autolablink" target="_self">Autolab</a> Again, assume we have the following output from `bstat' for a job array which is already submitted:</p>
+<pre><code>$ bstat
+JOBID      USER    QUEUE      JOB_NAME   NALLOC STAT  START_TIME      ELAPSED
+21241475   patmjen hpc        array[1]        1 RUN   Apr  9 13:40    0:00:09
+21241475   patmjen hpc        array[2]        1 RUN   Apr  9 13:40    0:00:09
+21241475   patmjen hpc        array[3]        1 RUN   Apr  9 13:40    0:00:09
+21241475   patmjen hpc        array[4]        1 RUN   Apr  9 13:40    0:00:09
+21241475   patmjen hpc        array[5]        1 RUN   Apr  9 13:40    0:00:09
+</code></pre>
+<p>Make a job script that waits until all elements of the job array have exited for any reason.</p>
+</li>
+</ol>
+<h2 id="2-face-colors">2. Face Colors</h2>
+<p><img alt="CelebA preview" src="figs/week11/celeba_preview.png"></p>
+<p>In this exercise we will return to the <a href="http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html">CelebA</a> dataset of celebrity images as our data source. As a way of summarizing the dataset, we will create a histogram over the colors in the images - more specifically, the <a href="https://en.wikipedia.org/wiki/HSL_and_HSV">hue</a> values. The images are stored in subfolders at: <code>/dtu/projects/02613_2024/data/celeba/images</code>. Each subfolder contains around 1000 images. To speed up the computation, we will process each folder as a separate job (using a job array) and then aggregate the results into a combined histogram as a final job at the end.</p>
+<p>Consider the following function, which extracts a histogram from an RGB stored as a (H, W, 3) NumPy array:</p>
+<pre><code>import numpy as np
+from PIL import Image
+
+def huehist(image):
+    bins = np.linspace(0, 255, 64 + 1)
+    hsv_image = np.asarray(Image.fromarray(image).convert('HSV'))
+    hue_values = hsv_image[:, :, 0].reshape(-1)
+    hue_hist = np.histogram(hue_values, bins)[0]
+    return hue_hist
+</code></pre>
+<ol>
+<li>
+<p>Create a Python program which takes an index <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>i</mi></mrow></math> as a command line argument. For the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>i</mi></mrow></math>th folder in <code>/dtu/projects/02613_2024/data/celeba/images</code>, the program must then:</p>
+<ol>
+<li>Load every image in the folder. Hint: use <a href="https://docs.python.org/3/library/glob.html#glob.glob"><code>glob.glob</code></a> or <a href="https://docs.python.org/3/library/os.html#os.listdir"><code>os.listdir</code></a> to get the files in a folder.</li>
+<li>Compute the hue histogram for each image using the provided function.</li>
+<li>Sum the histograms to get a combined histogram for the folder.</li>
+<li>Save the summed histogram to a NumPy array named <code>subhist_&lt;i&gt;.npy</code>, where <code>&lt;i&gt;</code> is replaced with the value of the provided index <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>i</mi></mrow></math>.</li>
+</ol>
+</li>
+<li>
+<p>Create a Python program that loads the saved histogram arrays, sums them to a combined histogram for the entire dataset, plots the histogram using <a href="https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.bar.html"><code>plt.bar</code></a> and finally saves the histogram plot as an image.</p>
+</li>
+<li>
+<p>Make a job script that submits a job array where each job computes the hue histogram for the <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>i</mi></mrow></math>th folder using the first Python program.</p>
+</li>
+<li>
+<p>Make a job script that waits for all jobs in the previous job array to finish successfully and then runs the second Python program to compute and plot the final hue histogram.</p>
+</li>
+<li>
+<p>Submit your jobs and compute the histogram.</p>
+</li>
+</ol></body></html>
