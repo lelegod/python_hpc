@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="exercises-for-week-7">Exercises for Week 7</h1>
+<hr>
+<p>For these exercises, we will use weather data from public DMI (Danmarks Metereologiske Institut) from January 2023. You can read more about DMI's free data (in Danish) <a href="https://www.dmi.dk/friedata/guides-til-frie-data">here</a>. For information about the data records we will be working with (in English), see <a href="https://www.dmi.dk/friedata/dokumentation/meteorological-observations-data" target="_self">the official documentation</a>. We have prepared the relevant data in a CSV file you can find at <code>/dtu/projects/02613_2025/data/dmi/2023_01.csv.zip</code>.</p>
+<p>Each row of the CSV file represents a measurement from one of the measurement stations DMI operates in Denmark, Greenland and the Faroe Islands. The stations measure several different parameters including wind speed, precipitation, humidity, etc., and each row is a measurement of one parameter. The columns are:</p>
+<ol>
+<li><code>coordsx</code> First coordinate of measurement station.</li>
+<li><code>coordsy</code> Second coordinate of measurement station.</li>
+<li><code>created</code> Time measurement was entered in data base.</li>
+<li><code>observed</code> Time measurement was observed.</li>
+<li><code>parameterId</code> Measured parameter. See also the <a href="https://www.dmi.dk/friedata/dokumentation/meteorological-observations-data#parameters" target="_self">official documentation</a>.</li>
+<li><code>stationId</code> ID of measurement station.</li>
+<li><code>value</code> Measured value.</li>
+</ol>
+<h2 id="1-storage-and-reading-files-with-pandas">1. Storage and Reading Files with Pandas</h2>
+<p>The goal of this exercise is to compare different method of loading and representing dataframes with pure Pandas.</p>
+<ol>
+<li>
+<p>The CSV file is stored as a zip file. Compare the time it takes for the following two approaches:</p>
+<ol>
+<li>
+<p>First unpacking the zip file with the <code>unzip</code> command and then reading the CSV file with <code>read_csv</code>.</p>
+</li>
+<li>
+<p>Read the zip directly with <code>read_csv</code>.</p>
+</li>
+</ol>
+<p>Which one is faster?</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Pandas-Size" class="autolablink" target="_self">Autolab</a> Load the data to a pandas dataframe (use <code>pd.read_csv()</code>). How much memory does the data frame occupy? Create a function <code>df_memsize</code> that takes a Pandas DataFrame as input and returns its size in bytes.</p>
+</li>
+<li>
+<p>Check the columns and list all the changes you can do to save memory. Hint: check sections 7.1.2 and 7.1.3 on Fast Python for inspiration. You can use the following function summarize the dataframe:</p>
+<pre><code>def summarize_columns(df):
+print(pd.DataFrame([
+    (
+        c,
+        df[c].dtype,
+        len(df[c].unique()),
+        df[c].memory_usage(deep=True) // (1024**2)
+    ) for c in df.columns
+], columns=['name', 'dtype', 'unique', 'size (MB)']))
+print('Total size:', df.memory_usage(deep=True).sum() / 1024**2, 'MB')
+</code></pre>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Reduce-DataFrame" class="autolablink" target="_self">Autolab</a> Perform the changes to reduce the memory usage. What is the new size of the dataframe? Create a function <code>reduce_dmi_df</code> that takes a Pandas DataFrame as input and returns a transformed DataFrame where at least 3 columns have had their memory use reduced.</p>
+</li>
+</ol>
+<h2 id="2-reading-files-with-arrow">2. Reading Files with Arrow</h2>
+<p>The goal of this exercise is to compare the time and memory size we get when using PyArrow to read the files instead of pandas. Check section 7.4 on Fast Python for help on this exercise.</p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/PyArrow-Load" class="autolablink" target="_self">Autolab</a> Load the DMI data from January 2023, as we did in the last exercise, but this time using PyArrow. Compute the time it took to read the CSV, what was the speed up when comparing with pandas? Create a function <code>pyarrow_load</code> that takes a path to a CSV file as input, loads the file with PyArrow and returns the PyArrow table.</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/PyArrow-Load-and-Convert" class="autolablink" target="_self">Autolab</a> Now convert the PyArrow table to a pandas data frame, how long does it take? Is the total time (time to load the data with PyArrow + the time to convert it to a pandas data frame) faster or slower than pure Pandas? Modify your previous function to return a Pandas DataFrame instead of a PyArrow table.</p>
+</li>
+<li>
+<p>What was the size of the PyArrow table you got after loading the data? What was the size of the data frame after the conversion? Why are they different?</p>
+</li>
+<li>
+<p>Modify your loading code in order to perform (as many as possible of) the memory reducing operations you did in exercise 1.4. What is the new size of the PyArrow table?</p>
+</li>
+</ol>
+<h2 id="3-parquet-files">3. Parquet Files</h2>
+<p>Parquet files offer a highly efficient representation for columnar data, optimizing storage, and query performance in data processing workflows. The data is stored in a binary file allowing to represent numbers in a much more compactly form than in text, as it is done for csv files. In this exercise we will explore the advantages of using Parquet files to store data. Check section 8.2 in Fast Python for help on this exercise.</p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Save-Parquet" class="autolablink" target="_self">Autolab</a> Make a Python program that receives the path to a CSV file as a command line argument, loads the CSV file and finally saves it again as a Parquet file. What is the difference in size between the original CSV file and the Parquet file?</p>
+</li>
+<li>
+<p>Measure the times to read and write the DMI data to a parquet files and compare it to reading and writing CSV.</p>
+</li>
+</ol>
+<h2 id="4-pandas-fast-operations">4. Pandas - Fast Operations</h2>
+<p>Our goal with this exercise is to compute the total amount of precipitation (i.e., rain) across all measurement stations. We will do this by summing all records with <code>parameterId</code> equal to <code>precip_past10min</code>. These hold the total precipitation in <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">k</mi><mi mathvariant="normal">g</mi></mrow><mo>/</mo><msup><mi>m</mi><mn>2</mn></msup></mrow></math> or <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mrow><mi mathvariant="normal">m</mi><mi mathvariant="normal">m</mi></mrow></mrow></math> for this station over the past 10 minutes. Check sections 7.2.2 and 7.3.1 on Fast Python for help on this exercise.</p>
+<p>A raw python implementation (i.e., not using pandas- or NumPy-based approaches) for could be:</p>
+<pre><code>def total_precip(df):
+    total = 0.0
+    for i in range(len(df)):
+        row = df.iloc[i]
+        if row['parameterId'] == 'precip_past10min':
+            total += row['value']
+    return total
+</code></pre>
+<ol>
+<li>
+<p>Run the raw python implementation and time it. <em>Note:</em> Use the Pandas DataFrame method <code>sample</code> to subsample a smaller DataFrame, to avoid exessive wait times. How long did it take to execute?</p>
+</li>
+<li>
+<p>Build a pandas-based implementation using the <code>apply()</code> method to perform the same operation and time it. What was the speed up?</p>
+</li>
+<li>
+<p>Now write a pure Pandas version using a vectorized approach. How long did it take to execute? What was the speed up in comparison with the two previous implementations?</p>
+</li>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Total-Precipitation" class="autolablink" target="_self">Autolab</a> Turn your previous implementation into a Python program that receives the path to a CSV file as a command line argument, loads the CSV, computes the total precipitation and finally prints the result (and only the result).</p>
+</li>
+<li>
+<p>A significant portion of the work in the vectorized version is doing the indexing to extract the relevant rows. Rewrite the vectorized version to first use the <code>parameterId</code> column as an index. Excluding the time it takes to build the index, how long does it take to compute the total precipitation now? Including the time to build the index? When would one prefer one to the other? Hint: see section 7.2.1 in Fast Python.</p>
+</li>
+</ol></body></html>
