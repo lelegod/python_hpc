@@ -1,5 +1,33 @@
 # Floating Point & dtype Arithmetic — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — float16 precision loss at large values](#q1-float16-precision-loss-at-large-values)
+- [Q2 — float16 rounding near 100](#q2-float16-rounding-near-100)
+- [Q3 — int8 signed overflow](#q3-int8-signed-overflow)
+- [Q4 — uint8 underflow (wrap-around)](#q4-uint8-underflow-wrap-around)
+- [Q5 — float16 overflow to inf](#q5-float16-overflow-to-inf)
+- [Q6 — int16 signed overflow at boundary](#q6-int16-signed-overflow-at-boundary)
+- [Q7 — dtype downcast safety check](#q7-dtype-downcast-safety-check)
+- [Q8 — float32 exact integer representation limit](#q8-float32-exact-integer-representation-limit)
+- [Summary Table](#summary-table)
+- [Key Facts Reference](#key-facts-reference)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q9 — Array Memory Footprint](#q9-array-memory-footprint)
+- [Q10 — Dtype Memory Comparison](#q10-dtype-memory-comparison)
+- [Q11 — int8 Value Wrapping on Array Construction](#q11-int8-value-wrapping-on-array-construction)
+- [Q12 — Pandas astype Memory Reduction](#q12-pandas-astype-memory-reduction)
+- [Q13 — Range Check for uint8](#q13-range-check-for-uint8)
+- [Q14 — float16 Memory for Large Array](#q14-float16-memory-for-large-array)
+- [Q15 — Detecting Unsafe Downcast](#q15-detecting-unsafe-downcast)
+- [Q16 — Categorical vs Object Memory](#q16-categorical-vs-object-memory)
+- [Q17 — float16 NaN vs inf](#q17-float16-nan-vs-inf)
+- [Q18 — int32 vs int64 Memory Tradeoff](#q18-int32-vs-int64-memory-tradeoff)
+
+---
+
 > Format: Each question shows NumPy dtype code — predict the output.
 > Exam frequency: **F25 exam Q2**.
 

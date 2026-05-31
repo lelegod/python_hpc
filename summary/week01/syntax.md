@@ -1,5 +1,16 @@
 # Week 1 — LSF / BSUB Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [BSUB Directives (inside job script)](#bsub-directives-inside-job-script)
+- [LSF Commands](#lsf-commands)
+- [Inside Job Script](#inside-job-script)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## BSUB Directives (inside job script)
 
 ```bash

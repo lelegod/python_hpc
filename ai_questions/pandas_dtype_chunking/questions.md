@@ -1,5 +1,35 @@
 # Pandas Dtype Optimization & Chunking — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — int64 mach_id Downcast](#q1-int64-mach_id-downcast)
+- [Q2 — int64 version Column Downcast](#q2-int64-version-column-downcast)
+- [Q3 — Low-Cardinality Object Column](#q3-low-cardinality-object-column)
+- [Q4 — High-Cardinality Object Column with Timestamps](#q4-high-cardinality-object-column-with-timestamps)
+- [Q5 — int64 units Column Exceeding int16](#q5-int64-units-column-exceeding-int16)
+- [Q6 — Integer-to-Float Precision Trap](#q6-integer-to-float-precision-trap)
+- [Q7 — Memory Budget Calculation (Mixed Dtypes)](#q7-memory-budget-calculation-mixed-dtypes)
+- [Q8 — Memory Budget Calculation (All int64)](#q8-memory-budget-calculation-all-int64)
+- [Q9 — Chunked Reading Limitations](#q9-chunked-reading-limitations)
+- [Q10 — memory_usage deep=True vs deep=False](#q10-memory_usage-deeptrue-vs-deepfalse)
+- [Q11 — Sorted Index for Repeated Date Lookups](#q11-sorted-index-for-repeated-date-lookups)
+- [Q12 — High-Cardinality String Column Decision](#q12-high-cardinality-string-column-decision)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q13 — read_csv dtype Parameter Effect](#q13-read_csv-dtype-parameter-effect)
+- [Q14 — chunksize Return Type](#q14-chunksize-return-type)
+- [Q15 — Category Memory Calculation](#q15-category-memory-calculation)
+- [Q16 — Chunk Accumulation Pattern](#q16-chunk-accumulation-pattern)
+- [Q17 — memory_usage Without deep=True](#q17-memory_usage-without-deeptrue)
+- [Q18 — float32 vs float64 Memory Saving Percentage](#q18-float32-vs-float64-memory-saving-percentage)
+- [Q19 — read_csv dtype vs astype Timing](#q19-read_csv-dtype-vs-astype-timing)
+- [Q20 — Category Codes Integer Width](#q20-category-codes-integer-width)
+- [Q21 — Correct chunksize for Memory Budget](#q21-correct-chunksize-for-memory-budget)
+- [Q22 — Arrow Dictionary Type vs Pandas Category](#q22-arrow-dictionary-type-vs-pandas-category)
+
+---
+
 > Topics: dtype downcast decisions, object→datetime/category, memory budget calculation, chunked reading.
 > Exam frequency: **2024 exam + F25**.
 

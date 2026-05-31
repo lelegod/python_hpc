@@ -1,5 +1,20 @@
 # Week 2 — Timing & Profiling Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Timing](#timing)
+  - [`time.perf_counter()`](#timeperf_counter)
+- [cProfile — function-level profiling](#cprofile-function-level-profiling)
+  - [Output columns](#output-columns)
+- [kernprof / line_profiler — line-level profiling](#kernprof-line_profiler-line-level-profiling)
+  - [Output columns](#output-columns)
+- [`time` shell command — wall vs CPU time](#time-shell-command-wall-vs-cpu-time)
+- [MFLOP/s formula](#mflops-formula)
+
+---
+
 ## Timing
 
 ### `time.perf_counter()`

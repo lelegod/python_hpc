@@ -1,5 +1,32 @@
 # HPC Workflows — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Question 1](#question-1)
+- [Question 2](#question-2)
+- [Question 3](#question-3)
+- [Question 4](#question-4)
+- [Question 5](#question-5)
+- [Question 6](#question-6)
+- [Question 7](#question-7)
+- [Question 8](#question-8)
+- [Key Facts Summary](#key-facts-summary)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q9 — Spotting the done() Blocker](#q9-spotting-the-done-blocker)
+- [Q10 — Fixing Output File Collision](#q10-fixing-output-file-collision)
+- [Q11 — Reading Array Index in Python](#q11-reading-array-index-in-python)
+- [Q12 — Concurrent Slot Limit Syntax](#q12-concurrent-slot-limit-syntax)
+- [Q13 — Three-Stage Pipeline With done() and ended()](#q13-three-stage-pipeline-with-done-and-ended)
+- [Q14 — Identifying the Correct Index in a File List](#q14-identifying-the-correct-index-in-a-file-list)
+- [Q15 — done() With Specific Job ID](#q15-done-with-specific-job-id)
+- [Q16 — Diagnosing a Stuck Pipeline](#q16-diagnosing-a-stuck-pipeline)
+- [Q17 — Constructing the Output Filename](#q17-constructing-the-output-filename)
+- [Q18 — Combining Array Index With Python Logic](#q18-combining-array-index-with-python-logic)
+
+---
+
 > Format: Each question shows a job array script or Python HPC code with patterns to analyse.
 > Exam frequency: **2024 exam + F25**.
 

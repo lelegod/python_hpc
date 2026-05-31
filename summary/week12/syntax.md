@@ -1,5 +1,20 @@
 # Week 12 — Project Syntax Reference (Wall Heating)
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Jacobi Iteration (reference implementation)](#jacobi-iteration-reference-implementation)
+- [Loading Building Data](#loading-building-data)
+- [Computing Statistics](#computing-statistics)
+- [Numba JIT Jacobi (Task 7)](#numba-jit-jacobi-task-7)
+- [CUDA Jacobi Kernel (Task 8)](#cuda-jacobi-kernel-task-8)
+- [CuPy Jacobi (Task 9)](#cupy-jacobi-task-9)
+- [Parallelizing Over Floor Plans](#parallelizing-over-floor-plans)
+- [Profiling Jacobi](#profiling-jacobi)
+
+---
+
 ## Jacobi Iteration (reference implementation)
 
 ```python

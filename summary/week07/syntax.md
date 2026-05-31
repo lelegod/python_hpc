@@ -1,5 +1,20 @@
 # Week 7 — Pandas & PyArrow Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Pandas Memory Inspection](#pandas-memory-inspection)
+- [dtype Downcasting](#dtype-downcasting)
+  - [dtype reference table](#dtype-reference-table)
+- [Pandas Indexing for Speed](#pandas-indexing-for-speed)
+- [PyArrow CSV Loading](#pyarrow-csv-loading)
+- [Parquet](#parquet)
+- [File Format Comparison](#file-format-comparison)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## Pandas Memory Inspection
 
 ```python

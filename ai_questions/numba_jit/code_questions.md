@@ -1,5 +1,21 @@
 # Numba JIT — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Timing Bug (Warmup)](#q1-timing-bug-warmup)
+- [Q2 — GIL and Threading (No `nogil`)](#q2-gil-and-threading-no-nogil)
+- [Q3 — GIL Released (`nogil=True`)](#q3-gil-released-nogiltrue)
+- [Q4 — Unsupported Type in `nopython` Mode](#q4-unsupported-type-in-nopython-mode)
+- [Q5 — Interpreting a Speedup Result](#q5-interpreting-a-speedup-result)
+- [Q6 — Applying `@njit` to Already-Vectorized NumPy](#q6-applying-njit-to-already-vectorized-numpy)
+- [Q7 — `cache=True` Behaviour](#q7-cachetrue-behaviour)
+- [Q8 — CUDA Kernel Called from `@jit` Function](#q8-cuda-kernel-called-from-jit-function)
+- [Key Facts Summary](#key-facts-summary)
+
+---
+
 > Format: Each question shows Numba-decorated Python code to analyse.
 > Exam frequency: **2024 exam + F25**.
 

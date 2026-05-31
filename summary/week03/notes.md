@@ -1,5 +1,33 @@
 # Week 3 — Cache Effects & Efficient Data Storage
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [Measuring Performance](#measuring-performance)
+  - [Memory Hierarchy](#memory-hierarchy)
+  - [Cache Lines](#cache-lines)
+  - [Spatial Locality vs Temporal Locality](#spatial-locality-vs-temporal-locality)
+  - [Row vs Column Access in NumPy](#row-vs-column-access-in-numpy)
+- [Mathematical Formulas](#mathematical-formulas)
+- [Key Code Examples](#key-code-examples)
+  - [cache.py — Row vs Column Access Timing](#cachepy-row-vs-column-access-timing)
+  - [Solution: Timing with Repetitions (from solutions)](#solution-timing-with-repetitions-from-solutions)
+  - [Solution: Sweeping SIZE with logspace](#solution-sweeping-size-with-logspace)
+- [Plotting Performance (loglog plots)](#plotting-performance-loglog-plots)
+- [Blosc API Reference](#blosc-api-reference)
+  - [blosc_ex.py — Full Read/Write Comparison](#blosc_expy-full-readwrite-comparison)
+  - [blosc_quiz.py — Three Data Patterns](#blosc_quizpy-three-data-patterns)
+- [Exercise Highlights](#exercise-highlights)
+  - [Exercise 1: Cache Effects](#exercise-1-cache-effects)
+  - [Exercise 2: Efficient Data Storage with Blosc](#exercise-2-efficient-data-storage-with-blosc)
+- [Key Takeaways](#key-takeaways)
+- [Common Misconception: Stride-8 vs Sequential Access](#common-misconception-stride-8-vs-sequential-access)
+
+---
+
 ## Overview
 
 Week 3 covers the **memory hierarchy** and how it affects computational performance. The central insight is that FLOP/s (floating point operations per second) is not constant — it degrades as data grows beyond each cache level. The lecture uses a motivating example of an 18K x 18K astronomical image to show why accessing data in the wrong order can be 12x slower. The second half covers **Blosc compression**, showing that for I/O-bound workloads, compressing data before writing it can actually make reads and writes faster.

@@ -1,5 +1,35 @@
 # LSF / BSUB Job Scripts — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Memory Per Core Calculation](#q1-memory-per-core-calculation)
+- [Q2 — Identifying Wrong Memory Value](#q2-identifying-wrong-memory-value)
+- [Q3 — Shared Memory Parallelism Flag](#q3-shared-memory-parallelism-flag)
+- [Q4 — GPU Queue Configuration](#q4-gpu-queue-configuration)
+- [Q5 — Job Dependency done() Semantics](#q5-job-dependency-done-semantics)
+- [Q6 — Job Dependency ended() vs done()](#q6-job-dependency-ended-vs-done)
+- [Q7 — EXIT State Blocks done() Dependency](#q7-exit-state-blocks-done-dependency)
+- [Q8 — Job Array Syntax](#q8-job-array-syntax)
+- [Q9 — $LSB_JOBINDEX Is 1-Based](#q9-lsb_jobindex-is-1-based)
+- [Q10 — Per-Element Log Output](#q10-per-element-log-output)
+- [Q11 — Wall Time Format](#q11-wall-time-format)
+- [Q12 — Pinning to a CPU Model](#q12-pinning-to-a-cpu-model)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q13 — Total Memory for a 4-Core Job](#q13-total-memory-for-a-4-core-job)
+- [Q14 — Per-Core Value for a Target Total](#q14-per-core-value-for-a-target-total)
+- [Q15 — GPU Job: Which Flag Is Mandatory?](#q15-gpu-job-which-flag-is-mandatory)
+- [Q16 — GPU Mode: exclusive_process vs shared](#q16-gpu-mode-exclusive_process-vs-shared)
+- [Q17 — span[hosts=1] vs span[ptile=N]](#q17-spanhosts1-vs-spanptilen)
+- [Q18 — Wall Time: Minutes-Only Format](#q18-wall-time-minutes-only-format)
+- [Q19 — bjobs Status Column Meanings](#q19-bjobs-status-column-meanings)
+- [Q20 — -n Flag vs -R Flag: What Each Controls](#q20-n-flag-vs-r-flag-what-each-controls)
+- [Q21 — bkill and Stuck PEND Jobs](#q21-bkill-and-stuck-pend-jobs)
+- [Q22 — Email Notification Flags](#q22-email-notification-flags)
+
+---
+
 > Topics: BSUB flags, resource calculation, GPU configuration, job dependencies, job arrays.
 > Exam frequency: **Every exam** — second highest priority topic.
 

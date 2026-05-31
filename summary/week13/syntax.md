@@ -1,5 +1,20 @@
 # Week 13 — HPC Pitfalls Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Thread Count Environment Variables](#thread-count-environment-variables)
+- [Fast I/O Redirection](#fast-io-redirection)
+- [Kill Background Processes](#kill-background-processes)
+- [Polling the Scheduler](#polling-the-scheduler)
+- [File Organisation](#file-organisation)
+- [ThreadPool vs Pool for NumPy](#threadpool-vs-pool-for-numpy)
+- [Good Job Script Template](#good-job-script-template)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## Thread Count Environment Variables
 
 **Always set these to match `#BSUB -n` — packages like NumPy use BLAS which ignores LSF allocation and defaults to all hardware cores.**

@@ -1,4 +1,30 @@
 # 02613 Python HPC — Exam 2024 Full Solutions
+
+> **Exam files:** [2024 Exam](exam_2024_solutions.md) · [2024 Re-exam](reexam_2024_solutions.md) · [F25 Exam](exam_F25_solutions.md) · · **Root:** [STUDY_GUIDE](../STUDY_GUIDE.md) · [Exam Review](../exam_review.md)
+
+## Contents
+
+- [Question 1 — Fixing a BSUB Job Script](#question-1-fixing-a-bsub-job-script)
+- [Question 2 — Parallel Fraction from a Speed-Up Plot (MCQ)](#question-2-parallel-fraction-from-a-speed-up-plot-mcq)
+- [Question 3 — Should They Pursue Parallelization? (Open-ended)](#question-3-should-they-pursue-parallelization-open-ended)
+- [Question 4 — Parallelization Approach for `process_number` (MCQ)](#question-4-parallelization-approach-for-process_number-mcq)
+- [Question 5 — Static vs. Dynamic Scheduling for `process_number` (Open-ended)](#question-5-static-vs-dynamic-scheduling-for-process_number-open-ended)
+- [Question 6 — Why `abssum` Cannot Be Used in a Parallel Reduction (Open-ended)](#question-6-why-abssum-cannot-be-used-in-a-parallel-reduction-open-ended)
+- [Question 7 — NumPy Broadcasting to Subtract a Mean Image (MCQ)](#question-7-numpy-broadcasting-to-subtract-a-mean-image-mcq)
+- [Question 8 — Re-ordering Loops for Cache Efficiency (Open-ended)](#question-8-re-ordering-loops-for-cache-efficiency-open-ended)
+- [Question 9 — Reading a Profiler Output: Number of Samples (MCQ)](#question-9-reading-a-profiler-output-number-of-samples-mcq)
+- [Question 10 — Which Function to Optimize for Normal Workloads (Open-ended)](#question-10-which-function-to-optimize-for-normal-workloads-open-ended)
+- [Question 11 — Cache Efficiency: CPU Parallel Version of `conv_channels` (Open-ended)](#question-11-cache-efficiency-cpu-parallel-version-of-conv_channels-open-ended)
+- [Question 12 — Cache Efficiency: CUDA Kernel Version of `conv_channels` (Open-ended)](#question-12-cache-efficiency-cuda-kernel-version-of-conv_channels-open-ended)
+- [Question 13 — GPU Transfer Speed from nsys Profiler (MCQ)](#question-13-gpu-transfer-speed-from-nsys-profiler-mcq)
+- [Question 14 — GPU vs. CPU Speed Comparison (Open-ended)](#question-14-gpu-vs-cpu-speed-comparison-open-ended)
+- [Question 15 — Recoding DataFrame Columns to Reduce Memory (Open-ended)](#question-15-recoding-dataframe-columns-to-reduce-memory-open-ended)
+- [Question 16 — Speeding Up Date-Based Row Extraction (Open-ended)](#question-16-speeding-up-date-based-row-extraction-open-ended)
+- [Question 17 — Maximum Rows per Chunk for Power Measurement DataFrame (MCQ)](#question-17-maximum-rows-per-chunk-for-power-measurement-dataframe-mcq)
+- [Question 18 — Job Dependency for Post-Processing Job (Open-ended)](#question-18-job-dependency-for-post-processing-job-open-ended)
+- [Question 19 — Parallelizing a Dynamical System Simulation (Open-ended)](#question-19-parallelizing-a-dynamical-system-simulation-open-ended)
+
+---
 **Date:** 28 May 2024 | **Duration:** 4 hours | **Format:** Mixed (open-ended + MCQ) | **Pages:** 14
 
 ---

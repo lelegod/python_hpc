@@ -1,5 +1,35 @@
 # LSF / BSUB Job Scripts — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Total Memory Calculation](#q1-total-memory-calculation)
+- [Q2 — Incorrect Per-Core Memory](#q2-incorrect-per-core-memory)
+- [Q3 — Missing span[hosts=1] for Shared Memory](#q3-missing-spanhosts1-for-shared-memory)
+- [Q4 — Converting CPU Script to GPU](#q4-converting-cpu-script-to-gpu)
+- [Q5 — Dependency on a Failed Job](#q5-dependency-on-a-failed-job)
+- [Q6 — done() vs ended() for Cleanup Jobs](#q6-done-vs-ended-for-cleanup-jobs)
+- [Q7 — Job Array Index Off-By-One](#q7-job-array-index-off-by-one)
+- [Q8 — Job Array Output File Naming](#q8-job-array-output-file-naming)
+- [Q9 — Wall Time Format](#q9-wall-time-format)
+- [Q10 — Email Notifications for Large Job Arrays](#q10-email-notifications-for-large-job-arrays)
+- [Q11 — Map-Reduce Dependency with Partial Failures](#q11-map-reduce-dependency-with-partial-failures)
+- [Q12 — Full Script Resource Summary](#q12-full-script-resource-summary)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q13 — Reading Total Memory from a Script](#q13-reading-total-memory-from-a-script)
+- [Q14 — Fixing Over-Allocated Memory](#q14-fixing-over-allocated-memory)
+- [Q15 — GPU Script: Spot the Bug](#q15-gpu-script-spot-the-bug)
+- [Q16 — Two Scripts: Which Gets a GPU?](#q16-two-scripts-which-gets-a-gpu)
+- [Q17 — span[hosts=1] in a Shared Memory Script](#q17-spanhosts1-in-a-shared-memory-script)
+- [Q18 — Wall Time: Script Killed Mid-Run](#q18-wall-time-script-killed-mid-run)
+- [Q19 — Interpreting bjobs Output](#q19-interpreting-bjobs-output)
+- [Q20 — Per-Core Memory in MB vs GB](#q20-per-core-memory-in-mb-vs-gb)
+- [Q21 — Combining rusage and span in -R](#q21-combining-rusage-and-span-in-r)
+- [Q22 — bkill on a Running vs Pending Job](#q22-bkill-on-a-running-vs-pending-job)
+
+---
+
 > Format: Each question shows a BSUB script or command output to interpret or fix.
 > Exam frequency: **Every exam** — second highest priority.
 

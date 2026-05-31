@@ -1,0 +1,15 @@
+Task 11 merged array summary
+============================
+
+number of shard files: 4
+total buildings: 4571
+mean solver time per building: 4.7674 s
+total solver time across buildings: 21791.5585 s
+total Jacobi iterations: 39746490
+
+Aggregate statistics across buildings
+------------------------------------
+mean_temp: mean=14.6936, min=6.8174, max=21.4362
+std_temp: mean=6.8017, min=4.0014, max=8.8134
+pct_above_18: mean=38.9261, min=4.5193, max=80.8818
+pct_below_15: mean=51.9606, min=13.5953, max=93.3518

@@ -1,5 +1,34 @@
 # Pandas Dtype Optimization & Chunking — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Question 1](#question-1)
+- [Question 2](#question-2)
+- [Question 3](#question-3)
+- [Question 4](#question-4)
+- [Question 5](#question-5)
+- [Question 6](#question-6)
+- [Question 7](#question-7)
+- [Question 8](#question-8)
+- [Question 9](#question-9)
+- [Question 10](#question-10)
+- [Key Facts Reference](#key-facts-reference)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Question 11](#question-11)
+- [Question 12](#question-12)
+- [Question 13](#question-13)
+- [Question 14](#question-14)
+- [Question 15](#question-15)
+- [Question 16](#question-16)
+- [Question 17](#question-17)
+- [Question 18](#question-18)
+- [Question 19](#question-19)
+- [Question 20](#question-20)
+
+---
+
 > Format: Each question shows a DataFrame summary, code snippet, or memory_usage output to interpret.
 > Exam frequency: **2024 exam + F25**.
 

@@ -1,0 +1,127 @@
+No GPU on this node, CUDA module not loaded
+Python:
+Python 3.12.13
+Starting tasks 1-5...
+TASK 1:
+Total buildings: 4571
+Saved: /zhome/af/5/222919/Documents/dtu_hpc_project/task1-5/report/task1_input_visualization.png
+
+TASK 2:
+10000, 14.0123, 6.3674, 30.9410, 55.5423
+10009, 11.0001, 5.8111, 16.6713, 74.9724
+10014, 14.7442, 7.0377, 38.2637, 52.8084
+10019, 14.7355, 7.0303, 38.1492, 52.9293
+10029, 10.6160, 6.3173, 18.2556, 74.5130
+10031, 12.5071, 6.2784, 24.0447, 66.3951
+10051, 13.2890, 5.9991, 25.9769, 62.8599
+10053, 11.3665, 6.2612, 19.9511, 72.4105
+10056, 14.2201, 6.1795, 31.7635, 57.0617
+10064, 12.7170, 6.9642, 28.7914, 62.7569
+10075, 15.1569, 6.4405, 39.1209, 47.4561
+10079, 15.0944, 7.3139, 41.9000, 49.4497
+10080, 15.7777, 7.2806, 46.3658, 44.7110
+10082, 16.4657, 6.7133, 48.6435, 40.5614
+10083, 15.6392, 7.1208, 44.8555, 45.8864
+10084, 15.1006, 7.1505, 40.9065, 50.2665
+10085, 15.8689, 7.1928, 46.1830, 44.7257
+10086, 14.3915, 7.2156, 37.2566, 53.0188
+10087, 15.0732, 7.2755, 41.5324, 49.8971
+10089, 13.9898, 7.2763, 35.4586, 56.3640
+Time for 20 buildings:  233.59 s
+Time per building:       11.68 s
+Estimated total (4571):  889.8 min
+TASK 3:
+Saved: /zhome/af/5/222919/Documents/dtu_hpc_project/task1-5/report/task3_simulation_results.png
+
+TASK 4:
+Profile saved: /zhome/af/5/222919/Documents/dtu_hpc_project/task1-5/report/task4_profile.txt
+
+TASK 5 (N=50, max_workers=8):
+  workers= 1  time=663.04s
+  workers= 2  time=343.77s
+  workers= 4  time=303.20s
+  workers= 8  time=169.46s
+
+ Workers    Time(s)    Speedup
+       1     663.04      1.000
+       2     343.77      1.929
+       4     303.20      2.187
+       8     169.46      3.913
+
+Amdahl: parallel fraction p ≈ 0.851
+Theoretical max speedup: 6.70x
+Estimated time for all 4571 buildings: 258.2 min
+Speedup plot saved: /zhome/af/5/222919/Documents/dtu_hpc_project/task1-5/report/task5_speedup.png
+CSV results saved:  /zhome/af/5/222919/Documents/dtu_hpc_project/task1-5/report/task5_results.csv
+
+Finished.
+Outputs in report/
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@hpc.dtu.dk>
+Subject: Job 28327415: <task15> in cluster <dcc> Done
+
+Job <task15> was submitted from host <hpclogin1> by user <s252786> in cluster <dcc> at Wed Apr 29 19:43:13 2026
+Job was executed on host(s) <8*n-62-30-25>, in queue <hpc>, as user <s252786> in cluster <dcc> at Wed Apr 29 19:43:15 2026
+</zhome/af/5/222919> was used as the home directory.
+</zhome/af/5/222919/Documents/dtu_hpc_project/task1-5> was used as the working directory.
+Started at Wed Apr 29 19:43:15 2026
+Terminated at Wed Apr 29 20:11:59 2026
+Results reported at Wed Apr 29 20:11:59 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#!/bin/bash
+#BSUB -J task15
+#BSUB -q hpc
+#BSUB -n 8
+#BSUB -R "span[hosts=1] rusage[mem=16GB]"
+#BSUB -W 01:00
+#BSUB -o logs/task15-%J.out
+#BSUB -e logs/task15-%J.err
+
+set -eo pipefail
+
+source /dtu/projects/02613_2025/conda/conda_init.sh
+conda activate 02613_2026
+
+cd ~/Documents/dtu_hpc_project/task1-5
+mkdir -p logs report
+
+export DTU_HPC_LOAD_DIR="/dtu/projects/02613_2025/data/modified_swiss_dwellings/"
+
+echo "Python:"
+python --version
+echo "Starting tasks 1-5..."
+
+/usr/bin/time -v python task1-5.py
+
+echo "Finished."
+echo "Outputs in report/"
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   3002.18 sec.
+    Max Memory :                                 237 MB
+    Average Memory :                             152.57 MB
+    Total Requested Memory :                     131072.00 MB
+    Delta Memory :                               130835.00 MB
+    Max Swap :                                   -
+    Max Processes :                              13
+    Max Threads :                                17
+    Run time :                                   1724 sec.
+    Turnaround time :                            1726 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <logs/task15-28327415.err> for stderr output of this job.
+

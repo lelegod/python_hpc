@@ -1,0 +1,17 @@
+=== Building 10000 ===
+         10811 function calls in 5.938 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    5.861    5.861    5.938    5.938 /zhome/af/5/222919/Documents/dtu_hpc_project/task1-5/task1-5.py:27(jacobi)
+     3602    0.006    0.000    0.077    0.000 {method 'max' of 'numpy.ndarray' objects}
+     3602    0.003    0.000    0.071    0.000 /dtu/projects/02613_2025/conda/miniconda3/envs/02613_2026/lib/python3.12/site-packages/numpy/core/_methods.py:39(_amax)
+     3602    0.068    0.000    0.068    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+        1    0.000    0.000    0.000    0.000 /dtu/projects/02613_2025/conda/miniconda3/envs/02613_2026/lib/python3.12/site-packages/numpy/lib/function_base.py:873(copy)
+        1    0.000    0.000    0.000    0.000 {built-in method numpy.array}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        1    0.000    0.000    0.000    0.000 /dtu/projects/02613_2025/conda/miniconda3/envs/02613_2026/lib/python3.12/site-packages/numpy/lib/function_base.py:869(_copy_dispatcher)
+
+
+

@@ -1,5 +1,35 @@
 # Week 13 — HPC Pitfalls
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [Categories of Pitfalls](#categories-of-pitfalls)
+- [Pitfall Catalogue](#pitfall-catalogue)
+  - [Pitfall 1 — Excessive I/O via `-o`/`-e` Channels](#pitfall-1-excessive-io-via-o-e-channels)
+  - [Pitfall 2 — Duplicate I/O via `tee`](#pitfall-2-duplicate-io-via-tee)
+  - [Pitfall 3 — Spamming `bjobs`/`bstat`](#pitfall-3-spamming-bjobsbstat)
+  - [Pitfall 4 — Too Many Files in One Folder](#pitfall-4-too-many-files-in-one-folder)
+  - [Pitfall 5 — Wrong Number of Threads/Processes](#pitfall-5-wrong-number-of-threadsprocesses)
+  - [Pitfall 6 — Leaving Background Processes Running](#pitfall-6-leaving-background-processes-running)
+- [The "Good HPC Citizen" Rules](#the-good-hpc-citizen-rules)
+- [Debugging HPC Issues](#debugging-hpc-issues)
+  - [Diagnosing I/O slowness](#diagnosing-io-slowness)
+  - [Diagnosing thread count problems](#diagnosing-thread-count-problems)
+  - [Diagnosing too many files](#diagnosing-too-many-files)
+  - [Checking what a package does internally](#checking-what-a-package-does-internally)
+  - [Useful LSF commands reference](#useful-lsf-commands-reference)
+- [Key Code Examples](#key-code-examples)
+  - [matmul.py — the baseline (from course file)](#matmulpy-the-baseline-from-course-file)
+  - [Solution: parallelise with ThreadPool (exercise 2.4)](#solution-parallelise-with-threadpool-exercise-24)
+  - [Complete job script template (good practices)](#complete-job-script-template-good-practices)
+  - [Measured performance summary (from exercises and lecture)](#measured-performance-summary-from-exercises-and-lecture)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 13 covers common mistakes that HPC users make — mistakes that either waste your own compute time or degrade the shared cluster for everyone. The lecture walks through six numbered pitfalls (excessive I/O, duplicate I/O via `tee`, spamming scheduler commands, too many files per folder, mis-configured multi-threading, and leaving background processes running) and gives concrete measurements showing how bad each one is. The exercises let you reproduce the I/O and multi-threading pitfalls yourself on DTU HPC.

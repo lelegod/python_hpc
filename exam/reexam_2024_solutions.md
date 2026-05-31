@@ -1,4 +1,30 @@
 # 02613 Python HPC — Re-exam 2024 Full Solutions
+
+> **Exam files:** [2024 Exam](exam_2024_solutions.md) · [2024 Re-exam](reexam_2024_solutions.md) · [F25 Exam](exam_F25_solutions.md) · · **Root:** [STUDY_GUIDE](../STUDY_GUIDE.md) · [Exam Review](../exam_review.md)
+
+## Contents
+
+- [Context — The Scenario](#context-the-scenario)
+- [Question 1 — LSF Job Script Resource Requests](#question-1-lsf-job-script-resource-requests)
+- [Question 2 — Modifying a Job Script for GPU Execution](#question-2-modifying-a-job-script-for-gpu-execution)
+- [Question 3 — Amdahl's Law: Time on 1 Processor](#question-3-amdahls-law-time-on-1-processor)
+- [Question 4 — Amdahl's Law: Reduced Serial Time](#question-4-amdahls-law-reduced-serial-time)
+- [Question 5 — Zarr Block Shape for Column Access](#question-5-zarr-block-shape-for-column-access)
+- [Question 6 — Memory Required for One Zarr Block](#question-6-memory-required-for-one-zarr-block)
+- [Question 7 — Line Profiler: Number of Steps](#question-7-line-profiler-number-of-steps)
+- [Question 8 — FLOP/s Calculation from Profiler Output](#question-8-flops-calculation-from-profiler-output)
+- [Question 9 — NumPy Vectorization of simulate](#question-9-numpy-vectorization-of-simulate)
+- [Question 10 — NumPy Broadcasting Shape](#question-10-numpy-broadcasting-shape)
+- [Question 11 — CUDA Thread Block Configuration for Best Performance](#question-11-cuda-thread-block-configuration-for-best-performance)
+- [Question 12 — CUDA Block Configuration Reasoning (Open-ended)](#question-12-cuda-block-configuration-reasoning-open-ended)
+- [Question 13 — GPU Memory Transfers in sumavg (Current Implementation)](#question-13-gpu-memory-transfers-in-sumavg-current-implementation)
+- [Question 14 — Optimal GPU Transfer Count for sumavg](#question-14-optimal-gpu-transfer-count-for-sumavg)
+- [Question 15 — Job Array Dependencies and EXIT State](#question-15-job-array-dependencies-and-exit-state)
+- [Question 16 — Parallel Row vs Column Sum: Cache Efficiency](#question-16-parallel-row-vs-column-sum-cache-efficiency)
+- [Question 17 — Multi-threading vs Multi-processing for NumPy](#question-17-multi-threading-vs-multi-processing-for-numpy)
+- [Question 18 — Parallel Reduction vs Parallel Row Sum Speedup](#question-18-parallel-reduction-vs-parallel-row-sum-speedup)
+
+---
 **Duration:** 4 hours | **Format:** Mixed (open-ended + MCQ)
 
 **Date:** 21.08.2024

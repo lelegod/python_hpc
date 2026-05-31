@@ -1,5 +1,35 @@
 # GPU / CUDA Kernels — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Question 1 — Thread Index Calculation](#question-1-thread-index-calculation)
+- [Question 2 — Grid Launch Bug (Off-by-One)](#question-2-grid-launch-bug-off-by-one)
+- [Question 3 — 2D Grid Coverage Bug](#question-3-2d-grid-coverage-bug)
+- [Question 4 — Memory Coalescing in 3D Arrays](#question-4-memory-coalescing-in-3d-arrays)
+- [Question 5 — Missing Bounds Check](#question-5-missing-bounds-check)
+- [Question 6 — Correct Block Count Formula](#question-6-correct-block-count-formula)
+- [Question 7 — Coalescing in a CHW Image Kernel](#question-7-coalescing-in-a-chw-image-kernel)
+- [Question 7b — Coalescing in a CHW Kernel (Standard Block Rules)](#question-7b-coalescing-in-a-chw-kernel-standard-block-rules)
+- [Question 8 — Device Function Callable Scope](#question-8-device-function-callable-scope)
+- [Question 9 — Block Dimension Orientation and Coalescing](#question-9-block-dimension-orientation-and-coalescing)
+- [Question 10 — Thread Block Size and Warp Efficiency](#question-10-thread-block-size-and-warp-efficiency)
+- [Key Facts](#key-facts)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Question 11 — syncthreads Inside an If-Branch](#question-11-syncthreads-inside-an-if-branch)
+- [Question 12 — Transfer Count in an Explicit Loop](#question-12-transfer-count-in-an-explicit-loop)
+- [Question 13 — Naive vs Optimised Transfer Loop](#question-13-naive-vs-optimised-transfer-loop)
+- [Question 14 — Block Reduction: Step Trace](#question-14-block-reduction-step-trace)
+- [Question 15 — Warp Divergence Code Analysis](#question-15-warp-divergence-code-analysis)
+- [Question 16 — nsys Bandwidth Calculation](#question-16-nsys-bandwidth-calculation)
+- [Question 17 — 3D Kernel: Choose Block Shape for Coalescing](#question-17-3d-kernel-choose-block-shape-for-coalescing)
+- [Question 18 — Transfer Count: Pre-allocated Device Output](#question-18-transfer-count-pre-allocated-device-output)
+- [Question 19 — Mixed Arguments: Automatic vs Explicit Transfers](#question-19-mixed-arguments-automatic-vs-explicit-transfers)
+- [Question 20 — Shared Memory Reduction: Missing syncthreads](#question-20-shared-memory-reduction-missing-syncthreads)
+
+---
+
 > Format: Each question shows a Numba CUDA kernel or grid setup code to analyse.
 > Exam frequency: **Every exam** — 4+ questions per exam.
 

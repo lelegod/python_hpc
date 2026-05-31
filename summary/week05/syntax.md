@@ -1,5 +1,20 @@
 # Week 5 — Parallelism & Amdahl's Law Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Amdahl's Law Formulas](#amdahls-law-formulas)
+- [multiprocessing.Pool](#multiprocessingpool)
+  - [`Pool(n_proc)`](#pooln_proc)
+- [ThreadPool (for GIL-releasing code)](#threadpool-for-gil-releasing-code)
+- [Static vs Dynamic Scheduling](#static-vs-dynamic-scheduling)
+- [GIL Rules](#gil-rules)
+- [Granularity Warning](#granularity-warning)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## Amdahl's Law Formulas
 
 ```

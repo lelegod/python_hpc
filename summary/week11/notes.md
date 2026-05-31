@@ -1,5 +1,33 @@
 # Week 11 — HPC Workflows: Job Arrays & Dependencies
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [HPC as a Compute Cluster](#hpc-as-a-compute-cluster)
+  - [Job Arrays](#job-arrays)
+  - [Job Dependencies](#job-dependencies)
+  - [Job States](#job-states)
+  - [Workflow Patterns](#workflow-patterns)
+- [Job Array Syntax](#job-array-syntax)
+  - [Output file naming for job arrays](#output-file-naming-for-job-arrays)
+- [Job Dependency Syntax](#job-dependency-syntax)
+  - [Submitting a dependent job from the command line](#submitting-a-dependent-job-from-the-command-line)
+- [Monitoring Job Arrays](#monitoring-job-arrays)
+- [Key Code Examples](#key-code-examples)
+  - [Minimal job array script](#minimal-job-array-script)
+  - [Dependent aggregation job](#dependent-aggregation-job)
+  - [Element-wise array dependency](#element-wise-array-dependency)
+- [Exercise Highlights](#exercise-highlights)
+  - [Exercise 1 — Job Script Workflows](#exercise-1-job-script-workflows)
+  - [Exercise 2 — CelebA Face Color Histogram (Map-Reduce Workflow)](#exercise-2-celeba-face-color-histogram-map-reduce-workflow)
+- [Useful LSF Commands Reference](#useful-lsf-commands-reference)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 11 shifts perspective from using HPC as a single bigger computer to using it as a **compute cluster**: orchestrating many jobs simultaneously via the LSF batch submission system. The two key tools are **job arrays** (submit many nearly-identical jobs at once) and **job dependencies** (make jobs wait on other jobs). Together these enable map-reduce style workflows where a large dataset is processed in parallel and results are then aggregated by a single downstream job.

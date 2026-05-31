@@ -1,5 +1,32 @@
 # Week 9 — Numba & GPU Computing (CUDA)
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md) · [CUDA Grid Visual](cuda_grid_visual.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [Why GPU?](#why-gpu)
+  - [GPU Architecture](#gpu-architecture)
+  - [Numba](#numba)
+  - [CUDA Programming Model](#cuda-programming-model)
+- [Mathematical Content](#mathematical-content)
+- [Key Code Examples](#key-code-examples)
+  - [Numba CPU JIT](#numba-cpu-jit)
+  - [Minimal CUDA Kernel (1D)](#minimal-cuda-kernel-1d)
+  - [CUDA Kernel (2D grid for matrix operations)](#cuda-kernel-2d-grid-for-matrix-operations)
+  - [CUDA Vector Addition with Timing](#cuda-vector-addition-with-timing)
+  - [Host-Device Memory Transfer Pattern](#host-device-memory-transfer-pattern)
+  - [CUDA Matrix Multiplication Kernel](#cuda-matrix-multiplication-kernel)
+- [Numba CPU JIT](#numba-cpu-jit)
+- [Exercise Highlights](#exercise-highlights)
+  - [Exercise 1: CPU Matrix Multiplication](#exercise-1-cpu-matrix-multiplication)
+  - [Exercise 2: CUDA Vector Addition](#exercise-2-cuda-vector-addition)
+  - [Exercise 3: CUDA Matrix Multiplication](#exercise-3-cuda-matrix-multiplication)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 9 introduces GPU computing using NVIDIA CUDA, accessed from Python via Numba's JIT compiler. The lecture covers why GPUs are useful, how they differ from CPUs architecturally, how to write GPU kernels using `@cuda.jit`, the thread/block/grid programming model, and the critical cost of memory transfers between CPU (host) and GPU (device). Exercises benchmark JIT-compiled CPU matrix multiplication for cache efficiency, then build and profile CUDA kernels for vector addition and matrix multiplication, isolating compute time from transfer overhead.

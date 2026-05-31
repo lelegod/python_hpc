@@ -1,4 +1,36 @@
 # 02613 Python HPC — Exam F25 Full Solutions
+
+> **Exam files:** [2024 Exam](exam_2024_solutions.md) · [2024 Re-exam](reexam_2024_solutions.md) · [F25 Exam](exam_F25_solutions.md) · · **Root:** [STUDY_GUIDE](../STUDY_GUIDE.md) · [Exam Review](../exam_review.md)
+
+## Contents
+
+- [Question 1 — LSF Memory Requests (rusage per core)](#question-1-lsf-memory-requests-rusage-per-core)
+- [Question 2 — float16 Precision and Rounding](#question-2-float16-precision-and-rounding)
+- [Question 3 — Set Intersection as a Parallel Reduction Operator](#question-3-set-intersection-as-a-parallel-reduction-operator)
+- [Question 4 — NumPy reshape and Row-Major Indexing](#question-4-numpy-reshape-and-row-major-indexing)
+- [Question 5 — NumPy Broadcasting for Image Normalization](#question-5-numpy-broadcasting-for-image-normalization)
+- [Question 6 — cProfile: Identifying the Bottleneck (cumtime)](#question-6-cprofile-identifying-the-bottleneck-cumtime)
+- [Question 7 — Identifying Parallelizable Loops (Data Dependencies)](#question-7-identifying-parallelizable-loops-data-dependencies)
+- [Question 8 — Amdahl's Law: Inferring F from Measured Speedup](#question-8-amdahls-law-inferring-f-from-measured-speedup)
+- [Question 9 — The `time` Command: Wall Time vs CPU Time in Parallel Programs](#question-9-the-time-command-wall-time-vs-cpu-time-in-parallel-programs)
+- [Question 10 — GPU Kernel Scheduling: Static vs Dynamic](#question-10-gpu-kernel-scheduling-static-vs-dynamic)
+- [Question 11 — line_profiler: Extrapolating Runtime to Larger Dataset](#question-11-line_profiler-extrapolating-runtime-to-larger-dataset)
+- [Question 12 — CUDA Memory Coalescing: Worst Case for ray_step Traversal](#question-12-cuda-memory-coalescing-worst-case-for-ray_step-traversal)
+- [Question 13 — CUDA Thread Block Count for Output Image](#question-13-cuda-thread-block-count-for-output-image)
+- [Question 14 — nsys Profiler: Identifying Dominant Cost (HtoD vs Kernel vs DtoH)](#question-14-nsys-profiler-identifying-dominant-cost-htod-vs-kernel-vs-dtoh)
+- [Question 15 — Numba CUDA with NumPy Arrays: Memory Transfer Count](#question-15-numba-cuda-with-numpy-arrays-memory-transfer-count)
+- [Question 16 — Cache Behavior: Random Access Pattern](#question-16-cache-behavior-random-access-pattern)
+- [Question 17 — Pandas DataFrame Reduction: Choosing the Right Dtype](#question-17-pandas-dataframe-reduction-choosing-the-right-dtype)
+- [Question 18 — Chunked Processing: Maximum Chunk Size for RAM Constraint](#question-18-chunked-processing-maximum-chunk-size-for-ram-constraint)
+- [Question 19 — numpy.memmap: Actual Memory Footprint](#question-19-numpymemmap-actual-memory-footprint)
+- [Question 20 — Zarr Chunk Size for Row-Sum Operation](#question-20-zarr-chunk-size-for-row-sum-operation)
+- [Question 21 — N-body Gravity: Which Optimization Claim is NOT Correct](#question-21-n-body-gravity-which-optimization-claim-is-not-correct)
+- [Question 22 — Simulation Parallelism: Choosing the Right Strategy](#question-22-simulation-parallelism-choosing-the-right-strategy)
+- [Question 23 — GPU vs CPU: Benchmarking Pitfall with Transfer Overhead](#question-23-gpu-vs-cpu-benchmarking-pitfall-with-transfer-overhead)
+- [Question 24 — Amdahl's Law and the Unknown Sequential Fraction](#question-24-amdahls-law-and-the-unknown-sequential-fraction)
+- [Quick Reference: All Answers](#quick-reference-all-answers)
+
+---
 **Format:** MCQ only (24 questions, 4 options each) | **Duration:** 4 hours
 > This exam is the same format as the upcoming exam. Study this carefully.
 

@@ -1,0 +1,5 @@
+engine,scheduler,workers,chunksize,wall_seconds
+numba,dynamic,8,1,20.847727541811764
+numba,dynamic,8,2,25.70377704827115
+numba,dynamic,8,4,29.119783862959594
+numba,dynamic,8,8,40.344652648083866

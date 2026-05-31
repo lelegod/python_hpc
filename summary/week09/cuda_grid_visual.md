@@ -1,5 +1,25 @@
 # CUDA Grid & Warp Coalescing — Visual Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md) · [CUDA Grid Visual](cuda_grid_visual.md)
+
+## Contents
+
+- [The Root Cause of All Confusion](#the-root-cause-of-all-confusion)
+- [`row, col = cuda.grid(2)` — What They Map To](#row-col-cudagrid2-what-they-map-to)
+- [Core Formula (memorise this)](#core-formula-memorise-this)
+- [Full Warp Rundown: Block (1, 256) ✅ BEST](#full-warp-rundown-block-1-256-best)
+- [Full Warp Rundown: Block (256, 1) ❌ WORST](#full-warp-rundown-block-256-1-worst)
+- [Full Warp Rundown: Block (16, 16) ⚠️ PARTIAL](#full-warp-rundown-block-16-16-partial)
+- [How to Work Out Any Block Shape in 4 Steps](#how-to-work-out-any-block-shape-in-4-steps)
+- [The Fix: Swapped Convention `j, i = cuda.grid(2)`](#the-fix-swapped-convention-j-i-cudagrid2)
+- [Full Warp Rundown: Block (32, 16) ❌ SAME AS (256,1)](#full-warp-rundown-block-32-16-same-as-2561)
+- [Full Warp Rundown: Block (16, 32) ⚠️ SAME AS (16,16)](#full-warp-rundown-block-16-32-same-as-1616)
+- [Summary Table](#summary-table)
+- [One-Sentence Rule for the Exam](#one-sentence-rule-for-the-exam)
+- [How to Find a Thread's Global (row, col) — Visual](#how-to-find-a-threads-global-row-col-visual)
+
+---
+
 ## The Root Cause of All Confusion
 
 **NumPy / CPU (row-major):** rightmost index is fastest in memory

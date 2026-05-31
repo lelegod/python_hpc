@@ -1,5 +1,36 @@
 # Parallelism Strategy — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Pure Python Loop: Threading vs Multiprocessing](#q1-pure-python-loop-threading-vs-multiprocessing)
+- [Q2 — NumPy `.sum()` in a ThreadPool](#q2-numpy-sum-in-a-threadpool)
+- [Q3 — Numba `@jit(nogil=True)` and ThreadPool](#q3-numba-jitnogiltrue-and-threadpool)
+- [Q4 — Parallelising `simulate_ball` with Sequential Internal Steps](#q4-parallelising-simulate_ball-with-sequential-internal-steps)
+- [Q5 — Static Scheduling and Uniform Task Times](#q5-static-scheduling-and-uniform-task-times)
+- [Q6 — Dynamic Scheduling and Variable Task Times](#q6-dynamic-scheduling-and-variable-task-times)
+- [Q7 — Choosing Scheduling Based on Kernel Variance](#q7-choosing-scheduling-based-on-kernel-variance)
+- [Q8 — Interpreting `time` Command Output](#q8-interpreting-time-command-output)
+- [Q9 — `Pool()` Default Workers and HPC Oversubscription](#q9-pool-default-workers-and-hpc-oversubscription)
+- [Q10 — The `if __name__ == '__main__':` Guard](#q10-the-if-__name__-__main__-guard)
+- [Q11 — Task Granularity and IPC Overhead](#q11-task-granularity-and-ipc-overhead)
+- [Q12 — I/O-Bound Tasks and the GIL](#q12-io-bound-tasks-and-the-gil)
+- [Q13 — Parallelising `@jit(nogil=True)` Across Outer Loop](#q13-parallelising-jitnogiltrue-across-outer-loop)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q14 — Threading with Pure Python vs NumPy Workloads](#q14-threading-with-pure-python-vs-numpy-workloads)
+- [Q15 — Effect of `nogil=True` Being Absent](#q15-effect-of-nogiltrue-being-absent)
+- [Q16 — Amdahl's Law Ceiling with 10% Serial Fraction](#q16-amdahls-law-ceiling-with-10-serial-fraction)
+- [Q17 — Mandelbrot Set: Static or Dynamic Scheduling?](#q17-mandelbrot-set-static-or-dynamic-scheduling)
+- [Q18 — IPC Cost of Large Arrays in Multiprocessing](#q18-ipc-cost-of-large-arrays-in-multiprocessing)
+- [Q19 — Threading for I/O vs CPU-Bound Work](#q19-threading-for-io-vs-cpu-bound-work)
+- [Q20 — `nogil=True` Requires `nopython=True`](#q20-nogiltrue-requires-nopythontrue)
+- [Q21 — Pool Worker Count and HPC Job Allocation](#q21-pool-worker-count-and-hpc-job-allocation)
+- [Q22 — Choosing Between Static and Dynamic Based on Coefficient of Variation](#q22-choosing-between-static-and-dynamic-based-on-coefficient-of-variation)
+- [Q23 — Recognising When Multiprocessing Overhead Outweighs Benefit](#q23-recognising-when-multiprocessing-overhead-outweighs-benefit)
+
+---
+
 > Topics: GIL, threading vs multiprocessing, static vs dynamic scheduling, time command output.
 > Exam frequency: **Every exam**.
 

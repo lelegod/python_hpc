@@ -1,5 +1,21 @@
 # Week 10 — CuPy, GPU Reductions & nsys Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [CuPy — Drop-in NumPy Replacement](#cupy-drop-in-numpy-replacement)
+- [Shared Memory in CUDA Kernel](#shared-memory-in-cuda-kernel)
+  - [`cuda.shared.array(size, dtype)`](#cudasharedarraysize-dtype)
+  - [`cuda.syncthreads()`](#cudasyncthreads)
+- [Warp Divergence](#warp-divergence)
+- [GPU Profiling with nsys](#gpu-profiling-with-nsys)
+  - [Key sections](#key-sections)
+- [GPU Reduction Pattern](#gpu-reduction-pattern)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## CuPy — Drop-in NumPy Replacement
 
 ```python

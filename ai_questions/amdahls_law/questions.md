@@ -1,5 +1,35 @@
 # Amdahl's Law — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Compute Speedup F=0.9 p=8](#q1-compute-speedup-f09-p8)
+- [Q2 — Solve for F Then S_max](#q2-solve-for-f-then-s_max)
+- [Q3 — Derive F From Saturation Plot](#q3-derive-f-from-saturation-plot)
+- [Q4 — Achievability of Target Speedup](#q4-achievability-of-target-speedup)
+- [Q5 — Recover T(1) From T(4)](#q5-recover-t1-from-t4)
+- [Q6 — Compute T(8) From T(1)](#q6-compute-t8-from-t1)
+- [Q7 — Effect of Halving the Serial Fraction](#q7-effect-of-halving-the-serial-fraction)
+- [Q8 — Compute Efficiency E(p)](#q8-compute-efficiency-ep)
+- [Q9 — Maximum Speedup With 5% Serial Fraction](#q9-maximum-speedup-with-5-serial-fraction)
+- [Q10 — Wall-Clock vs CPU Time in Speedup](#q10-wall-clock-vs-cpu-time-in-speedup)
+- [Q11 — Asymptotic Behavior of S(p)](#q11-asymptotic-behavior-of-sp)
+- [Q12 — Compare Two Programs at p=20](#q12-compare-two-programs-at-p20)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q13 — Reverse-Solve for F from Raw Times](#q13-reverse-solve-for-f-from-raw-times)
+- [Q14 — Minimum Cores for Target Speedup](#q14-minimum-cores-for-target-speedup)
+- [Q15 — Efficiency Comparison Across Core Counts](#q15-efficiency-comparison-across-core-counts)
+- [Q16 — Gustafson's Law vs Amdahl's Law](#q16-gustafsons-law-vs-amdahls-law)
+- [Q17 — Two Programs, Large Core Count](#q17-two-programs-large-core-count)
+- [Q18 — Finding T(1) From T(p) and S_max](#q18-finding-t1-from-tp-and-s_max)
+- [Q19 — Amdahl at Extreme Core Counts](#q19-amdahl-at-extreme-core-counts)
+- [Q20 — Serial Fraction Bottleneck at Scale](#q20-serial-fraction-bottleneck-at-scale)
+- [Q21 — Comparing Efficiency Before and After Optimization](#q21-comparing-efficiency-before-and-after-optimization)
+- [Q22 — Amdahl Limit When Serial Work is Fixed Overhead](#q22-amdahl-limit-when-serial-work-is-fixed-overhead)
+
+---
+
 > Topics: S(p) formula, solving for F, maximum speedup, efficiency, serial time calculations.
 > Exam frequency: **Every exam** — highest priority topic.
 

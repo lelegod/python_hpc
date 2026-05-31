@@ -1,5 +1,18 @@
 # Week 3 — Cache Effects & Blosc Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [NumPy Strides](#numpy-strides)
+  - [`arr.strides`](#arrstrides)
+- [Blosc Compression](#blosc-compression)
+- [Cache Hierarchy (DTU XeonGold6226R)](#cache-hierarchy-dtu-xeongold6226r)
+- [Row vs Column Access](#row-vs-column-access)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## NumPy Strides
 
 ### `arr.strides`

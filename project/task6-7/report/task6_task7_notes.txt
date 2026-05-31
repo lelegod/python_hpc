@@ -1,0 +1,37 @@
+Task 6/7 benchmark summary
+=========================
+
+Subset size: 50
+Sample mode: head
+Primary configuration: engine=numba, scheduler=dynamic
+Primary workers: 8
+Primary chunksize: 1
+Primary wall time: 20.8474 s
+Primary mean solver time per building: 3.0377 s
+
+Single-building comparison
+--------------------------
+numpy: solver_seconds=6.1924, iterations=3602, mean_temp=14.0123, std_temp=6.3674
+numba: solver_seconds=1.3081, iterations=3602, mean_temp=14.0123, std_temp=6.3674
+
+Worker sweep
+-----------
+numba + dynamic: workers=1, wall_seconds=136.7949, mean_solver_seconds=2.7292
+numba + dynamic: workers=2, wall_seconds=70.2008, mean_solver_seconds=2.7319
+numba + dynamic: workers=4, wall_seconds=37.4150, mean_solver_seconds=2.8759
+numba + dynamic: workers=8, wall_seconds=21.0225, mean_solver_seconds=3.0472
+numpy + dynamic: workers=1, wall_seconds=603.1893, mean_solver_seconds=12.0546
+numpy + dynamic: workers=2, wall_seconds=331.3795, mean_solver_seconds=13.0043
+numpy + dynamic: workers=4, wall_seconds=198.8322, mean_solver_seconds=15.4415
+numpy + dynamic: workers=8, wall_seconds=112.6109, mean_solver_seconds=16.2291
+numpy + static: workers=1, wall_seconds=619.7763, mean_solver_seconds=12.3758
+numpy + static: workers=2, wall_seconds=355.0874, mean_solver_seconds=12.7580
+numpy + static: workers=4, wall_seconds=287.5531, mean_solver_seconds=13.0312
+numpy + static: workers=8, wall_seconds=169.6031, mean_solver_seconds=14.9302
+
+Chunksize sweep
+---------------
+chunksize=1, workers=8, wall_seconds=20.8477
+chunksize=2, workers=8, wall_seconds=25.7038
+chunksize=4, workers=8, wall_seconds=29.1198
+chunksize=8, workers=8, wall_seconds=40.3447

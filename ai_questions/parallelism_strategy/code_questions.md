@@ -1,5 +1,34 @@
 # Parallelism Strategy — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — GIL with pure Python loops](#q1-gil-with-pure-python-loops)
+- [Q2 — NumPy releases the GIL](#q2-numpy-releases-the-gil)
+- [Q3 — Reading `time` command output](#q3-reading-time-command-output)
+- [Q4 — Predicting `time` output after scaling up cores](#q4-predicting-time-output-after-scaling-up-cores)
+- [Q5 — IPC overhead from too many small tasks](#q5-ipc-overhead-from-too-many-small-tasks)
+- [Q6 — Numba `nogil=True` with `ThreadPool`](#q6-numba-nogiltrue-with-threadpool)
+- [Q7 — Static chunking with variable-runtime tasks](#q7-static-chunking-with-variable-runtime-tasks)
+- [Q8 — Missing `if __name__ == '__main__':` guard](#q8-missing-if-__name__-__main__-guard)
+- [Q9 — Choosing static vs dynamic scheduling](#q9-choosing-static-vs-dynamic-scheduling)
+- [Q10 — `Pool()` ignores LSF allocation](#q10-pool-ignores-lsf-allocation)
+- [Key Facts Summary](#key-facts-summary)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q11 — Threading a Pure Python Accumulator](#q11-threading-a-pure-python-accumulator)
+- [Q12 — NumPy Thread Parallelism: Predicting `time` Output](#q12-numpy-thread-parallelism-predicting-time-output)
+- [Q13 — Numba `nogil=True` Thread Count Scaling](#q13-numba-nogiltrue-thread-count-scaling)
+- [Q14 — Detecting Oversubscription on an HPC Node](#q14-detecting-oversubscription-on-an-hpc-node)
+- [Q15 — Choosing `chunksize` for a Mandelbrot Computation](#q15-choosing-chunksize-for-a-mandelbrot-computation)
+- [Q16 — `ThreadPool` vs `Pool` for Mixed NumPy and Python Workload](#q16-threadpool-vs-pool-for-mixed-numpy-and-python-workload)
+- [Q17 — Race Condition with Shared Counter in `multiprocessing`](#q17-race-condition-with-shared-counter-in-multiprocessing)
+- [Q18 — Interpreting Speedup from `time` with 8 Workers](#q18-interpreting-speedup-from-time-with-8-workers)
+- [Q19 — When Does `nogil=True` Not Help?](#q19-when-does-nogiltrue-not-help)
+- [Q20 — Combining `imap_unordered` and Task Batching](#q20-combining-imap_unordered-and-task-batching)
+
+---
+
 > Format: Each question shows Python parallelism code or shell output to analyse.
 > Exam frequency: **Every exam**.
 

@@ -1,5 +1,35 @@
 # HPC Workflows — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Job Array Index Range](#q1-job-array-index-range)
+- [Q2 — Job Array Step Syntax](#q2-job-array-step-syntax)
+- [Q3 — Zero-Based Array Access in Python](#q3-zero-based-array-access-in-python)
+- [Q4 — Per-Element Log Files](#q4-per-element-log-files)
+- [Q5 — Email Notification with Job Arrays](#q5-email-notification-with-job-arrays)
+- [Q6 — Orphan Background Process](#q6-orphan-background-process)
+- [Q7 — Correct Cleanup of Background Process](#q7-correct-cleanup-of-background-process)
+- [Q8 — Thread Environment Variables and Oversubscription](#q8-thread-environment-variables-and-oversubscription)
+- [Q9 — Fixing Thread Oversubscription](#q9-fixing-thread-oversubscription)
+- [Q10 — multiprocessing.Pool Default Worker Count](#q10-multiprocessingpool-default-worker-count)
+- [Q11 — Map-Reduce Job Dependency](#q11-map-reduce-job-dependency)
+- [Q12 — Login Node vs Compute Node](#q12-login-node-vs-compute-node)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q13 — done() vs ended() Critical Distinction](#q13-done-vs-ended-critical-distinction)
+- [Q14 — ended() Permissive Dependency](#q14-ended-permissive-dependency)
+- [Q15 — Output File %J vs %I](#q15-output-file-j-vs-i)
+- [Q16 — Three-Stage Pipeline Construction](#q16-three-stage-pipeline-construction)
+- [Q17 — Concurrent Array Job Limit](#q17-concurrent-array-job-limit)
+- [Q18 — LSB_JOBINDEX Off-by-One in Python](#q18-lsb_jobindex-off-by-one-in-python)
+- [Q19 — Dependency on Specific Job ID](#q19-dependency-on-specific-job-id)
+- [Q20 — AND Dependency: Both Jobs Must Succeed](#q20-and-dependency-both-jobs-must-succeed)
+- [Q21 — What %I Expands To in a Running Job](#q21-what-i-expands-to-in-a-running-job)
+- [Q22 — Danger of Missing %I in Output Directive](#q22-danger-of-missing-i-in-output-directive)
+
+---
+
 > Topics: Job arrays, $LSB_JOBINDEX, background processes, thread env vars, oversubscription.
 > Exam frequency: **2024 exam + F25** (job arrays, dependencies).
 

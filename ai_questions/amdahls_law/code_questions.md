@@ -1,5 +1,33 @@
 # Amdahl's Law — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Derive F from Timing Output](#q1-derive-f-from-timing-output)
+- [Q2 — Speedup Table and S_max](#q2-speedup-table-and-s_max)
+- [Q3 — Reading Speedup from perf_counter Code](#q3-reading-speedup-from-perf_counter-code)
+- [Q4 — Wall-Clock vs User Time for Speedup](#q4-wall-clock-vs-user-time-for-speedup)
+- [Q5 — Predicting T(p) from F](#q5-predicting-tp-from-f)
+- [Q6 — Estimating S_max from Multiple Timing Points](#q6-estimating-s_max-from-multiple-timing-points)
+- [Q7 — Two-Phase Program on 4 Cores](#q7-two-phase-program-on-4-cores)
+- [Q8 — Does This Timing Code Correctly Measure Speedup?](#q8-does-this-timing-code-correctly-measure-speedup)
+- [Q9 — Spotting an Impossible Speedup Claim](#q9-spotting-an-impossible-speedup-claim)
+- [Q10 — Computing Parallel Efficiency](#q10-computing-parallel-efficiency)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q11 — Reading F from a Pool.map Timing Loop](#q11-reading-f-from-a-poolmap-timing-loop)
+- [Q12 — What Does This Amdahl Sweep Print?](#q12-what-does-this-amdahl-sweep-print)
+- [Q13 — Reverse-Solve F from a Pool Benchmark](#q13-reverse-solve-f-from-a-pool-benchmark)
+- [Q14 — Minimum p from a Bisection Search](#q14-minimum-p-from-a-bisection-search)
+- [Q15 — Does Efficiency Decrease in This Loop?](#q15-does-efficiency-decrease-in-this-loop)
+- [Q16 — Spotting the Bug: Wrong Speedup Formula](#q16-spotting-the-bug-wrong-speedup-formula)
+- [Q17 — Gustafson Scaled Speedup in Code](#q17-gustafson-scaled-speedup-in-code)
+- [Q18 — Predicting T(p) and Checking Against Observed](#q18-predicting-tp-and-checking-against-observed)
+- [Q19 — Reading S_max from a Loop That Converges](#q19-reading-s_max-from-a-loop-that-converges)
+- [Q20 — Full Amdahl Pipeline: Compute F, S_max, E, T(p)](#q20-full-amdahl-pipeline-compute-f-s_max-e-tp)
+
+---
+
 > Format: Each question includes code, output, or a data table to interpret.
 > Exam frequency: **Every exam** — highest priority topic.
 

@@ -1,5 +1,35 @@
 # NumPy Broadcasting — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1](#q1)
+- [Q2](#q2)
+- [Q3](#q3)
+- [Q4](#q4)
+- [Q5](#q5)
+- [Q6](#q6)
+- [Q7](#q7)
+- [Q8](#q8)
+- [Q9](#q9)
+- [Q10](#q10)
+- [Broadcasting Rules — Quick Reference](#broadcasting-rules-quick-reference)
+  - [Common Pitfalls](#common-pitfalls)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q11](#q11)
+- [Q12](#q12)
+- [Q13](#q13)
+- [Q14](#q14)
+- [Q15](#q15)
+- [Q16](#q16)
+- [Q17](#q17)
+- [Q18](#q18)
+- [Q19](#q19)
+- [Q20](#q20)
+
+---
+
 > Format: Each question shows NumPy code to evaluate — predict output shape or error.
 > Exam frequency: **2024 exam + re-exam**.
 

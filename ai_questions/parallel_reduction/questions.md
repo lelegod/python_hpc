@@ -1,5 +1,34 @@
 # Parallel Reduction — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Associativity Requirement](#q1-associativity-requirement)
+- [Q2 — Commutativity in Unordered Reductions](#q2-commutativity-in-unordered-reductions)
+- [Q3 — abssum Commutativity Test](#q3-abssum-commutativity-test)
+- [Q4 — abssum Associativity Counterexample](#q4-abssum-associativity-counterexample)
+- [Q5 — Why abssum Fails Parallel Reduction](#q5-why-abssum-fails-parallel-reduction)
+- [Q6 — Fixing abssum for Parallel Use](#q6-fixing-abssum-for-parallel-use)
+- [Q7 — Valid Reduction Operators](#q7-valid-reduction-operators)
+- [Q8 — Matrix Multiply in Parallel Reduction](#q8-matrix-multiply-in-parallel-reduction)
+- [Q9 — Set Intersection as Reduction Operator](#q9-set-intersection-as-reduction-operator)
+- [Q10 — Binary Tree Reduction Depth](#q10-binary-tree-reduction-depth)
+- [Q11 — Flat Two-Level Reduction: Optimal Chunks and Speedup](#q11-flat-two-level-reduction-optimal-chunks-and-speedup)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q12 — Subtraction as Reduction Operator](#q12-subtraction-as-reduction-operator)
+- [Q13 — Average via Parallel Reduction](#q13-average-via-parallel-reduction)
+- [Q14 — Tree Reduction Depth for N=1024](#q14-tree-reduction-depth-for-n1024)
+- [Q15 — Pool.map Return Value](#q15-poolmap-return-value)
+- [Q16 — functools.reduce after Pool.map](#q16-functoolsreduce-after-poolmap)
+- [Q17 — Warp Reduction Step Count](#q17-warp-reduction-step-count)
+- [Q18 — cuda.syncthreads() Purpose in Shared Memory Reduction](#q18-cudasyncthreads-purpose-in-shared-memory-reduction)
+- [Q19 — cuda.atomic.add Purpose](#q19-cudaatomicadd-purpose)
+- [Q20 — XOR as Reduction Operator](#q20-xor-as-reduction-operator)
+- [Q21 — Non-Power-of-Two Tree Depth](#q21-non-power-of-two-tree-depth)
+
+---
+
 > Topics: Associativity, commutativity, counterexamples, tree depth, valid/invalid operators.
 > Exam frequency: **Every exam**.
 

@@ -1,5 +1,19 @@
 # Week 4 — NumPy Broadcasting & Vectorization Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Broadcasting Rules](#broadcasting-rules)
+- [Key Broadcasting Patterns](#key-broadcasting-patterns)
+- [np.meshgrid](#npmeshgrid)
+  - [`np.meshgrid(x, y)`](#npmeshgridx-y)
+- [Views vs Copies](#views-vs-copies)
+- [Haversine Distance](#haversine-distance)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## Broadcasting Rules
 
 1. Right-align shapes

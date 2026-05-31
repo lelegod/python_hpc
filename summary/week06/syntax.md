@@ -1,5 +1,20 @@
 # Week 6 — Parallel Reductions & Shared Memory Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Parallel Reduction Requirements](#parallel-reduction-requirements)
+- [Reduction Complexity](#reduction-complexity)
+- [Shared Memory with multiprocessing](#shared-memory-with-multiprocessing)
+  - [`mp.RawArray(typecode, size_or_initializer)`](#mprawarraytypecode-size_or_initializer)
+  - [`np.frombuffer(buffer, dtype)`](#npfrombufferbuffer-dtype)
+- [NUMA (Non-Uniform Memory Access)](#numa-non-uniform-memory-access)
+- [modern Python SharedMemory (Python 3.8+)](#modern-python-sharedmemory-python-38)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## Parallel Reduction Requirements
 
 An operator can be used in a parallel reduction if it is:

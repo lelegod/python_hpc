@@ -1,5 +1,36 @@
 # Week 1 — Introduction to Python HPC & DTU HPC System
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [What is HPC and Why It Matters](#what-is-hpc-and-why-it-matters)
+  - [What is an HPC Cluster?](#what-is-an-hpc-cluster)
+  - [DTU HPC Cluster Architecture](#dtu-hpc-cluster-architecture)
+  - [Python's Role in HPC](#pythons-role-in-hpc)
+- [LSF Job Script Reference](#lsf-job-script-reference)
+  - [Annotated Example (from submit.sh in this repo)](#annotated-example-from-submitsh-in-this-repo)
+  - [What Happens When the Wall Time is Exceeded](#what-happens-when-the-wall-time-is-exceeded)
+  - [Core Count Limits](#core-count-limits)
+- [Key Linux/HPC Commands](#key-linuxhpc-commands)
+  - [Connecting and File Transfer](#connecting-and-file-transfer)
+  - [Directory Navigation](#directory-navigation)
+  - [Conda Environment (course-specific)](#conda-environment-course-specific)
+  - [Job Submission and Monitoring](#job-submission-and-monitoring)
+  - [Node Information](#node-information)
+  - [Reading bstat / bjobs Output](#reading-bstat-bjobs-output)
+- [Timing & Profiling Basics](#timing-profiling-basics)
+- [Key Code Examples](#key-code-examples)
+  - [content.py (Week 1 Hello World)](#contentpy-week-1-hello-world)
+  - [submit.sh (Week 1 Job Script)](#submitsh-week-1-job-script)
+  - [Full Workflow (from exercise solutions)](#full-workflow-from-exercise-solutions)
+- [Exercise Highlights](#exercise-highlights)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 1 establishes the foundations for the entire course. The lecture covers what HPC is and why it matters, introduces DTU's specific cluster infrastructure, and gives hands-on practice with the LSF batch job scheduler. The exercises build the muscle memory needed for every subsequent week: SSH into the cluster, transfer files, activate the conda environment, write a job script, and submit it. Everything from Week 2 onward assumes you can do all of this confidently.

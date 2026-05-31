@@ -1,5 +1,50 @@
 # Week 2 — Python Bootcamp
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [Why Python?](#why-python)
+  - [The GIL: Global Interpreter Lock](#the-gil-global-interpreter-lock)
+  - [HPC Cluster Workflow](#hpc-cluster-workflow)
+  - [Computer Terminology](#computer-terminology)
+  - [BSub Job Script Structure](#bsub-job-script-structure)
+- [Key Python Patterns](#key-python-patterns)
+  - [Built-in functions used in exercises](#built-in-functions-used-in-exercises)
+  - [Classes](#classes)
+  - [Command-line arguments pattern](#command-line-arguments-pattern)
+  - [Deduplication via set](#deduplication-via-set)
+  - [Sorting tuples by last element](#sorting-tuples-by-last-element)
+- [Key NumPy Operations](#key-numpy-operations)
+  - [Array creation](#array-creation)
+  - [Vector magnitude (norm)](#vector-magnitude-norm)
+  - [File I/O](#file-io)
+  - [Axis-wise reductions](#axis-wise-reductions)
+  - [Matrix power](#matrix-power)
+- [Mathematical Content](#mathematical-content)
+  - [Vector magnitude formula](#vector-magnitude-formula)
+  - [Diagonal matrix](#diagonal-matrix)
+  - [Column and row means](#column-and-row-means)
+  - [Matrix power](#matrix-power)
+- [Timing Code](#timing-code)
+- [Key Code Examples](#key-code-examples)
+  - [basic1.py — list sum using built-in](#basic1py-list-sum-using-built-in)
+  - [basic2.py — deduplication via set conversion](#basic2py-deduplication-via-set-conversion)
+  - [basic3.py — sort list of tuples by last element](#basic3py-sort-list-of-tuples-by-last-element)
+  - [numpy1.py — vector magnitude (function form)](#numpy1py-vector-magnitude-function-form)
+  - [numpy2.py — vector magnitude from command line](#numpy2py-vector-magnitude-from-command-line)
+  - [numpy3.py — build and save a diagonal matrix](#numpy3py-build-and-save-a-diagonal-matrix)
+  - [numpy4.py — column and row means](#numpy4py-column-and-row-means)
+  - [numpy5.py — timed matrix power](#numpy5py-timed-matrix-power)
+- [Exercise Highlights](#exercise-highlights)
+  - [Section 1: Basic Python (8 exercises)](#section-1-basic-python-8-exercises)
+  - [Section 2: Basic NumPy (6 exercises)](#section-2-basic-numpy-6-exercises)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 2 is a Python bootcamp covering two main topics: core Python programming patterns (data structures, functions, classes, command-line programs) and an introduction to NumPy for numerical computing. The lecture also covers the HPC cluster workflow — login nodes, interactive sessions, and batch jobs — and explains *why* Python is used in HPC despite its performance limitations. Exam date: 1 June 2026.

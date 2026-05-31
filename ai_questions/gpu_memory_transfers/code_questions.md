@@ -1,5 +1,34 @@
 # GPU Memory Transfers — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Question 1 — Auto-transfer count with implicit transfers](#question-1-auto-transfer-count-with-implicit-transfers)
+- [Question 2 — Explicit device arrays reduce transfers](#question-2-explicit-device-arrays-reduce-transfers)
+- [Question 3 — Transfer count in a loop, then optimal count](#question-3-transfer-count-in-a-loop-then-optimal-count)
+- [Question 4 — Reading nsys profiler output: what dominates?](#question-4-reading-nsys-profiler-output-what-dominates)
+- [Question 5 — Computing GPU memory bandwidth from nsys output](#question-5-computing-gpu-memory-bandwidth-from-nsys-output)
+- [Question 6 — Missing synchronize before timing](#question-6-missing-synchronize-before-timing)
+- [Question 7 — Bytes transferred by device_array_like](#question-7-bytes-transferred-by-device_array_like)
+- [Question 8 — Amortising fixed GPU overhead](#question-8-amortising-fixed-gpu-overhead)
+- [Question 9 — HtoD count in an image-processing loop](#question-9-htod-count-in-an-image-processing-loop)
+- [Question 10 — Interpreting cudaapisum in nsys output](#question-10-interpreting-cudaapisum-in-nsys-output)
+- [Key Facts](#key-facts)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Question 11 — Total transfers in a weights-plus-images loop](#question-11-total-transfers-in-a-weights-plus-images-loop)
+- [Question 12 — Refactoring to minimise transfers in a weights loop](#question-12-refactoring-to-minimise-transfers-in-a-weights-loop)
+- [Question 13 — nsys output: compute the HtoD bandwidth](#question-13-nsys-output-compute-the-htod-bandwidth)
+- [Question 14 — Identify the unnecessary transfer](#question-14-identify-the-unnecessary-transfer)
+- [Question 15 — DtoH bandwidth from nsys](#question-15-dtoh-bandwidth-from-nsys)
+- [Question 16 — Transfer count with CuPy](#question-16-transfer-count-with-cupy)
+- [Question 17 — Correcting a missing synchronize in a timed loop](#question-17-correcting-a-missing-synchronize-in-a-timed-loop)
+- [Question 18 — Pre-allocating output to avoid repeated DtoH in a loop](#question-18-pre-allocating-output-to-avoid-repeated-dtoh-in-a-loop)
+- [Question 19 — Identifying transfer type from CuPy code](#question-19-identifying-transfer-type-from-cupy-code)
+- [Question 20 — nsys: which transfer is the bottleneck?](#question-20-nsys-which-transfer-is-the-bottleneck)
+
+---
+
 > Format: Each question shows Python CUDA code or nsys profiler output to interpret.
 > Exam frequency: **Every exam**.
 

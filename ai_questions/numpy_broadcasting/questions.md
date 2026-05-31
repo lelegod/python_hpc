@@ -1,5 +1,35 @@
 # NumPy Broadcasting — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Output Shape: (3,) + (2,3)](#q1-output-shape-3-23)
+- [Q2 — Error Case: (2,3) + (2,)](#q2-error-case-23-2)
+- [Q3 — Output Shape: (5,1,3) + (4,3)](#q3-output-shape-513-43)
+- [Q4 — Image Batch Mean Subtraction](#q4-image-batch-mean-subtraction)
+- [Q5 — None/newaxis Effect on Shape](#q5-nonenewaxis-effect-on-shape)
+- [Q6 — Outer Product via Broadcasting](#q6-outer-product-via-broadcasting)
+- [Q7 — Four-Dimensional Broadcasting](#q7-four-dimensional-broadcasting)
+- [Q8 — Subtracting a Minimum Image](#q8-subtracting-a-minimum-image)
+- [Q9 — Scalar Broadcasting](#q9-scalar-broadcasting)
+- [Q10 — Three-Dimensional Middle-Axis Broadcast](#q10-three-dimensional-middle-axis-broadcast)
+- [Q11 — Subtracting Row Means from a Matrix](#q11-subtracting-row-means-from-a-matrix)
+- [Q12 — Right-Align Error vs. Valid Case](#q12-right-align-error-vs-valid-case)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q13 — Shape Compatibility: (5,3,4) + (3,)](#q13-shape-compatibility-534-3)
+- [Q14 — newaxis to Fix a Column Subtraction](#q14-newaxis-to-fix-a-column-subtraction)
+- [Q15 — Pairwise Euclidean Distance Shape](#q15-pairwise-euclidean-distance-shape)
+- [Q16 — Broadcasting Copies Data?](#q16-broadcasting-copies-data)
+- [Q17 — np.broadcast_shapes Result](#q17-npbroadcast_shapes-result)
+- [Q18 — Which Shape Pair is NOT Compatible?](#q18-which-shape-pair-is-not-compatible)
+- [Q19 — np.expand_dims Equivalence](#q19-npexpand_dims-equivalence)
+- [Q20 — Haversine All-Pairs Pattern](#q20-haversine-all-pairs-pattern)
+- [Q21 — Three-Way Broadcasting](#q21-three-way-broadcasting)
+- [Q22 — Fixing a Row-Mean Subtraction Bug](#q22-fixing-a-row-mean-subtraction-bug)
+
+---
+
 > Topics: Shape alignment rules, None/newaxis insertion, output shape derivation, common patterns.
 > Exam frequency: **2024 exam + re-exam** — tested multiple times.
 

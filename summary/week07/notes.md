@@ -1,5 +1,34 @@
 # Week 7 — High-Performance Pandas & Apache Arrow
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [From Array Data to Tabular Data](#from-array-data-to-tabular-data)
+  - [Pandas Memory Optimization](#pandas-memory-optimization)
+  - [Apache Arrow](#apache-arrow)
+  - [Parquet File Format](#parquet-file-format)
+  - [DMI Weather Data (course example)](#dmi-weather-data-course-example)
+- [Mathematical Content](#mathematical-content)
+- [Key Code Examples](#key-code-examples)
+  - [Loading and inspecting memory](#loading-and-inspecting-memory)
+  - [Loading with PyArrow (returns Arrow Table)](#loading-with-pyarrow-returns-arrow-table)
+  - [Loading with PyArrow and converting to Pandas](#loading-with-pyarrow-and-converting-to-pandas)
+  - [PyArrow with ConvertOptions for memory optimization on load](#pyarrow-with-convertoptions-for-memory-optimization-on-load)
+  - [Parquet read/write](#parquet-readwrite)
+- [Reducing DataFrame Memory](#reducing-dataframe-memory)
+- [File Format Comparison](#file-format-comparison)
+- [Exercise Highlights](#exercise-highlights)
+  - [Exercise 1 — Storage and Reading Files with Pandas](#exercise-1-storage-and-reading-files-with-pandas)
+  - [Exercise 2 — Reading Files with Arrow](#exercise-2-reading-files-with-arrow)
+  - [Exercise 3 — Parquet Files](#exercise-3-parquet-files)
+  - [Exercise 4 — Pandas Fast Operations (total precipitation)](#exercise-4-pandas-fast-operations-total-precipitation)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 This week transitions from pure array/NumPy data to tabular (heterogeneous) data. The core question is: how do you work with large DataFrames efficiently, both in terms of memory and speed? The lecture covers the three main bottlenecks in a typical Pandas workflow — **load speed**, **memory use**, and **operation speed** — and introduces Apache Arrow and Parquet as tools to address all three. The DMI weather dataset (January 2023, ~8 million rows) is the running example throughout all exercises.

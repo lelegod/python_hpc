@@ -1,5 +1,34 @@
 # Memory-Mapped Files & Zarr — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — How many bytes does `y` use?](#q1-how-many-bytes-does-y-use)
+- [Q2 — What mode opens an existing file for modification without truncating it?](#q2-what-mode-opens-an-existing-file-for-modification-without-truncating-it)
+- [Q3 — What shape does `mm.shape` report?](#q3-what-shape-does-mmshape-report)
+- [Q4 — What does `mm2[0, 0]` print?](#q4-what-does-mm20-0-print)
+- [Q5 — Which chunk shape minimises I/O for row-by-row access?](#q5-which-chunk-shape-minimises-io-for-row-by-row-access)
+- [Q6 — How many chunks are accessed to compute `col_sum`?](#q6-how-many-chunks-are-accessed-to-compute-col_sum)
+- [Q7 — Is this parallel Zarr write safe?](#q7-is-this-parallel-zarr-write-safe)
+- [Q8 — How much RAM does `small` use?](#q8-how-much-ram-does-small-use)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q9 — What does this code print?](#q9-what-does-this-code-print)
+- [Q10 — What is wrong with this code?](#q10-what-is-wrong-with-this-code)
+- [Q11 — How many bytes does `chunk_data` occupy?](#q11-how-many-bytes-does-chunk_data-occupy)
+- [Q12 — What does `m[0]` return after this sequence?](#q12-what-does-m0-return-after-this-sequence)
+- [Q13 — What is the total number of chunks in this Zarr array?](#q13-what-is-the-total-number-of-chunks-in-this-zarr-array)
+- [Q14 — Which line raises an error?](#q14-which-line-raises-an-error)
+- [Q15 — How many chunks are loaded by this Zarr access?](#q15-how-many-chunks-are-loaded-by-this-zarr-access)
+- [Q16 — What does this print?](#q16-what-does-this-print)
+- [Q17 — What chunk shape produces the smallest RAM per chunk?](#q17-what-chunk-shape-produces-the-smallest-ram-per-chunk)
+- [Q18 — What is the result of this memmap dtype mismatch?](#q18-what-is-the-result-of-this-memmap-dtype-mismatch)
+- [Q19 — What happens when this script runs twice?](#q19-what-happens-when-this-script-runs-twice)
+- [Q20 — Which mode prevents overwriting an existing result?](#q20-which-mode-prevents-overwriting-an-existing-result)
+- [Q21 — zarr mode 'r+' on a missing store](#q21-zarr-mode-r-on-a-missing-store)
+
+---
+
 > Format: Each question shows np.memmap or Zarr code to analyse.
 > Exam frequency: **F25 exam** — np.memmap and Zarr.
 

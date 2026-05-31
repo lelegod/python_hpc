@@ -1,0 +1,12 @@
+invoke
+pytest
+numpy
+numba
+pandas
+matplotlib
+scipy
+seaborn
+cruft
+ipykernel
+simple-term-menu
+questionary

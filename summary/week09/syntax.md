@@ -1,5 +1,20 @@
 # Week 9 — Numba JIT & CUDA Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md) · [CUDA Grid Visual](cuda_grid_visual.md)
+
+## Contents
+
+- [Numba CPU JIT](#numba-cpu-jit)
+- [CUDA Kernel](#cuda-kernel)
+- [Thread Index Variables (inside kernel)](#thread-index-variables-inside-kernel)
+- [Launching a Kernel](#launching-a-kernel)
+- [Memory Transfers](#memory-transfers)
+- [cuda.synchronize()](#cudasynchronize)
+- [Timing a Kernel](#timing-a-kernel)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## Numba CPU JIT
 
 ```python

@@ -1,5 +1,36 @@
 # Profiling — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — cProfile cumtime vs tottime](#q1-cprofile-cumtime-vs-tottime)
+- [Q2 — Identifying the Bottleneck in cProfile](#q2-identifying-the-bottleneck-in-cprofile)
+- [Q3 — Scaling ncalls to Production](#q3-scaling-ncalls-to-production)
+- [Q4 — Fixed-Cost Functions Do Not Scale](#q4-fixed-cost-functions-do-not-scale)
+- [Q5 — Line Profiler: What Does the Hits Column Mean?](#q5-line-profiler-what-does-the-hits-column-mean)
+- [Q6 — Inferring Loop Count from Hits](#q6-inferring-loop-count-from-hits)
+- [Q7 — FLOP/s Calculation](#q7-flops-calculation)
+- [Q8 — Projecting Production Runtime from Profile](#q8-projecting-production-runtime-from-profile)
+- [Q9 — nsys Report Sections](#q9-nsys-report-sections)
+- [Q10 — GPU Memory Bandwidth from nsys](#q10-gpu-memory-bandwidth-from-nsys)
+- [Q11 — Choosing the Right Profiler](#q11-choosing-the-right-profiler)
+- [Q12 — Reading tottime for Own-Code Time](#q12-reading-tottime-for-own-code-time)
+- [Q13 — Comparing Two Functions at Scale](#q13-comparing-two-functions-at-scale)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q14 — percall Formula](#q14-percall-formula)
+- [Q15 — Large cumtime, Small tottime Diagnosis](#q15-large-cumtime-small-tottime-diagnosis)
+- [Q16 — Line Profiler: Loop Header vs Loop Body Hits](#q16-line-profiler-loop-header-vs-loop-body-hits)
+- [Q17 — FLOP/s and Hardware Utilisation](#q17-flops-and-hardware-utilisation)
+- [Q18 — nsys gpukernsum vs gpumemtimesum Bottleneck Diagnosis](#q18-nsys-gpukernsum-vs-gpumemtimesum-bottleneck-diagnosis)
+- [Q19 — Interpreting nsys Bandwidth Against Hardware Spec](#q19-interpreting-nsys-bandwidth-against-hardware-spec)
+- [Q20 — cProfile percall Consistency Check](#q20-cprofile-percall-consistency-check)
+- [Q21 — Scaling with Non-Linear Growth](#q21-scaling-with-non-linear-growth)
+- [Q22 — line_profiler % Time Interpretation](#q22-line_profiler-time-interpretation)
+- [Q23 — nsys Kernel Time Granularity](#q23-nsys-kernel-time-granularity)
+
+---
+
 > Topics: cProfile columns, line profiler Hits, scaling to production workload, FLOP/s, nsys.
 > Exam frequency: **Every exam**.
 

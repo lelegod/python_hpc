@@ -1,0 +1,16 @@
+Task 11 array worker summary
+============================
+
+Configuration
+-------------
+engine: numba
+scheduler: dynamic
+workers: 8
+chunksize: 1
+task_index: 0
+task_count: 4
+dataset size for this shard: 1143 buildings
+wall time: 539.5449 s
+mean solver time per building: 3.7030 s
+total solver time across buildings: 4232.5215 s
+total Jacobi iterations: 9826651

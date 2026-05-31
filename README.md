@@ -1,5 +1,4 @@
 # Python HPC
-
 Notes and solutions for the **Python HPC** course.
 
 **Author:** Kyle Nathan Yahya

@@ -1,5 +1,19 @@
 # Week 11 — HPC Workflows Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Job Array Syntax](#job-array-syntax)
+- [Job Dependency Syntax](#job-dependency-syntax)
+- [Monitoring Commands](#monitoring-commands)
+- [Map-Reduce Pattern](#map-reduce-pattern)
+- [Python Script for Array Jobs](#python-script-for-array-jobs)
+- [Pitfalls](#pitfalls)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## Job Array Syntax
 
 ```bash

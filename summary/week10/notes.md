@@ -1,5 +1,32 @@
 # Week 10 — CuPy and GPU Profiling
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [1. GPU Reductions](#1-gpu-reductions)
+  - [2. Shared Memory](#2-shared-memory)
+  - [3. Warp Divergence](#3-warp-divergence)
+  - [4. GPU Memory Hierarchy (recap)](#4-gpu-memory-hierarchy-recap)
+  - [5. GPU Profiling with NVIDIA nsys](#5-gpu-profiling-with-nvidia-nsys)
+  - [6. CuPy](#6-cupy)
+- [Mathematical Formulas](#mathematical-formulas)
+- [Key Code Examples](#key-code-examples)
+  - [reduce.py — Block Reduce Kernel (from file)](#reducepy-block-reduce-kernel-from-file)
+  - [Shared Memory Kernel (from lecture slides, Exercise 4 solution)](#shared-memory-kernel-from-lecture-slides-exercise-4-solution)
+  - [Strided Index Kernel — eliminates warp divergence (Exercise 5 solution)](#strided-index-kernel-eliminates-warp-divergence-exercise-5-solution)
+  - [Fully Optimised Kernel with Warp Unrolling (Exercise 7 solution)](#fully-optimised-kernel-with-warp-unrolling-exercise-7-solution)
+  - [nsys Profiling Commands](#nsys-profiling-commands)
+  - [CuPy Drop-in Replacement](#cupy-drop-in-replacement)
+- [Exercise Highlights](#exercise-highlights)
+  - [Exercise 1 — GPU Reductions (7 sub-tasks)](#exercise-1-gpu-reductions-7-sub-tasks)
+  - [Exercise 2 — CuPy (5 sub-tasks)](#exercise-2-cupy-5-sub-tasks)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 10 covers three interconnected topics: GPU parallel reductions, GPU profiling with NVIDIA Nsight Systems (nsys), and CuPy (CUDA NumPy). The week revisits the reduction pattern from earlier weeks but now implements it directly in CUDA via Numba, progressively optimising the kernel using shared memory and strided indexing. GPU profiling with nsys is introduced as the tool to measure where time is actually spent on the GPU — exposing memory transfer costs, kernel launch overhead, and kernel execution time. CuPy is presented as a drop-in NumPy replacement that runs on the GPU with almost no code changes, making it the fastest path to GPU acceleration for array-heavy code.

@@ -1,5 +1,33 @@
 # Floating Point & dtype Arithmetic — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — float16 Addition Near 10000](#q1-float16-addition-near-10000)
+- [Q2 — float16 Addition Near 100](#q2-float16-addition-near-100)
+- [Q3 — float16 vs int16 for Exact Integer Representation](#q3-float16-vs-int16-for-exact-integer-representation)
+- [Q4 — int8 Overflow](#q4-int8-overflow)
+- [Q5 — uint8 Negative Wrapping](#q5-uint8-negative-wrapping)
+- [Q6 — Downcasting Safety Check](#q6-downcasting-safety-check)
+- [Q7 — float16 Overflow to Infinity](#q7-float16-overflow-to-infinity)
+- [Q8 — float32 Precision Limits](#q8-float32-precision-limits)
+- [Q9 — Relative vs Absolute Resolution of float16](#q9-relative-vs-absolute-resolution-of-float16)
+- [Q10 — int16 Range Confusion with uint16](#q10-int16-range-confusion-with-uint16)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q11 — Memory Footprint of a float64 Array](#q11-memory-footprint-of-a-float64-array)
+- [Q12 — Memory Savings: float64 to float32 Downcast](#q12-memory-savings-float64-to-float32-downcast)
+- [Q13 — Smallest Safe Integer Dtype for Range 0–200](#q13-smallest-safe-integer-dtype-for-range-0200)
+- [Q14 — Pandas memory_usage(deep=True)](#q14-pandas-memory_usagedeeptrue)
+- [Q15 — pd.Categorical for Low-Cardinality Strings](#q15-pdcategorical-for-low-cardinality-strings)
+- [Q16 — float64 to float16 Memory Reduction](#q16-float64-to-float16-memory-reduction)
+- [Q17 — Total DataFrame Memory Calculation](#q17-total-dataframe-memory-calculation)
+- [Q18 — pd.to_numeric with downcast='float'](#q18-pdto_numeric-with-downcastfloat)
+- [Q19 — int8 Range: Values Including 200](#q19-int8-range-values-including-200)
+- [Q20 — float32 vs float64 for ML Features](#q20-float32-vs-float64-for-ml-features)
+
+---
+
 > Topics: float16 relative resolution, at-value precision, dtype ranges, downcasting safety.
 > Exam frequency: **F25 exam Q2** — less frequent but distinctly tricky.
 

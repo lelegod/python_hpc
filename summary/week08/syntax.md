@@ -1,5 +1,24 @@
 # Week 8 — Memory-Mapped Files & Zarr Syntax Reference
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [np.memmap](#npmemmap)
+  - [`np.memmap(filename, dtype, mode, shape)`](#npmemmapfilename-dtype-mode-shape)
+  - [Mode summary](#mode-summary)
+  - [Strided access — memory magic](#strided-access-memory-magic)
+- [Zarr](#zarr)
+  - [`zarr.open(path, mode, shape, chunks, dtype)`](#zarropenpath-mode-shape-chunks-dtype)
+  - [Chunk shape for access patterns](#chunk-shape-for-access-patterns)
+  - [Nested directory store (avoid too many files)](#nested-directory-store-avoid-too-many-files)
+- [Pandas Chunked CSV](#pandas-chunked-csv)
+  - [Chunked reader limitations](#chunked-reader-limitations)
+- [Memory Budget Formula](#memory-budget-formula)
+- [Exam Traps](#exam-traps)
+
+---
+
 ## np.memmap
 
 ### `np.memmap(filename, dtype, mode, shape)`

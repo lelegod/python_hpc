@@ -1,5 +1,20 @@
 # Week 12 — Course Project
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Project Description](#project-description)
+- [Project Requirements](#project-requirements)
+- [HPC Concepts Applied](#hpc-concepts-applied)
+- [Technical Skills Needed](#technical-skills-needed)
+- [Suggested Approach](#suggested-approach)
+- [Evaluation Criteria](#evaluation-criteria)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 12 is the culmination of the course: the mini-project. Rather than isolated exercises, students integrate all techniques learned across weeks 1–11 into a single, realistic scientific computing problem. The project is called **Wall Heating!** — a fictional study of an experimental building heating system. The central goal is to simulate heat distribution across 4571 real building floor plans as fast as possible, applying successive layers of HPC optimization to an initially slow reference implementation.

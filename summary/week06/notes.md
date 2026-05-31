@@ -1,5 +1,28 @@
 # Week 6 — Parallelism Part 2: Reductions & Shared Memory
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [Reduction Operations](#reduction-operations)
+  - [Parallel Reduction Algorithms](#parallel-reduction-algorithms)
+  - [Shared Memory Parallelism](#shared-memory-parallelism)
+  - [NUMA Architecture](#numa-architecture)
+- [Mathematical Content](#mathematical-content)
+  - [Simple Reduction Speed-up](#simple-reduction-speed-up)
+  - [Binary Tree Reduction Speed-up](#binary-tree-reduction-speed-up)
+  - [When Reduction Overhead Exceeds Benefit](#when-reduction-overhead-exceeds-benefit)
+- [Key Code Examples](#key-code-examples)
+  - [reduction1.py — Single Binary Tree Step](#reduction1py-single-binary-tree-step)
+  - [reduction_full.py — Complete Binary Tree Reduction](#reduction_fullpy-complete-binary-tree-reduction)
+- [numactl Usage](#numactl-usage)
+- [Quiz/Exercise Highlights](#quizexercise-highlights)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 6 covers two major topics: parallel reductions (combining N elements into 1 using associative operators) and how hardware architecture — specifically NUMA (Non-Uniform Memory Access) — interferes with the expected scaling behavior. The practical exercise builds a parallel mean-face computation over 200,000 celebrity images using `mp.RawArray` shared memory and a binary tree reduction strategy.

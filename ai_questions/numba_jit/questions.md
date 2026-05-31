@@ -1,5 +1,23 @@
 # Numba JIT — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — First Call Compilation Overhead](#q1-first-call-compilation-overhead)
+- [Q2 — Warm-Up Best Practice](#q2-warm-up-best-practice)
+- [Q3 — @njit vs @jit](#q3-njit-vs-jit)
+- [Q4 — nogil and ThreadPool](#q4-nogil-and-threadpool)
+- [Q5 — nogil=True Effect](#q5-nogiltrue-effect)
+- [Q6 — JIT Speedup for Python Loops](#q6-jit-speedup-for-python-loops)
+- [Q7 — JIT vs Already-Vectorized NumPy](#q7-jit-vs-already-vectorized-numpy)
+- [Q8 — When JIT Helps Most](#q8-when-jit-helps-most)
+- [Q9 — cache=True](#q9-cachetrue)
+- [Q10 — parallel=True and prange](#q10-paralleltrue-and-prange)
+- [Q11 — Type Restrictions in @njit](#q11-type-restrictions-in-njit)
+
+---
+
 > Topics: @jit warmup, nogil, nopython, speedup cases, @cuda.jit.
 > Exam frequency: **2024 exam + F25**.
 

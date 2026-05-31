@@ -1,5 +1,36 @@
 # 02613 Python HPC — Exam Review
 
+> **Root files:** [STUDY_GUIDE](STUDY_GUIDE.md) · [Exam Review](exam_review.md) · [Cheat Sheet](master_cheat_sheet.md) · [Tips & Pitfalls](tips_and_tricks.md) · [README](README.md)
+
+---
+
+## Contents
+
+- [Exam Format](#exam-format)
+- [Topic Distribution by Exam](#topic-distribution-by-exam)
+- [Question Type Analysis](#question-type-analysis)
+  - [1. Read and interpret a job script](#1-read-and-interpret-a-job-script)
+  - [2. Amdahl's law calculations](#2-amdahls-law-calculations)
+  - [3. GIL and parallelisation strategy](#3-gil-and-parallelisation-strategy)
+  - [4. Parallel reduction associativity](#4-parallel-reduction-associativity)
+  - [5. NumPy broadcasting](#5-numpy-broadcasting)
+  - [6. Cache efficiency and loop ordering](#6-cache-efficiency-and-loop-ordering)
+  - [7. Reading profiler output](#7-reading-profiler-output)
+  - [8. GPU kernel thread blocks and coalescing](#8-gpu-kernel-thread-blocks-and-coalescing)
+  - [9. Pandas memory optimisation](#9-pandas-memory-optimisation)
+  - [10. Chunked processing and memory budgeting](#10-chunked-processing-and-memory-budgeting)
+- [High-Frequency Topics](#high-frequency-topics)
+- [Per-Exam Breakdown](#per-exam-breakdown)
+  - [2024 Exam](#2024-exam-28052024-14-pages-19-questions)
+  - [2024 Re-exam](#2024-re-exam-21082024-10-pages-18-questions)
+  - [F25 Exam](#f25-exam-2025-18-pages-24-questions--all-multiple-choice)
+- [Common Traps and Mistakes](#common-traps-and-mistakes)
+- [What the Exam Rewards](#what-the-exam-rewards)
+- [Exam Preparation Strategy](#exam-preparation-strategy)
+  - [Week-by-week priority](#week-by-week-priority)
+  - [Exam-day tactics](#exam-day-tactics)
+  - [What is never tested](#what-is-never-tested-based-on-these-three-exams)
+
 ---
 
 ## Exam Format

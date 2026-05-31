@@ -1,5 +1,32 @@
 # Parallel Reduction — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Associativity Counterexample](#q1-associativity-counterexample)
+- [Q2 — Max Operator](#q2-max-operator)
+- [Q3 — Matrix Multiplication](#q3-matrix-multiplication)
+- [Q4 — Binary Tree Reduction Rounds](#q4-binary-tree-reduction-rounds)
+- [Q5 — Optimal Chunk Count (Flat Reduction)](#q5-optimal-chunk-count-flat-reduction)
+- [Q6 — Custom Additive Operator](#q6-custom-additive-operator)
+- [Q7 — String Concatenation](#q7-string-concatenation)
+- [Q8 — ThreadPool Row-Sum Analysis](#q8-threadpool-row-sum-analysis)
+- [Key Facts Summary](#key-facts-summary)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q9 — Pool.map + functools.reduce Pattern](#q9-poolmap-functoolsreduce-pattern)
+- [Q10 — Subtraction in a Tree Reduction](#q10-subtraction-in-a-tree-reduction)
+- [Q11 — CUDA Shared Memory Reduction Kernel](#q11-cuda-shared-memory-reduction-kernel)
+- [Q12 — Identifying the Serial Combine Step](#q12-identifying-the-serial-combine-step)
+- [Q13 — XOR Reduction Correctness](#q13-xor-reduction-correctness)
+- [Q14 — Warp Shuffle Reduction](#q14-warp-shuffle-reduction)
+- [Q15 — Parallel Average: Wrong Approach](#q15-parallel-average-wrong-approach)
+- [Q16 — Missing syncthreads Bug](#q16-missing-syncthreads-bug)
+- [Q17 — Counting Reduction Steps for N=256](#q17-counting-reduction-steps-for-n256)
+- [Q18 — Custom Reduction: Weighted Sum](#q18-custom-reduction-weighted-sum)
+
+---
+
 > Format: Each question shows a Python function or reduction implementation to analyse.
 > Exam frequency: **Every exam**.
 

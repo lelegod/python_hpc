@@ -1,5 +1,33 @@
 # Cache Efficiency & Memory Layout — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Question 1](#question-1)
+- [Question 2](#question-2)
+- [Question 3](#question-3)
+- [Question 4](#question-4)
+- [Question 5](#question-5)
+- [Question 6](#question-6)
+- [Question 7](#question-7)
+- [Question 8](#question-8)
+- [Question 9](#question-9)
+- [Question 10](#question-10)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q11 — Strides After np.asfortranarray](#q11-strides-after-npasfortranarray)
+- [Q12 — Loop Order for F-Order Array](#q12-loop-order-for-f-order-array)
+- [Q13 — Strides of a 3D C-Order Array](#q13-strides-of-a-3d-c-order-array)
+- [Q14 — Broadcasting Stride Trick](#q14-broadcasting-stride-trick)
+- [Q15 — CUDA Thread Layout for C-Order Access](#q15-cuda-thread-layout-for-c-order-access)
+- [Q16 — np.ascontiguousarray on a Slice](#q16-npascontiguousarray-on-a-slice)
+- [Q17 — Axis=0 vs Axis=1 Sum Strides](#q17-axis0-vs-axis1-sum-strides)
+- [Q18 — Transpose Flags](#q18-transpose-flags)
+- [Q19 — Memory Access Pattern for Diagonal Sum](#q19-memory-access-pattern-for-diagonal-sum)
+- [Q20 — Choosing Layout for a CUDA Reduction](#q20-choosing-layout-for-a-cuda-reduction)
+
+---
+
 > Format: Each question shows Python/NumPy code to analyse for cache efficiency.
 > Exam frequency: **Every exam**.
 

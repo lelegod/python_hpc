@@ -1,5 +1,35 @@
 # Cache Efficiency & Memory Layout — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Optimal Loop Order from Strides](#q1-optimal-loop-order-from-strides)
+- [Q2 — C-Order Stride Layout](#q2-c-order-stride-layout)
+- [Q3 — Row Access vs Column Access](#q3-row-access-vs-column-access)
+- [Q4 — Cache Line Size and Prefetching](#q4-cache-line-size-and-prefetching)
+- [Q5 — Spatial Locality](#q5-spatial-locality)
+- [Q6 — Temporal Locality and Loop Tiling](#q6-temporal-locality-and-loop-tiling)
+- [Q7 — Infer Shape from Strides](#q7-infer-shape-from-strides)
+- [Q8 — Effect of Transposing an Array](#q8-effect-of-transposing-an-array)
+- [Q9 — Optimal Array Layout for CPU Convolution](#q9-optimal-array-layout-for-cpu-convolution)
+- [Q10 — Performance Staircase](#q10-performance-staircase)
+- [Q11 — Loop Order and Cache Efficiency](#q11-loop-order-and-cache-efficiency)
+- [Q12 — Stride Calculation for 2D Array](#q12-stride-calculation-for-2d-array)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q13 — Fortran-Order Innermost Loop](#q13-fortran-order-innermost-loop)
+- [Q14 — np.ascontiguousarray Behavior](#q14-npascontiguousarray-behavior)
+- [Q15 — Stride of 0 and Broadcasting](#q15-stride-of-0-and-broadcasting)
+- [Q16 — CUDA Coalescing vs CPU Cache](#q16-cuda-coalescing-vs-cpu-cache)
+- [Q17 — Column Sum vs Row Sum Performance](#q17-column-sum-vs-row-sum-performance)
+- [Q18 — 3D Array Optimal Inner Loop](#q18-3d-array-optimal-inner-loop)
+- [Q19 — np.asfortranarray Strides](#q19-npasfortranarray-strides)
+- [Q20 — Cache Efficiency of np.sum vs Python Loop](#q20-cache-efficiency-of-npsum-vs-python-loop)
+- [Q21 — Strides After Slicing](#q21-strides-after-slicing)
+- [Q22 — C-Order vs F-Order for Matrix Multiply](#q22-c-order-vs-f-order-for-matrix-multiply)
+
+---
+
 > Topics: Strides, loop ordering, row vs column access, cache hierarchy, spatial/temporal locality.
 > Exam frequency: **Every exam**.
 

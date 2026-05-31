@@ -1,5 +1,35 @@
 # GPU Memory Transfers — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Numba Auto-Transfer Rule](#q1-numba-auto-transfer-rule)
+- [Q2 — Transfer Count for Two-Array Kernel](#q2-transfer-count-for-two-array-kernel)
+- [Q3 — Why Output Arrays Are Transferred HtoD](#q3-why-output-arrays-are-transferred-htod)
+- [Q4 — Optimal Transfers for Input/Output Kernel](#q4-optimal-transfers-for-inputoutput-kernel)
+- [Q5 — Explicit Transfer Functions](#q5-explicit-transfer-functions)
+- [Q6 — Zero-Transfer Device Allocation](#q6-zero-transfer-device-allocation)
+- [Q7 — nsys Profiling Tables](#q7-nsys-profiling-tables)
+- [Q8 — Bandwidth Calculation from nsys](#q8-bandwidth-calculation-from-nsys)
+- [Q9 — Redundant Transfers in a Loop](#q9-redundant-transfers-in-a-loop)
+- [Q10 — Identifying the Bottleneck from nsys](#q10-identifying-the-bottleneck-from-nsys)
+- [Q11 — cuda.synchronize() Purpose](#q11-cudasynchronize-purpose)
+- [Q12 — GPU vs CPU Break-Even Point](#q12-gpu-vs-cpu-break-even-point)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q13 — Bandwidth from nsys: Small Transfer](#q13-bandwidth-from-nsys-small-transfer)
+- [Q14 — Transfer Count: Three Arrays, One Loop](#q14-transfer-count-three-arrays-one-loop)
+- [Q15 — Pre-allocation Saves Transfers in a Loop](#q15-pre-allocation-saves-transfers-in-a-loop)
+- [Q16 — HtoD vs DtoH Asymmetry](#q16-htod-vs-dtoh-asymmetry)
+- [Q17 — Counting Transfers with a Conditional Inside a Loop](#q17-counting-transfers-with-a-conditional-inside-a-loop)
+- [Q18 — nsys Bandwidth: Converting Units Correctly](#q18-nsys-bandwidth-converting-units-correctly)
+- [Q19 — Why DtoH Can Be the Bottleneck Despite Small Size](#q19-why-dtoh-can-be-the-bottleneck-despite-small-size)
+- [Q20 — Optimal Transfer Count for a Reduction Kernel](#q20-optimal-transfer-count-for-a-reduction-kernel)
+- [Q21 — Comparing Auto-Transfer vs Explicit in One Call](#q21-comparing-auto-transfer-vs-explicit-in-one-call)
+- [Q22 — Reading gpumemtimesum to Find Total Transfer Time](#q22-reading-gpumemtimesum-to-find-total-transfer-time)
+
+---
+
 > Topics: Numba auto-transfers, optimal transfer counts, nsys profiling, bandwidth calculation.
 > Exam frequency: **Every exam**.
 

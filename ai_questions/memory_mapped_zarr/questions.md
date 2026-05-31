@@ -1,5 +1,38 @@
 # Memory-Mapped Files & Zarr — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — np.memmap Mode 'r'](#q1-npmemmap-mode-r)
+- [Q2 — np.memmap Mode 'w+'](#q2-npmemmap-mode-w)
+- [Q3 — np.memmap Mode 'r+'](#q3-npmemmap-mode-r)
+- [Q4 — np.memmap Mode 'c' (Copy-on-Write)](#q4-npmemmap-mode-c-copy-on-write)
+- [Q5 — memmap RAM Footprint](#q5-memmap-ram-footprint)
+- [Q6 — Strided memmap Access and RAM Usage](#q6-strided-memmap-access-and-ram-usage)
+- [Q7 — dtype and shape Must Be Specified](#q7-dtype-and-shape-must-be-specified)
+- [Q8 — Zarr Chunk Shape for Row-by-Row Access](#q8-zarr-chunk-shape-for-row-by-row-access)
+- [Q9 — Zarr Chunk Shape Mismatched to Access Pattern](#q9-zarr-chunk-shape-mismatched-to-access-pattern)
+- [Q10 — Zarr Chunk Size Too Small](#q10-zarr-chunk-size-too-small)
+- [Q11 — Zarr Chunk Size Too Large](#q11-zarr-chunk-size-too-large)
+- [Q12 — Parallel Writes to Different Zarr Chunks](#q12-parallel-writes-to-different-zarr-chunks)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q13 — Which memmap Mode Creates a New File?](#q13-which-memmap-mode-creates-a-new-file)
+- [Q14 — What Happens When You `del` a Mode 'r+' memmap?](#q14-what-happens-when-you-del-a-mode-r-memmap)
+- [Q15 — Zarr Chunk Memory Calculation](#q15-zarr-chunk-memory-calculation)
+- [Q16 — When Is Memory Mapping Better Than Loading?](#q16-when-is-memory-mapping-better-than-loading)
+- [Q17 — Multiple Processes Sharing a Read-Only memmap](#q17-multiple-processes-sharing-a-read-only-memmap)
+- [Q18 — Choosing Between memmap and Loading for Sequential Access](#q18-choosing-between-memmap-and-loading-for-sequential-access)
+- [Q19 — Mode 'c' After Flush](#q19-mode-c-after-flush)
+- [Q20 — Zarr Chunk Count for a Given Array](#q20-zarr-chunk-count-for-a-given-array)
+- [Q21 — What Happens When memmap 'r+' File Does Not Exist?](#q21-what-happens-when-memmap-r-file-does-not-exist)
+- [Q22 — Zarr Chunk Shape for Column-by-Column Access](#q22-zarr-chunk-shape-for-column-by-column-access)
+- [Q23 — zarr.open Default Mode](#q23-zarropen-default-mode)
+- [Q24 — zarr.open Mode 'w-' / 'x'](#q24-zarropen-mode-w-x)
+- [Q25 — zarr.open Mode Comparison: 'r+' vs 'a'](#q25-zarropen-mode-comparison-r-vs-a)
+
+---
+
 > Topics: np.memmap modes, RAM footprint, Zarr chunk shapes, shared memory.
 > Exam frequency: **F25 exam** — np.memmap Q19, Zarr in re-exam and F25.
 

@@ -1,5 +1,38 @@
 # GPU / CUDA Kernels — MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — Best Block Shape for Coalescing (Row-Major)](#q1-best-block-shape-for-coalescing-row-major)
+- [Q2 — Why 1×256 Is Best for Row-Major Arrays](#q2-why-1256-is-best-for-row-major-arrays)
+- [Q3 — Worst Block Shape for Row-Major Coalescing](#q3-worst-block-shape-for-row-major-coalescing)
+- [Q4 — Grid Size Calculation (1D)](#q4-grid-size-calculation-1d)
+- [Q5 — 2D Grid Dimension Calculation](#q5-2d-grid-dimension-calculation)
+- [Q6 — Maximum Threads Per Block and Warp Multiples](#q6-maximum-threads-per-block-and-warp-multiples)
+- [Q7 — Optimal Array Layout for CUDA Convolution (CHW)](#q7-optimal-array-layout-for-cuda-convolution-chw)
+- [Q8 — CPU vs CUDA Layout Are Opposite](#q8-cpu-vs-cuda-layout-are-opposite)
+- [Q9 — Bounds Check Requirement](#q9-bounds-check-requirement)
+- [Q10 — `@cuda.jit(device=True)` Decorator](#q10-cudajitdevicetrue-decorator)
+- [Q11 — `cuda.grid(1)` Formula](#q11-cudagrid1-formula)
+- [Q12 — Warp Size and SIMT Execution](#q12-warp-size-and-simt-execution)
+- [Q13 — Worst Block Shape for Row-Major Read (Performance Trap)](#q13-worst-block-shape-for-row-major-read-performance-trap)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q14 — Reading nsys Profiler Output](#q14-reading-nsys-profiler-output)
+- [Q15 — Numba Automatic Transfer Count (Naive)](#q15-numba-automatic-transfer-count-naive)
+- [Q16 — Optimised Transfer Count (Pre-allocated Device Arrays)](#q16-optimised-transfer-count-pre-allocated-device-arrays)
+- [Q17 — GPU vs CPU Total Time Calculation](#q17-gpu-vs-cpu-total-time-calculation)
+- [Q18 — `cuda.syncthreads()` in Parallel Reduction](#q18-cudasyncthreads-in-parallel-reduction)
+- [Q19 — Static vs Dynamic Scheduling for GPU Jobs](#q19-static-vs-dynamic-scheduling-for-gpu-jobs)
+- [Q20 — GPU Amortisation Over Many Iterations](#q20-gpu-amortisation-over-many-iterations)
+- [Q21 — Warp Divergence with if/else](#q21-warp-divergence-with-ifelse)
+- [Q22 — 3D Array Coalescing: Which Block Shape?](#q22-3d-array-coalescing-which-block-shape)
+- [Q23 — GPU Queue and Resource Flags (BSUB)](#q23-gpu-queue-and-resource-flags-bsub)
+- [Q24 — `cuda.to_device` vs `cuda.device_array_like` Transfers](#q24-cudato_device-vs-cudadevice_array_like-transfers)
+- [Q25 — Transfer Count with Mixed NumPy and Device Arrays](#q25-transfer-count-with-mixed-numpy-and-device-arrays)
+
+---
+
 > Topics: Thread blocks, warp coalescing, grid dimensions, memory access patterns, CPU vs CUDA layout rules.
 > Exam frequency: **Every exam** — 4+ questions per exam.
 

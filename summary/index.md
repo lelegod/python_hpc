@@ -1,5 +1,16 @@
 # 02613 Python HPC — Summary Index
 
+> **Root:** [STUDY_GUIDE](../STUDY_GUIDE.md) · [Exam Review](../exam_review.md) · [Cheat Sheet](../master_cheat_sheet.md) · [Tips & Pitfalls](../tips_and_tricks.md)
+
+## Contents
+
+- [Weeks](#weeks)
+- [Syntax References](#syntax-references)
+- [Exam Quick Reference](#exam-quick-reference)
+- [Practice Exams (with code proofs)](#practice-exams-with-code-proofs)
+
+---
+
 Each week has two files:
 - `notes.md` — theory, concepts, key takeaways
 - `syntax.md` — coding syntax reference with exam traps

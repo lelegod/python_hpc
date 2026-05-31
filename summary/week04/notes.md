@@ -1,5 +1,31 @@
 # Week 4 — Profiling and High-Performance NumPy
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [NumPy Array Internals](#numpy-array-internals)
+  - [Views vs Copies](#views-vs-copies)
+  - [Broadcasting Rules](#broadcasting-rules)
+- [Key Code Examples](#key-code-examples)
+  - [bradscasting1.py — Row Standardization](#bradscasting1py-row-standardization)
+  - [bradscasting2.py — Outer Product](#bradscasting2py-outer-product)
+  - [bradscasting3.py — 1D Distance Matrix](#bradscasting3py-1d-distance-matrix)
+- [The Haversine Distance Matrix](#the-haversine-distance-matrix)
+- [Two-Loop vs One-Loop vs No-Loop](#two-loop-vs-one-loop-vs-no-loop)
+- [Profiling Workflow](#profiling-workflow)
+  - [Step 1 — cProfile (function-level)](#step-1-cprofile-function-level)
+  - [Step 2 — line_profiler (line-level)](#step-2-line_profiler-line-level)
+  - [Step 3 — MFLOP/S measurement](#step-3-mflops-measurement)
+- [Exercise Highlights](#exercise-highlights)
+  - [Section 1 — Broadcasting](#section-1-broadcasting)
+  - [Section 2 — High Performance Haversine](#section-2-high-performance-haversine)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 4 covers two tightly linked topics: **NumPy internals** (arrays, strides, views vs copies, broadcasting) and **profiling** (finding where time is actually spent, then systematically eliminating that bottleneck). The central case study is the Haversine distance matrix — rewritten from two nested Python loops down to zero loops, with profiling guiding every step.

@@ -1,5 +1,33 @@
 # Profiling — Code-Based MCQ Practice
 
+> [← Topics](../README.md) · [Questions](questions.md) · [Code Questions](code_questions.md)
+
+## Contents
+
+- [Q1 — cProfile: Bottleneck at Scale](#q1-cprofile-bottleneck-at-scale)
+- [Q2 — cProfile: tottime vs cumtime](#q2-cprofile-tottime-vs-cumtime)
+- [Q3 — line_profiler: Reading Hit Counts](#q3-line_profiler-reading-hit-counts)
+- [Q4 — line_profiler: FLOP/s Calculation](#q4-line_profiler-flops-calculation)
+- [Q5 — cProfile: Two Bottlenecks at Scale](#q5-cprofile-two-bottlenecks-at-scale)
+- [Q6 — nsys: HtoD Memory Bandwidth](#q6-nsys-htod-memory-bandwidth)
+- [Q7 — cProfile: Recursive Call Notation](#q7-cprofile-recursive-call-notation)
+- [Q8 — cProfile: Projecting Runtime from a Subset](#q8-cprofile-projecting-runtime-from-a-subset)
+- [Q9 — line_profiler: Which Line to Optimise First](#q9-line_profiler-which-line-to-optimise-first)
+- [Q10 — cProfile: Sorting by tottime vs cumtime](#q10-cprofile-sorting-by-tottime-vs-cumtime)
+- [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
+- [Q11 — cProfile: Identifying Own-Code Bottleneck](#q11-cprofile-identifying-own-code-bottleneck)
+- [Q12 — line_profiler: Inferring N from Hits](#q12-line_profiler-inferring-n-from-hits)
+- [Q13 — cProfile: percall Arithmetic Verification](#q13-cprofile-percall-arithmetic-verification)
+- [Q14 — nsys: Kernel vs Transfer Time Ratio](#q14-nsys-kernel-vs-transfer-time-ratio)
+- [Q15 — cProfile: Projecting a Scaling Function](#q15-cprofile-projecting-a-scaling-function)
+- [Q16 — line_profiler: FLOP/s from Output](#q16-line_profiler-flops-from-output)
+- [Q17 — cProfile: ncalls and Fixed vs Variable Cost](#q17-cprofile-ncalls-and-fixed-vs-variable-cost)
+- [Q18 — nsys: Diagnosing PCIe Bottleneck](#q18-nsys-diagnosing-pcie-bottleneck)
+- [Q19 — line_profiler: Hits Column Disambiguation](#q19-line_profiler-hits-column-disambiguation)
+- [Q20 — cProfile: Sorting Strategy for Optimisation](#q20-cprofile-sorting-strategy-for-optimisation)
+
+---
+
 > Format: Each question shows cProfile or line_profiler output to interpret.
 > Exam frequency: **Every exam**.
 

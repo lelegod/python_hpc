@@ -1,5 +1,36 @@
 # Week 5 — Parallelism Part 1: Multiprocessing & the GIL
 
+> [← Index](../index.md) · [Notes](notes.md) · [Syntax](syntax.md) · [Exercises](exercises.md)
+
+## Contents
+
+- [Overview](#overview)
+- [Theory & Concepts](#theory-concepts)
+  - [Why Parallelism?](#why-parallelism)
+  - [What Is Parallelism?](#what-is-parallelism)
+  - [Amdahl's Law](#amdahls-law)
+  - [Types of Parallelism](#types-of-parallelism)
+- [Threads vs. Processes](#threads-vs-processes)
+  - [Process](#process)
+  - [Thread](#thread)
+  - [The GIL: Global Interpreter Lock](#the-gil-global-interpreter-lock)
+- [Python Multiprocessing](#python-multiprocessing)
+  - [Pool API](#pool-api)
+- [Key Code Examples](#key-code-examples)
+  - [pi_serial.py — Baseline Serial Monte Carlo](#pi_serialpy-baseline-serial-monte-carlo)
+  - [pi_parallel.py — Naive Fully Parallel (one task per sample)](#pi_parallelpy-naive-fully-parallel-one-task-per-sample)
+  - [pi_chunked.py — Correct Chunked Parallel (one task per process)](#pi_chunkedpy-correct-chunked-parallel-one-task-per-process)
+- [Mandelbrot Parallelization](#mandelbrot-parallelization)
+  - [mandelbrot1.py — Pool.map with equal distribution](#mandelbrot1py-poolmap-with-equal-distribution)
+  - [mandelbrot2.py — Context manager + timing + CLI argument](#mandelbrot2py-context-manager-timing-cli-argument)
+- [Exercise Highlights](#exercise-highlights)
+  - [Exercise 1 — Amdahl's Law (analytical)](#exercise-1-amdahls-law-analytical)
+  - [Exercise 2 — Parallel Pi](#exercise-2-parallel-pi)
+  - [Exercise 3 — Mandelbrot Set](#exercise-3-mandelbrot-set)
+- [Key Takeaways](#key-takeaways)
+
+---
+
 ## Overview
 
 Week 5 introduces parallelism as the primary strategy for squeezing more performance out of modern hardware. Single-core clock speeds plateaued around 2004-2005; processor vendors responded by adding more cores rather than pushing higher frequencies. The lecture covers three interlocking topics: why parallelism matters, how Python's threading model works (and why the GIL blocks naive parallelism), and how to write correct parallel code using `multiprocessing`. The exercises apply these ideas to two classic HPC benchmarks: Monte Carlo pi estimation and the Mandelbrot set.
