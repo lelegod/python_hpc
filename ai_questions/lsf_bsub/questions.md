@@ -3,6 +3,8 @@
 > Topics: BSUB flags, resource calculation, GPU configuration, job dependencies, job arrays.
 > Exam frequency: **Every exam** — second highest priority topic.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--memory-per-core-calculation)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Memory Per Core Calculation
@@ -254,5 +256,181 @@ You are benchmarking a NumPy routine and need reproducible timings. Different no
 - B) Incorrect — rusage is for consumable resources that are decremented when allocated (like memory slots or GPU slots). CPU model is a static hardware property, not a consumable; it belongs in a select expression, not rusage.
 - C) Correct — select[model==XeonGold6226R] filters node selection to only allocate nodes whose reported CPU model string matches exactly. The double-equals is required syntax for string equality in LSF resource expressions.
 - D) Incorrect — -processor is not a valid BSUB directive. There is no such flag in LSF; using it would cause a script parsing error and the job would not be submitted.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets rusage[mem=X] per-core semantics, GPU queue flags, -n vs span[hosts=1], wall time formats, and bjobs output interpretation
+
+---
+
+## Q13 — Total Memory for a 4-Core Job
+
+> **Week reference:** Week 1
+
+A job script contains `#BSUB -n 4` and `#BSUB -R "rusage[mem=8192]"`. Assuming the memory unit is MB, what is the **total** memory reserved by LSF for this job?
+
+- A) 8192 MB (8 GB)
+- B) 16384 MB (16 GB)
+- C) 32768 MB (32 GB)
+- D) 2048 MB (2 GB)
+
+**Answer: C**
+
+rusage[mem=X] is per-core. With 4 cores: 8192 MB × 4 = 32768 MB = 32 GB total. A is the most common trap — treating the value as the total rather than per-core. B would be 8192 × 2 cores. D would be 8192 / 4, which inverts the direction of the error.
+
+---
+
+## Q14 — Per-Core Value for a Target Total
+
+> **Week reference:** Week 1
+
+You need exactly **24 GB** of total memory for a job running on **6 cores**. What value should you specify for `rusage[mem=X]` (in MB)?
+
+- A) 24576
+- B) 4096
+- C) 147456
+- D) 12288
+
+**Answer: B**
+
+Per-core = total ÷ n_cores = 24 GB ÷ 6 = 4 GB = 4096 MB. A (24576 MB = 24 GB) treats the total as the per-core value, which would actually allocate 24 × 6 = 144 GB. C (147456 MB) is the result of that over-allocation. D (12288 MB = 12 GB) halves correctly once but that would give 12 × 6 = 72 GB total, not 24 GB.
+
+---
+
+## Q15 — GPU Job: Which Flag Is Mandatory?
+
+> **Week reference:** Week 1
+
+A student switches their queue to `#BSUB -q gpuv100` but does not add any other GPU-related line to the script. The job runs. What actually happens?
+
+- A) The job gets a GPU automatically because it is in the GPU queue
+- B) The job lands on a GPU node but no GPU is allocated; CUDA calls will fail
+- C) LSF rejects the script with a submission error because -gpu is required
+- D) The job is automatically given one GPU in shared mode
+
+**Answer: B**
+
+The GPU queue routes the job to nodes that have GPUs installed, but it does not allocate a GPU device to the process. Only `#BSUB -gpu "num=1:mode=exclusive_process"` (or similar) actually reserves a GPU. Without it, CUDA initialization finds no device and the program fails at runtime. LSF does not reject the script — the directive is optional, just useless here.
+
+---
+
+## Q16 — GPU Mode: exclusive_process vs shared
+
+> **Week reference:** Week 1
+
+Two students both request `#BSUB -gpu "num=1"` without specifying a mode. A third student uses `#BSUB -gpu "num=1:mode=exclusive_process"`. What is the practical difference?
+
+- A) The third student's job will always be scheduled faster because exclusive mode has higher priority
+- B) Without specifying mode, the GPU may be shared with other jobs; exclusive_process guarantees no other process uses the same GPU concurrently
+- C) exclusive_process reserves the entire node, not just the GPU
+- D) There is no difference — all GPU jobs are run in exclusive mode by default on DTU HPC
+
+**Answer: B**
+
+`mode=exclusive_process` means the GPU is not shared with any other process for the duration of the job. Without it, the GPU may be in a shared or default mode where multiple jobs can time-share the device, which causes non-deterministic performance and can corrupt memory-heavy workloads. It does not affect node-level exclusivity or scheduling priority.
+
+---
+
+## Q17 — span[hosts=1] vs span[ptile=N]
+
+> **Week reference:** Week 1
+
+A job uses `#BSUB -n 8` and `#BSUB -R "span[ptile=4]"`. How many nodes does LSF allocate, and is this safe for `multiprocessing.shared_memory`?
+
+- A) 1 node with 8 cores — safe for shared memory
+- B) 2 nodes with 4 cores each — NOT safe for shared memory across nodes
+- C) 8 nodes with 1 core each — safe because all cores are pinned
+- D) 4 nodes with 2 cores each — safe because ptile balances the load
+
+**Answer: B**
+
+`span[ptile=4]` sets the maximum cores per host to 4. With `-n 8` total cores, LSF distributes across 2 nodes (4 cores each). Shared memory (e.g., `multiprocessing.shared_memory.SharedMemory`) exists only within a single node's physical RAM. Processes on different nodes cannot access it. Only `span[hosts=1]` forces all 8 cores onto one node, which is the requirement for shared-memory parallelism.
+
+---
+
+## Q18 — Wall Time: Minutes-Only Format
+
+> **Week reference:** Week 1
+
+A researcher wants to set a wall time limit of exactly **3 hours and 15 minutes**. Which `#BSUB -W` values are both valid and equivalent?
+
+- A) `-W 3:15` and `-W 195`
+- B) `-W 3.25` and `-W 195`
+- C) `-W 315` and `-W 3:15`
+- D) `-W 3h15m` and `-W 195`
+
+**Answer: A**
+
+`-W 3:15` uses HH:MM format (3 hours, 15 minutes = 195 minutes). `-W 195` uses the plain-integer minutes format. Both specify identical wall time. B uses decimal hours (3.25), which LSF does not parse. C uses 315 which means 315 minutes (5 hours 15 minutes), not 3:15 — a classic trap where people read the digits literally. D uses a unit-suffix format that LSF does not recognize.
+
+---
+
+## Q19 — bjobs Status Column Meanings
+
+> **Week reference:** Week 1
+
+You run `bjobs` and see jobs in states PEND, RUN, DONE, and EXIT. A colleague says "my job is PEND — it must be paused mid-run." Is this correct, and what does PEND actually mean?
+
+- A) Correct — PEND means the job is paused at a checkpoint
+- B) Incorrect — PEND means the job is waiting in the queue for resources or an unsatisfied dependency; it has not started running yet
+- C) Incorrect — PEND means the job finished but the exit code is pending evaluation
+- D) Correct — PEND means LSF is pending a node health check before resuming the job
+
+**Answer: B**
+
+PEND (pending) is the state a job is in before it has ever started running. It waits in the queue either because no suitable resources are available yet or because a dependency condition (`-w "done(...)"`) is not yet satisfied. It is not a paused-mid-run state — that would be USUSP (user-suspended) or SSUSP (system-suspended). DONE means finished successfully; EXIT means terminated with a non-zero exit code.
+
+---
+
+## Q20 — -n Flag vs -R Flag: What Each Controls
+
+> **Week reference:** Week 1
+
+What is the functional difference between `#BSUB -n 8` and `#BSUB -R "rusage[mem=4GB]"`?
+
+- A) `-n` sets the number of tasks, `-R` sets the number of CPU cores per task
+- B) `-n` sets the total number of CPU cores to request; `-R` specifies resource requirements (memory per core, node constraints, hardware selection)
+- C) `-n` sets the number of nodes; `-R` sets resources per node
+- D) Both flags control CPU count; `-R` overrides `-n` when they conflict
+
+**Answer: B**
+
+`-n` is the core count flag — it tells LSF how many CPU slots to reserve in total. `-R` is the resource requirement string — it can specify memory via `rusage[mem=X]` (per core), node topology via `span[hosts=1]`, hardware filters via `select[model==X]`, and more. They serve completely different purposes. `-n` sets how many; `-R` sets what kind and how much per unit.
+
+---
+
+## Q21 — bkill and Stuck PEND Jobs
+
+> **Week reference:** Week 1
+
+A job is stuck in PEND state because its `done()` dependency can never be satisfied (the prerequisite job exited with an error). What is the correct action to remove the stuck job?
+
+- A) Wait — LSF will automatically detect the unsatisfied dependency and kill the job after 24 hours
+- B) `bdel <jobid>` — the dedicated command for deleting pending jobs
+- C) `bkill <jobid>` — terminates or removes any job regardless of its current state
+- D) `bstop <jobid>` — stops the dependency check and releases the job to run immediately
+
+**Answer: C**
+
+`bkill <jobid>` is the standard command to terminate or remove LSF jobs in any state: PEND, RUN, DONE, or EXIT. LSF does not auto-kill jobs with permanently unsatisfied dependencies — they sit in PEND forever until the user acts. `bdel` is not a standard LSF command. `bstop` suspends a running job (sets it to USUSP); it does not release dependencies or kill the job.
+
+---
+
+## Q22 — Email Notification Flags
+
+> **Week reference:** Week 1
+
+Which pair of `#BSUB` directives together sends an email to `user@dtu.dk` when the job **ends** (not when it starts)?
+
+- A) `#BSUB -B` and `#BSUB -u user@dtu.dk`
+- B) `#BSUB -N` and `#BSUB -u user@dtu.dk`
+- C) `#BSUB -mail user@dtu.dk` alone
+- D) `#BSUB -N` alone (LSF infers the address from the submitting user's login)
+
+**Answer: B**
+
+`-N` sends an email notification when the job **ends** (reaches any terminal state). `-u` specifies the email address. Both are needed together: `-N` enables end-of-job notification and `-u` directs it to the right address. `-B` sends notification at job **start**, not end. `-mail` is not a valid BSUB flag. While `-N` alone might default to the submitter's system account on some clusters, DTU HPC requires `-u` to specify an actual email address.
 
 ---

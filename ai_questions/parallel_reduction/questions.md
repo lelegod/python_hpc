@@ -3,6 +3,8 @@
 > Topics: Associativity, commutativity, counterexamples, tree depth, valid/invalid operators.
 > Exam frequency: **Every exam**.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--associativity-requirement)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Associativity Requirement
@@ -244,5 +246,206 @@ In a flat (two-level) parallel reduction, N = 100 elements are divided into T eq
 - B) Incorrect — T = log₂(N) ≈ 7 corresponds to the depth of a binary tree reduction, which is a different algorithm; in the flat two-level model, T=7 gives time ≈ 100/7 + 7 ≈ 21.3, close to but not optimal.
 - C) Correct — minimising N/T + T: take derivative d/dT = −N/T² + 1 = 0, giving T = sqrt(N) = 10. Total time = 100/10 + 10 = 20. Speedup = N / (2·sqrt(N)) = sqrt(N)/2 = 10/2 = 5.
 - D) Incorrect — T = N = 100 means each chunk has 1 element (no intra-chunk work), then all 100 partials merged serially: time = 1 + 100 = 101, which is actually slower than serial.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets commutativity/associativity requirements, tree reduction depth, warp-level reduction, and Pool.map + functools.reduce patterns
+
+---
+
+## Q12 — Subtraction as Reduction Operator
+
+> **Week reference:** Week 6
+
+A student proposes using subtraction as the operator in a parallel tree reduction to compute the "signed alternating sum" of an array. Which statement is correct?
+
+- A) Subtraction is valid because it is commutative
+- B) Subtraction is invalid because it is neither commutative nor associative
+- C) Subtraction is valid because it is associative
+- D) Subtraction is invalid only for floating-point arrays; it works for integers
+
+**Answer: B**
+
+Subtraction fails both requirements. It is not commutative: `a − b ≠ b − a` in general (e.g. 5 − 3 = 2, but 3 − 5 = −2). It is not associative: `(5 − 3) − 1 = 1` but `5 − (3 − 1) = 3`. Since a parallel tree reduction requires both properties for correct results regardless of thread pairing and merge order, subtraction is doubly disqualified. The integer vs. floating-point distinction is irrelevant; the algebraic failure applies to all number types.
+
+---
+
+## Q13 — Average via Parallel Reduction
+
+> **Week reference:** Week 6
+
+You want to compute the average of a large array in parallel. A colleague suggests using the average operator `avg(a, b) = (a + b) / 2` as the reduction operator in a tree reduction. Why is this wrong?
+
+- A) avg is not commutative, so thread ordering affects the result
+- B) avg is commutative and associative, so it is valid
+- C) avg is not associative; different groupings give different results
+- D) avg cannot be parallelised at all and must be computed serially
+
+**Answer: C**
+
+`avg(a, b) = (a + b) / 2` is commutative (`avg(a,b) = avg(b,a)`) but not associative. Counterexample: `avg(avg(1, 3), 5) = avg(2, 5) = 3.5`, but `avg(1, avg(3, 5)) = avg(1, 4) = 2.5`. Different tree groupings give different results. The correct approach is to use parallel sum (which is associative and commutative) and divide the scalar result by N once at the end.
+
+---
+
+## Q14 — Tree Reduction Depth for N=1024
+
+> **Week reference:** Week 6
+
+A parallel binary tree reduction is applied to an array of N = 1024 elements, with sufficient processors for all pairs to combine simultaneously each round. How many parallel rounds are required?
+
+- A) 512 rounds
+- B) 10 rounds
+- C) 1024 rounds
+- D) 5 rounds
+
+**Answer: B**
+
+For N = 1024 = 2^10, the tree depth is ceil(log₂(1024)) = 10 rounds. Each round halves the active partial results: 1024 → 512 → 256 → 128 → 64 → 32 → 16 → 8 → 4 → 2 → 1. The serial cost would be 1023 operations; the parallel tree compresses this to 10 rounds. 512 rounds (A) is the number of operations in round 1. 5 rounds (D) corresponds to N = 32, not 1024.
+
+---
+
+## Q15 — Pool.map Return Value
+
+> **Week reference:** Week 5
+
+```python
+from multiprocessing import Pool
+
+def partial_sum(chunk):
+    return sum(chunk)
+
+chunks = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+with Pool(3) as p:
+    result = p.map(partial_sum, chunks)
+```
+
+What does `result` contain after `Pool.map` completes?
+
+- A) A single integer: the total sum of all elements
+- B) A list of three integers: `[6, 15, 24]`
+- C) A Pool object with lazy results
+- D) A list of three lists, each unchanged from the input
+
+**Answer: B**
+
+`Pool.map` applies `partial_sum` to each chunk in parallel and returns a list of the individual return values in the same order as the input. Here `partial_sum([1,2,3])=6`, `partial_sum([4,5,6])=15`, `partial_sum([7,8,9])=24`, so `result = [6, 15, 24]`. To obtain the total sum a second serial step is needed: `sum(result)` or `functools.reduce(lambda a,b: a+b, result)`. A common exam trap is thinking `Pool.map` returns a single reduced scalar (answer A).
+
+---
+
+## Q16 — functools.reduce after Pool.map
+
+> **Week reference:** Week 5
+
+After `Pool.map` returns partial results from each worker, a student writes:
+
+```python
+from functools import reduce
+final = reduce(lambda a, b: a + b, partial_results)
+```
+
+What role does `reduce` play here and is it parallel or serial?
+
+- A) It distributes the combination work across all Pool workers — parallel
+- B) It applies the lambda to each element independently — parallel
+- C) It serially combines the partial results left-to-right into a single value — serial
+- D) It is equivalent to `sum(partial_results)` but runs in a new process — parallel
+
+**Answer: C**
+
+`functools.reduce` is a purely serial fold: it applies the binary function left-to-right across the iterable, accumulating a single value. For `[6, 15, 24]` it computes `((6 + 15) + 24) = 45`. It does not spawn processes or threads. Its role in the two-phase reduction pattern is the serial "combine" step that merges the small list of partial results produced by the parallel `Pool.map` phase. Answer A is wrong because reduce has no knowledge of the Pool. Answer D is wrong: while `reduce(lambda a,b:a+b, xs)` and `sum(xs)` produce the same numerical result, `reduce` runs in the calling process, not a new one.
+
+---
+
+## Q17 — Warp Reduction Step Count
+
+> **Week reference:** Week 9
+
+A CUDA warp contains 32 threads performing a parallel reduction using shuffle-down instructions (`__shfl_down_sync`). The reduction proceeds with strides 16, 8, 4, 2, 1. How many shuffle steps are needed to produce the final result in thread 0?
+
+- A) 32 steps
+- B) 6 steps
+- C) 5 steps
+- D) 4 steps
+
+**Answer: C**
+
+A warp has 32 = 2^5 threads, so the tree depth is ceil(log₂(32)) = 5. Each shuffle-down step halves the active thread count: stride 16 (32→16 active), stride 8 (16→8), stride 4 (8→4), stride 2 (4→2), stride 1 (2→1). Five steps total, with no `__syncthreads()` needed since all threads in a warp execute synchronously. Answer B (6) would correspond to N=64; answer D (4) would correspond to N=16.
+
+---
+
+## Q18 — cuda.syncthreads() Purpose in Shared Memory Reduction
+
+> **Week reference:** Week 9
+
+In a CUDA shared-memory reduction kernel, `cuda.syncthreads()` is called after each stride. What happens if `cuda.syncthreads()` is omitted?
+
+- A) The kernel runs faster because synchronisation overhead is removed; results are still correct
+- B) Threads may read stale or partially-written shared memory values from the previous stride, producing incorrect results
+- C) The reduction silently falls back to a serial loop
+- D) Only the first block produces a correct result; all other blocks fail
+
+**Answer: B**
+
+Without `cuda.syncthreads()`, threads within a block are not guaranteed to have completed their writes to shared memory before other threads begin reading those locations in the next stride. This is a classic data race: thread `tid` may read `shared[tid + stride]` before the thread responsible for `tid + stride` has written its updated value. The result is non-deterministic and typically wrong. The synchronisation barrier does add overhead (A is wrong), but correctness cannot be traded for speed here. The fallback to serial (C) does not happen in CUDA; the hardware simply allows the race to proceed.
+
+---
+
+## Q19 — cuda.atomic.add Purpose
+
+> **Week reference:** Week 9
+
+At the end of a CUDA block-level reduction, thread 0 of each block executes:
+
+```python
+if tid == 0:
+    cuda.atomic.add(result, 0, shared[0])
+```
+
+Why is `cuda.atomic.add` used instead of `result[0] += shared[0]`?
+
+- A) `cuda.atomic.add` is faster than the += operator for GPU memory
+- B) Multiple blocks finish at unpredictable times and may simultaneously write to `result[0]`; atomic add prevents lost updates
+- C) `result[0] += shared[0]` would cause shared memory corruption
+- D) The atomic operation is needed to trigger a final `cuda.syncthreads()` across all blocks
+
+**Answer: B**
+
+When multiple blocks each contribute a partial result to the same global output scalar, their thread-0 threads can execute simultaneously. Without atomicity, two threads reading `result[0]`, adding their partial sums, and writing back could overwrite each other — a classic read-modify-write race. `cuda.atomic.add` guarantees that each update is applied to the current value without interference. Answer A is wrong: atomic operations are slower than plain memory writes due to serialisation. Answer C is wrong: shared memory is per-block and `result` is global memory; the issue is global memory contention. Answer D is wrong: `cuda.syncthreads()` only synchronises threads within a block; there is no cross-block barrier in standard CUDA.
+
+---
+
+## Q20 — XOR as Reduction Operator
+
+> **Week reference:** Week 6
+
+Is the bitwise XOR operator (`^`) valid for use in a parallel reduction?
+
+- A) No — XOR is commutative but not associative
+- B) No — XOR is associative but not commutative
+- C) Yes — XOR is both associative and commutative
+- D) Only for arrays of even length
+
+**Answer: C**
+
+Bitwise XOR is both commutative (`a ^ b = b ^ a` by bit-level symmetry) and associative (`(a ^ b) ^ c = a ^ (b ^ c)` because each bit position is independent and XOR is a Boolean operation satisfying both properties). It therefore satisfies both requirements for a parallel reduction. A common use is checking parity or detecting duplicates: XOR-reduce an array; if a value appears an even number of times it cancels out. Array length (D) has no bearing on the algebraic properties.
+
+---
+
+## Q21 — Non-Power-of-Two Tree Depth
+
+> **Week reference:** Week 6
+
+A parallel binary tree reduction is applied to an array of N = 20 elements. How many parallel rounds are needed?
+
+- A) 4 rounds
+- B) 5 rounds
+- C) 10 rounds
+- D) 20 rounds
+
+**Answer: B**
+
+For a non-power-of-two N, the tree depth is ceil(log₂(N)). log₂(20) ≈ 4.32, so ceil(4.32) = 5 rounds. In practice, the first round pairs up elements; 20 elements give 10 pairs → 10 partials, then 5 → 3 (one element sits idle) → 2 → 1, taking 5 rounds total. Answer A (4 rounds) is wrong because 2^4 = 16 < 20; 4 rounds can only handle up to 16 elements exactly. Answer C (10) is N/2 — the number of operations in round 1, not the total rounds.
 
 ---

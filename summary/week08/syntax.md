@@ -50,10 +50,22 @@ y = np.array(big[::100_000])   # loads 10^5 elements = 400 KB RAM only
 - **What**: chunked, compressed N-dimensional array stored on disk
 - **Chunk size**: tuning parameter — too small = overhead, too large = poor parallelism
 
+**`zarr.open` modes:**
+
+| Mode | Store must exist? | Creates store? | Truncates existing? | Notes |
+|------|:-----------------:|:--------------:|:-------------------:|-------|
+| `'r'` | Yes | No | No | Read-only |
+| `'r+'` | Yes | No | No | Read-write; error if missing |
+| `'w'` | No | Yes | **Yes** | Create or overwrite |
+| `'w-'` / `'x'` | No | Yes | No | Exclusive create — **error if exists** |
+| `'a'` | No | Yes | No | **Default** — create if absent, else read-write |
+
+> Exam trap: omitting `mode=` gives `'a'` (not `'r'` or `'w'`). Use `'w-'` in pipelines where overwriting previous results would be a bug.
+
 ```python
 import zarr
 
-# Create
+# Create (overwrite if exists)
 z = zarr.open('data.zarr', mode='w', shape=(1000, 1000),
               chunks=(50, 50), dtype='int32')
 z[0:50, 0:50] = chunk_data    # write one chunk
@@ -61,6 +73,12 @@ z[0:50, 0:50] = chunk_data    # write one chunk
 # Read
 z = zarr.open('data.zarr', mode='r')
 data = z[100:200, :]
+
+# Default mode='a': create if missing, open read-write if present
+z = zarr.open('data.zarr', shape=(1000, 1000), chunks=(50, 50), dtype='int32')
+
+# Exclusive create: fail if already exists (safe for write-once pipelines)
+z = zarr.open('output.zarr', mode='w-', shape=(1000, 1000), chunks=(50, 50), dtype='int32')
 
 # Multiple processes can write to DIFFERENT chunks simultaneously — no locking needed
 ```

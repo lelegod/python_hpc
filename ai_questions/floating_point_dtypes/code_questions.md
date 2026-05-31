@@ -3,6 +3,8 @@
 > Format: Each question shows NumPy dtype code — predict the output.
 > Exam frequency: **F25 exam Q2**.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--float16-precision-loss-at-large-values)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — float16 precision loss at large values
@@ -206,3 +208,260 @@ print(a + np.float32(1) == a)
 - **uint16:** 0 to 65535
 - NumPy integer overflow is **silent** (no `OverflowError`), unlike Python `int`
 - NumPy float overflow follows **IEEE 754**: produces `inf`, not a wrapped integer
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets dtype memory footprint calculations, value range constraints, and pandas/numpy memory reduction strategies
+
+---
+
+## Q9 — Array Memory Footprint
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+arr = np.zeros(1_000_000, dtype=np.float32)
+print(arr.nbytes)
+```
+
+**A)** `1000000`
+**B)** `2000000`
+**C)** `4000000`
+**D)** `8000000`
+
+**Answer: C**
+
+- A) Incorrect — 1,000,000 bytes = 1 byte per element, which corresponds to int8 or uint8, not float32
+- B) Incorrect — 2,000,000 bytes = 2 bytes per element, which corresponds to float16 or int16, not float32
+- C) Correct — float32 uses 4 bytes per element; 1,000,000 × 4 = 4,000,000 bytes. `arr.nbytes` returns total byte count
+- D) Incorrect — 8,000,000 bytes = 8 bytes per element, which corresponds to float64, not float32
+
+---
+
+## Q10 — Dtype Memory Comparison
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+a = np.ones(500_000, dtype=np.float64)
+b = np.ones(500_000, dtype=np.float32)
+print(a.nbytes // b.nbytes)
+```
+
+**A)** `1`
+**B)** `2`
+**C)** `4`
+**D)** `8`
+
+**Answer: B**
+
+- A) Incorrect — float64 and float32 differ in size; they are not equal. float64 = 8 bytes, float32 = 4 bytes
+- B) Correct — a.nbytes = 500,000 × 8 = 4,000,000; b.nbytes = 500,000 × 4 = 2,000,000; 4,000,000 // 2,000,000 = 2
+- C) Incorrect — 4 would be the ratio of float64 to float16 (8 bytes vs 2 bytes), not float64 to float32
+- D) Incorrect — 8 would imply a float64 to int8/bool ratio (8 bytes vs 1 byte), not a float32 comparison
+
+---
+
+## Q11 — int8 Value Wrapping on Array Construction
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+arr = np.array([100, 150, 200], dtype=np.int8)
+print(arr)
+```
+
+**A)** `[100 127 127]`
+**B)** `[100 150 200]`
+**C)** `[100 -106  -56]`
+**D)** `OverflowError`
+
+**Answer: C**
+
+- A) Incorrect — NumPy does not clamp/saturate values at int8 max (127); it wraps using two's complement
+- B) Incorrect — int8 max is 127; 150 and 200 both exceed this and cannot be stored as-is
+- C) Correct — two's complement wrap: 150 − 256 = −106; 200 − 256 = −56; 100 fits in int8 unchanged
+- D) Incorrect — NumPy integer overflow is silent; no exception is raised during array construction
+
+---
+
+## Q12 — Pandas astype Memory Reduction
+
+> **Week reference:** Week 7
+
+```python
+import pandas as pd
+import numpy as np
+
+s = pd.Series(np.random.randn(1_000_000), dtype='float64')
+s32 = s.astype('float32')
+print(s.nbytes // s32.nbytes)
+```
+
+**A)** `1`
+**B)** `2`
+**C)** `4`
+**D)** `8`
+
+**Answer: B**
+
+- A) Incorrect — astype('float32') does reduce memory; float64 (8 bytes) and float32 (4 bytes) are different sizes
+- B) Correct — s.nbytes = 1,000,000 × 8 = 8,000,000; s32.nbytes = 1,000,000 × 4 = 4,000,000; 8,000,000 // 4,000,000 = 2
+- C) Incorrect — 4× reduction comes from float64→float16 (8 bytes → 2 bytes), not float64→float32
+- D) Incorrect — 8× reduction would require float64→bool or float64→int8 (8 bytes → 1 byte), not float32
+
+---
+
+## Q13 — Range Check for uint8
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+values = [0, 50, 127, 200, 255]
+arr = np.array(values, dtype=np.uint8)
+print(list(arr))
+```
+
+**A)** `[0, 50, 127, 200, 255]`
+**B)** `[0, 50, 127, -56, -1]`
+**C)** `[0, 50, 127, 200, 127]`
+**D)** `OverflowError`
+
+**Answer: A**
+
+- A) Correct — uint8 range is 0 to 255; all five values (0, 50, 127, 200, 255) are within this range and are stored exactly
+- B) Incorrect — negative wrapping occurs with signed int8, not unsigned uint8. uint8 has no negative values; 200 and 255 are valid uint8 values
+- C) Incorrect — uint8 does not clamp at 127; 127 is the max of int8 (signed), not uint8 (unsigned). uint8 max is 255
+- D) Incorrect — NumPy integer overflow is always silent; no OverflowError is raised, and all values here are in range anyway
+
+---
+
+## Q14 — float16 Memory for Large Array
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+arr = np.zeros(2_000_000, dtype=np.float16)
+print(arr.nbytes / 1e6)
+```
+
+**A)** `1.0`
+**B)** `2.0`
+**C)** `4.0`
+**D)** `16.0`
+
+**Answer: C**
+
+- A) Incorrect — 1.0 MB would be 2,000,000 × 0.5 bytes per element, which is not a valid dtype size
+- B) Incorrect — 2.0 MB = 2,000,000 × 1 byte per element, corresponding to int8 or bool dtype
+- C) Correct — float16 uses 2 bytes per element; 2,000,000 × 2 = 4,000,000 bytes = 4.0 MB
+- D) Incorrect — 16.0 MB = 2,000,000 × 8 bytes per element, corresponding to float64
+
+---
+
+## Q15 — Detecting Unsafe Downcast
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+data = np.array([10, 50, 130, 200], dtype=np.int32)
+can_use_int8 = (data.min() >= -128) and (data.max() <= 127)
+print(can_use_int8)
+```
+
+**A)** `True` — all values are positive and fit in int8
+**B)** `False` — int8 cannot hold any positive values
+**C)** `False` — 130 and 200 exceed int8 max of 127
+**D)** `True` — int8 range is 0 to 255 for positive values
+
+**Answer: C**
+
+- A) Incorrect — "all positive" does not guarantee int8 safety; int8 max is 127, so 130 and 200 fail the `<= 127` check
+- B) Incorrect — int8 holds positive values 0 to 127 perfectly; the issue is the upper bound, not the sign
+- C) Correct — `data.max()` is 200; `200 <= 127` is False, so `can_use_int8` evaluates to False. The check correctly identifies the unsafe downcast
+- D) Incorrect — int8 range is −128 to 127 (signed). The 0–255 range belongs to uint8. int8 cannot hold 130 or 200
+
+---
+
+## Q16 — Categorical vs Object Memory
+
+> **Week reference:** Week 7
+
+```python
+import pandas as pd
+s_obj = pd.Series(['yes', 'no', 'yes', 'no'] * 250_000)  # 1M elements, 2 unique
+s_cat = s_obj.astype('category')
+print(s_obj.nbytes > s_cat.nbytes)
+```
+
+**A)** `False` — Categorical always uses more memory due to the lookup table
+**B)** `True` — Categorical uses integer codes instead of repeated string objects
+**C)** `False` — object and category Series always have identical memory usage
+**D)** `True` — Categorical compresses using gzip
+
+**Answer: B**
+
+- A) Incorrect — the lookup table overhead (2 short strings) is negligible compared to storing 1,000,000 Python string objects. Categorical is much smaller for low-cardinality data
+- B) Correct — the object Series stores 1,000,000 Python string pointers plus heap-allocated string objects (~50+ bytes each). Categorical stores 1,000,000 int8 codes (1 byte each) plus 2 strings in the lookup. Memory drops dramatically
+- C) Incorrect — object dtype tracks individual Python objects; category dtype uses integer codes. They have very different memory footprints for repeated string data
+- D) Incorrect — Categorical uses dictionary encoding (integer codes), not gzip byte compression. It is a structural/algorithmic optimization, not a compression codec
+
+---
+
+## Q17 — float16 NaN vs inf
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+a = np.float16(0.0)
+b = np.float16(0.0)
+print(a / b)
+```
+
+**A)** `0.0`
+**B)** `inf`
+**C)** `nan`
+**D)** `ZeroDivisionError`
+
+**Answer: C**
+
+- A) Incorrect — 0.0 / 0.0 is an indeterminate form in IEEE 754; the result is NaN, not 0.0
+- B) Incorrect — `inf` results from a nonzero value divided by zero (e.g., `1.0 / 0.0`). Zero divided by zero is undefined, producing NaN
+- C) Correct — IEEE 754 defines 0.0 / 0.0 as NaN (Not a Number) because it is an indeterminate form. NumPy will also issue a RuntimeWarning: invalid value encountered in divide
+- D) Incorrect — NumPy floating-point division by zero does not raise a Python exception; it follows IEEE 754 and produces NaN or inf with a RuntimeWarning
+
+---
+
+## Q18 — int32 vs int64 Memory Tradeoff
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+a = np.zeros(1_000_000, dtype=np.int64)
+b = np.zeros(1_000_000, dtype=np.int32)
+print(a.nbytes - b.nbytes)
+```
+
+**A)** `0`
+**B)** `1000000`
+**C)** `4000000`
+**D)** `8000000`
+
+**Answer: C**
+
+- A) Incorrect — int64 (8 bytes) and int32 (4 bytes) have different sizes; their nbytes values are not equal
+- B) Incorrect — 1,000,000 byte difference would imply a 1 byte per element difference, corresponding to int8 vs no-dtype or similar. int64 vs int32 differs by 4 bytes per element
+- C) Correct — a.nbytes = 1,000,000 × 8 = 8,000,000; b.nbytes = 1,000,000 × 4 = 4,000,000; difference = 4,000,000 bytes
+- D) Incorrect — 8,000,000 would be the full size of the int64 array (a.nbytes), not the difference between the two arrays
+
+---

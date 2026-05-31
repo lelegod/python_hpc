@@ -3,6 +3,8 @@
 > Topics: Job arrays, $LSB_JOBINDEX, background processes, thread env vars, oversubscription.
 > Exam frequency: **2024 exam + F25** (job arrays, dependencies).
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--job-array-index-range)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Job Array Index Range
@@ -281,5 +283,181 @@ A student connects to `login.hpc.dtu.dk` and runs a CPU-intensive simulation dir
 - B) Correct — the login node is a lightweight shared gateway. Running CPU-intensive work there consumes shared resources (CPU time, RAM), slows down SSH logins for everyone, and violates cluster usage policy. The correct approach is `bsub` for batch jobs or `linuxsh`/`bsub -Is` for interactive sessions on compute nodes.
 - C) Incorrect — login nodes are not provisioned with extra RAM for computation. They are typically configured with moderate RAM for handling many concurrent SSH sessions, not for running large simulations.
 - D) Incorrect — LSF does not auto-migrate processes started outside of `bsub`. Any process started directly in the terminal runs on the login node and stays there; LSF only manages jobs explicitly submitted via `bsub`.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets job arrays with $LSB_JOBINDEX, job dependencies (done vs ended), output file naming, and pipeline construction
+
+---
+
+## Q13 — done() vs ended() Critical Distinction
+
+> **Week reference:** Week 11
+
+A 50-element job array named `preprocess` is submitted. Due to a data error, 4 of the 50 jobs exit with a non-zero return code (EXIT state). A downstream job was submitted with `#BSUB -w "done(preprocess)"`. What happens to the downstream job?
+
+- A) It starts after the 46 successful jobs complete; the 4 failures are tolerated.
+- B) It remains permanently stuck in PEND state because `done()` requires every element to reach DONE.
+- C) It starts after all 50 jobs have left RUN state, regardless of exit code.
+- D) It starts after a 10-minute timeout, even though some jobs failed.
+
+**Answer: B**
+
+`done()` is an all-or-nothing condition: every element of the named array must reach DONE (exit code 0). If even one element reaches EXIT, the `done()` condition is permanently false and the downstream job waits forever in PEND. There is no timeout or partial-success tolerance. A) describes the behaviour of `ended()`, not `done()`. C) also describes `ended()`. D) is invented; LSF has no dependency timeout mechanism.
+
+---
+
+## Q14 — ended() Permissive Dependency
+
+> **Week reference:** Week 11
+
+A pipeline runs preprocessing then aggregation. The aggregation step must run even if some preprocessing jobs fail (it will handle missing inputs gracefully). Which dependency directive on the aggregation job is correct?
+
+- A) `#BSUB -w "done(preprocess)"`
+- B) `#BSUB -w "ended(preprocess)"`
+- C) `#BSUB -w "exit(preprocess)"`
+- D) `#BSUB -w "finished(preprocess)"`
+
+**Answer: B**
+
+`ended()` is satisfied when all jobs in the named group have finished — whether DONE or EXIT. This is the correct choice when the downstream job should always run regardless of upstream failures. A) uses `done()`, which blocks permanently if any job fails. C) `exit()` is not a valid LSF dependency keyword. D) `finished()` does not exist in LSF dependency syntax.
+
+---
+
+## Q15 — Output File %J vs %I
+
+> **Week reference:** Week 11
+
+A 100-element job array is submitted with `#BSUB -o log_%I.out`. Job array index 47 runs as part of job submission ID 98765. What is the output filename for that element?
+
+- A) `log_98765.out`
+- B) `log_47_98765.out`
+- C) `log_47.out`
+- D) `log_98765_47.out`
+
+**Answer: C**
+
+`%I` expands to the array index, so the file is `log_47.out`. A) would result from `%J` alone (just the job ID). B) and D) would require `%I_%J` or `%J_%I` respectively. The directive only contains `%I`, so only the array index appears in the filename.
+
+---
+
+## Q16 — Three-Stage Pipeline Construction
+
+> **Week reference:** Week 11
+
+You need to build a three-stage pipeline: stage1 (array [1-20]), stage2 (array [1-20], runs after stage1 succeeds), stage3 (single job, runs after stage2 succeeds). Which sequence of `bsub` commands is correct?
+
+- A) `bsub -J "s1[1-20]" s1.sh` then `bsub -w "done(s1)" -J "s2[1-20]" s2.sh` then `bsub -w "done(s2)" s3.sh`
+- B) `bsub -J "s1[1-20]" s1.sh` then `bsub -J "s2[1-20]" -w "ended(s1)" s2.sh` then `bsub -w "ended(s2)" s3.sh`
+- C) `bsub -J "s1[1-20]" s1.sh && bsub -J "s2[1-20]" s2.sh && bsub s3.sh`
+- D) `bsub -J "s1[1-20]" s1.sh` then `bsub -hold_jid s1 -J "s2[1-20]" s2.sh` then `bsub -hold_jid s2 s3.sh`
+
+**Answer: A**
+
+A) correctly uses `done()` at both dependency stages, ensuring each stage only runs when the previous stage completed successfully. B) uses `ended()` which allows downstream stages to run even after failures — incorrect when success is required. C) uses shell `&&` which chains submission commands, not job execution order — all three jobs are submitted immediately and run in parallel. D) uses `-hold_jid` which is SGE/UGE syntax, not valid LSF/BSUB.
+
+---
+
+## Q17 — Concurrent Array Job Limit
+
+> **Week reference:** Week 11
+
+A job array is submitted with `#BSUB -J "bigrun[1-500]%20"`. What does the `%20` control?
+
+- A) The step size — only indices 1, 21, 41, ... are created.
+- B) The maximum number of array elements that can run concurrently (at most 20 at a time).
+- C) The wall-clock limit in minutes for each array element.
+- D) The number of CPU cores requested per array element.
+
+**Answer: B**
+
+The `%N` suffix after the range in LSF job array syntax limits concurrency: at most N elements run simultaneously. This prevents flooding the cluster with all 500 jobs at once. A) describes step syntax, which uses `[start-end:step]` (a colon, not a percent). C) wall-clock limit uses `#BSUB -W`. D) core count uses `#BSUB -n`.
+
+---
+
+## Q18 — LSB_JOBINDEX Off-by-One in Python
+
+> **Week reference:** Week 11
+
+A Python script accesses a list of 8 configuration files. The job array is `#BSUB -J "run[1-8]"`. Which line correctly selects the configuration for each array element?
+
+- A) `config = configs[os.environ["LSB_JOBINDEX"]]`
+- B) `config = configs[int(os.environ["LSB_JOBINDEX"])]`
+- C) `config = configs[int(os.environ["LSB_JOBINDEX"]) - 1]`
+- D) `config = configs[int(os.environ["SLURM_ARRAY_TASK_ID"]) - 1]`
+
+**Answer: C**
+
+`$LSB_JOBINDEX` is 1-based (1 through 8) but Python list indices are 0-based (0 through 7). Subtracting 1 maps them correctly: element 1 → `configs[0]`, element 8 → `configs[7]`. A) passes a string to the index operator, raising `TypeError`. B) passes the integer directly without subtracting 1 — element 1 accesses `configs[1]` (skips first), and element 8 raises `IndexError`. D) uses the SLURM variable name, which does not exist in LSF and raises `KeyError`.
+
+---
+
+## Q19 — Dependency on Specific Job ID
+
+> **Week reference:** Week 11
+
+A user submits a preprocessing job and it is assigned job ID 54321. They want to submit an analysis job that only runs after job 54321 completes successfully. Which directive is correct?
+
+- A) `#BSUB -w "done(preprocess)"`
+- B) `#BSUB -w "done(54321)"`
+- C) `#BSUB -w "ended(54321)"`
+- D) `#BSUB -after 54321`
+
+**Answer: B**
+
+LSF `-w` accepts either a job name or a numeric job ID inside `done()` or `ended()`. `done(54321)` waits for job ID 54321 to reach DONE (success). A) uses a name — if the submitted job was not named `preprocess`, this would either match a different job or block indefinitely. C) uses `ended()` which would also run if job 54321 failed. D) `-after` is not a valid LSF directive.
+
+---
+
+## Q20 — AND Dependency: Both Jobs Must Succeed
+
+> **Week reference:** Week 11
+
+A final report job must run only after BOTH a data job (named `data`) and a model job (named `model`) complete successfully. Which directive expresses this?
+
+- A) `#BSUB -w "done(data) || done(model)"`
+- B) `#BSUB -w "done(data,model)"`
+- C) `#BSUB -w "done(data) && done(model)"`
+- D) `#BSUB -w "done(data+model)"`
+
+**Answer: C**
+
+LSF dependency expressions support `&&` (AND) and `||` (OR) logical operators. `done(data) && done(model)` requires both to reach DONE before the downstream job starts. A) uses `||` (OR), meaning the report starts as soon as either one finishes — incorrect. B) a comma inside `done()` is not valid LSF dependency syntax. D) uses `+` which is not a valid operator in LSF dependency expressions.
+
+---
+
+## Q21 — What %I Expands To in a Running Job
+
+> **Week reference:** Week 11
+
+A job array is submitted with `#BSUB -J "exp[1-30]"` and `#BSUB -o results_%J_%I.out`. The entire job array is assigned submission ID 11111. When array element 15 runs, what is its output filename?
+
+- A) `results_11111_15.out`
+- B) `results_15_11111.out`
+- C) `results_11111.out`
+- D) `results_15.out`
+
+**Answer: A**
+
+The directive `results_%J_%I.out` expands `%J` to the parent job ID (11111) and `%I` to the array index (15), giving `results_11111_15.out`. B) reverses the order from what the directive specifies. C) omits `%I` expansion — that would result from `results_%J.out`. D) omits `%J` expansion — that would result from `results_%I.out`.
+
+---
+
+## Q22 — Danger of Missing %I in Output Directive
+
+> **Week reference:** Week 11
+
+A job array `#BSUB -J "proc[1-10]"` uses the output directive `#BSUB -o output_%J.out`. All 10 elements run concurrently on different nodes. What is the result?
+
+- A) Each element creates a uniquely named file; output is clean.
+- B) All 10 elements write concurrently to the same file, producing interleaved and potentially corrupted output.
+- C) LSF automatically appends the array index to the filename even without `%I`.
+- D) Only the element with the lowest index writes output; the others discard their stdout.
+
+**Answer: B**
+
+Without `%I`, `%J` expands to the same parent job ID for all 10 elements. Every element therefore opens the identical file `output_<jobID>.out`. With 10 processes writing simultaneously to the same file from different nodes, writes interleave unpredictably and output is corrupted or mixed. The fix is to use `%J_%I`. C) is false — LSF never auto-appends the index. D) is false — all elements write output, causing the collision.
 
 ---

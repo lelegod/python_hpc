@@ -3,6 +3,8 @@
 > Topics: cProfile columns, line profiler Hits, scaling to production workload, FLOP/s, nsys.
 > Exam frequency: **Every exam**.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--cprofile-cumtime-vs-tottime)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — cProfile cumtime vs tottime
@@ -338,5 +340,211 @@ At production scale: `transform_dataset` is still called once; `validate_record`
 - B) Correct — `transform_dataset` stays at ~30 s (ncalls=1, fixed). `validate_record` projects to 50,000 × (0.500 s / 1000) = 50,000 × 0.0005 s/call = 25 s. 30 s > 25 s, so `transform_dataset` is still the larger bottleneck at this scale, though both deserve attention.
 - C) Incorrect — 25 s ≠ 30 s; they differ by 5 s. Equal projected time would require validate_record to be called 60,000 times (30 s / 0.0005 s/call), not 50,000.
 - D) Incorrect — Comparing `tottime` values ignores callee time entirely and misrepresents actual impact. transform_dataset's tottime of 0.01 s is tiny, but its cumtime of 30 s shows it delegates massively. Always use cumtime for bottleneck comparison.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets cProfile cumtime vs tottime, line profiler Hits interpretation, percall scaling, nsys GPU profiler output, and FLOP/s calculations
+
+---
+
+## Q14 — percall Formula
+
+> **Week reference:** Week 2
+
+In cProfile output, what is the formula for the first `percall` column (the one adjacent to `tottime`)?
+
+- A) percall = cumtime / ncalls
+- B) percall = tottime / ncalls
+- C) percall = tottime × ncalls
+- D) percall = cumtime − tottime
+
+**Answer: B**
+
+`percall` in the `tottime` column = tottime / ncalls. It represents the average time the function's own code takes per invocation, not including callees. The second `percall` column (next to cumtime) = cumtime / ncalls, which includes callees. A) is the cumtime-based percall. C) and D) are not meaningful cProfile metrics.
+
+---
+
+## Q15 — Large cumtime, Small tottime Diagnosis
+
+> **Week reference:** Week 2
+
+A function `pipeline()` shows `tottime = 0.003 s` and `cumtime = 85.000 s` in cProfile. What is the correct interpretation?
+
+- A) `pipeline()` has a bug causing an infinite loop in its own code
+- B) `pipeline()` itself does almost no work; almost all 85 s is spent inside functions it calls
+- C) `pipeline()` was called 85 / 0.003 ≈ 28,333 times
+- D) `pipeline()` and its callees together execute 85 s of CPU time per call
+
+**Answer: B**
+
+cumtime − tottime = 84.997 s is spent inside callees of `pipeline()`. The function is a thin orchestrator: it does 0.003 s of its own work then delegates everything else. A) is wrong — an infinite loop in own code would increase tottime, not cumtime. C) misreads the columns — ncalls is a separate column. D) is close but "per call" is wrong; 85 s is the total across all calls, not per call (unless ncalls = 1, which we don't know).
+
+---
+
+## Q16 — Line Profiler: Loop Header vs Loop Body Hits
+
+> **Week reference:** Week 2
+
+A `line_profiler` report shows:
+
+```
+Line #   Hits    Time  Per Hit  % Time  Line Contents
+    10    201    40.0      0.2      0.1  for i in range(n):
+    11    200  39960.0    199.8     99.9      process(data[i])
+```
+
+What is the value of `n`, and why does line 10 show 201 hits instead of 200?
+
+- A) n = 201; line 11 is called once before the loop starts
+- B) n = 200; line 10 gets one extra hit when Python checks the iterator exhaustion condition after the last iteration
+- C) n = 200; line 10 executes n+1 times due to Python's off-by-one in range()
+- D) n = 201; cProfile counts the function definition line as one extra hit
+
+**Answer: B**
+
+The loop body (line 11) executes exactly n = 200 times — one per iteration. The loop header (line 10) is evaluated n+1 = 201 times: once per iteration to get the next value, plus one final time when the iterator raises `StopIteration` and the loop exits. A) is wrong — line 11 doesn't run before the loop. C) range() has no off-by-one; the extra hit is the exhaustion check. D) confuses line_profiler with cProfile.
+
+---
+
+## Q17 — FLOP/s and Hardware Utilisation
+
+> **Week reference:** Week 2
+
+A matrix multiply of shape 512 × 512 × 512 completes in 0.002 s. Approximately how many GFLOP/s does this achieve, and is it likely compute-bound on a modern CPU (assume ~200 GFLOP/s peak)?
+
+- A) ~134 GFLOP/s — yes, near peak
+- B) ~0.134 GFLOP/s — no, far below peak; likely memory-bound
+- C) ~134 GFLOP/s — no, far below peak; likely memory-bound
+- D) ~268 GFLOP/s — exceeds hardware peak; result is impossible
+
+**Answer: C**
+
+FLOPs = 2 × 512 × 512 × 512 = 2 × 134,217,728 ≈ 2.68 × 10^8. Time = 0.002 s. FLOP/s = 2.68×10^8 / 0.002 = 1.34×10^11 = 134 GFLOP/s. This is 67% of the 200 GFLOP/s peak — respectable but still below peak, so it is not fully compute-bound; memory bandwidth or overhead still limits it. A) and C) share the same number but differ on "near peak" — 134/200 = 67% is not "near peak." D) is wrong: 134 GFLOP/s < 200 GFLOP/s.
+
+---
+
+## Q18 — nsys gpukernsum vs gpumemtimesum Bottleneck Diagnosis
+
+> **Week reference:** Week 9
+
+An nsys report for a GPU application shows:
+
+```
+gpukernsum:    total kernel time = 0.050 s
+gpumemtimesum: total transfer time = 1.200 s
+```
+
+What is the primary bottleneck, and what strategy addresses it?
+
+- A) Compute-bound — optimise kernel arithmetic intensity
+- B) Memory transfer-bound — reduce host-device data movement or use pinned memory / overlap transfers
+- C) Memory transfer-bound — increase the number of CUDA threads per block
+- D) Latency-bound — use CUDA streams to parallelize kernel launches
+
+**Answer: B**
+
+Transfer time (1.2 s) is 24× longer than kernel time (0.05 s), so the bottleneck is PCIe data movement, not GPU computation. The fix is to reduce how much data crosses the bus (e.g., keep data on-device between kernels, reduce precision, use zero-copy when appropriate) or hide latency by overlapping transfers with computation using CUDA streams. A) is wrong — compute is not the bottleneck. C) increasing threads per block changes compute occupancy, not transfer speed. D) streams help overlap but don't reduce total transfer volume, which is the root issue here.
+
+---
+
+## Q19 — Interpreting nsys Bandwidth Against Hardware Spec
+
+> **Week reference:** Week 9
+
+A GPU node has a PCIe 4.0 ×16 link with a theoretical peak bidirectional bandwidth of ~64 GB/s. An nsys report shows 4000 MB transferred HtoD in 0.5 s. What is the achieved bandwidth, and what does this suggest?
+
+- A) 8 GB/s — ~12.5% of peak; transfers are likely serialized or small, leaving significant room for improvement
+- B) 8 GB/s — ~100% of peak; the application is fully bandwidth-saturated
+- C) 80 GB/s — exceeds peak bandwidth; the nsys measurement is incorrect
+- D) 0.5 GB/s — far below peak; the kernel is the real bottleneck
+
+**Answer: A**
+
+Bandwidth = 4000 MB / 0.5 s = 8000 MB/s = 8 GB/s. Peak is 64 GB/s (unidirectional), so utilisation ≈ 12.5%. This is low, suggesting transfers are fragmented (many small copies), not using pinned/page-locked memory, or running synchronously when they could be overlapped. B) is wrong — 8 GB/s is far below 64 GB/s. C) is wrong — 8 GB/s does not exceed peak. D) miscomputes: 4000 MB / 0.5 s = 8 GB/s, not 0.5 GB/s.
+
+---
+
+## Q20 — cProfile percall Consistency Check
+
+> **Week reference:** Week 2
+
+A cProfile report shows:
+
+```
+ncalls  tottime  percall  cumtime  percall  filename:lineno(function)
+   200    6.000    0.030   10.000    0.050  analyse()
+```
+
+A colleague claims: "the second `percall` column shows 0.050 s, so each call to `analyse()` spends 0.050 s in callee functions." Is this correct?
+
+- A) Yes — the second percall is always the time spent in callees per call
+- B) No — the second percall is cumtime / ncalls = 10.000 / 200 = 0.050 s, which is the total (own + callee) time per call; callee time per call = cumtime/ncalls − tottime/ncalls = 0.050 − 0.030 = 0.020 s
+- C) No — the second percall equals tottime / ncalls and the first percall equals cumtime / ncalls
+- D) Yes — percall always equals cumtime / ncalls for both columns
+
+**Answer: B**
+
+The second percall = cumtime / ncalls = 0.050 s is the end-to-end time per call including callees. To isolate callee time per call: 0.050 − 0.030 = 0.020 s per call in callees. A) mistakes "time in callees per call" for the cumtime percall value itself. C) reverses the column definitions. D) is wrong — the first percall = tottime / ncalls = 0.030 s, not cumtime / ncalls.
+
+---
+
+## Q21 — Scaling with Non-Linear Growth
+
+> **Week reference:** Week 2
+
+A profiled run processes N = 1,000 items and shows `sort_data()` with `tottime = 2.0 s` and `ncalls = 1`. The sort algorithm is O(N log N). At N = 10,000 items, what is the best estimate of `sort_data()` runtime?
+
+- A) 20 s (linear scale: 10× items → 10× time)
+- B) ~23.3 s (O(N log N) scaling: 10 × log(10,000)/log(1,000) ≈ 10 × 1.333 ≈ 13.33 → 2.0 × 13.33/6)
+- C) ~26.7 s (O(N log N): ratio = (10,000 × log₁₀(10,000)) / (1,000 × log₁₀(1,000)) = 4/3 × 10 × 2.0 s)
+- D) 200 s (quadratic scale: 10× items → 100× time is wrong for O(N log N))
+
+**Answer: C**
+
+For O(N log N): scaled_time = base_time × (N₂ log N₂) / (N₁ log N₁). Using log₁₀: (10,000 × 4) / (1,000 × 3) = 40,000 / 3,000 = 13.33. Estimated time = 2.0 × 13.33 = 26.67 s ≈ 26.7 s. A) assumes O(N) which is wrong for a sort. B) makes an arithmetic error in the ratio. D) assumes O(N²) which would be a naive sort, not a standard library sort.
+
+---
+
+## Q22 — line_profiler % Time Interpretation
+
+> **Week reference:** Week 2
+
+A `line_profiler` report shows:
+
+```
+Line #   Hits      Time   Per Hit   % Time  Line Contents
+    15   1000   80000.0      80.0     40.0   intermediate = transform(x)
+    16   1000  120000.0     120.0     60.0   result = model_predict(intermediate)
+```
+
+A developer decides to optimise `transform()` because it has a lower `Per Hit` value and therefore "must be faster." Is this reasoning valid?
+
+- A) Yes — Per Hit directly indicates which function is more efficient per call
+- B) No — `% Time` shows `model_predict` consumes 60% of total time; optimising it delivers more absolute speedup per Amdahl's law
+- C) Yes — a lower Per Hit means the function is called more efficiently and should be optimised to keep it that way
+- D) No — only `ncalls` (Hits) should guide optimisation decisions
+
+**Answer: B**
+
+`% Time` is the correct guide for optimisation priority: `model_predict` takes 60% of runtime vs 40% for `transform`. By Amdahl's law, halving `model_predict` time saves 30% total, while halving `transform` saves only 20%. Per Hit (80 µs vs 120 µs) is irrelevant here — both lines are called the same number of times (Hits = 1000), so total time = Per Hit × Hits directly. C) is wrong reasoning — "efficient" functions still need optimisation if they dominate total time. D) is wrong — Hits alone can't guide optimisation.
+
+---
+
+## Q23 — nsys Kernel Time Granularity
+
+> **Week reference:** Week 9
+
+Which of the following statements about `gpukernsum` in an nsys profile is TRUE?
+
+- A) `gpukernsum` includes both kernel execution time AND HtoD/DtoH memory transfer time
+- B) `gpukernsum` reports the CPU time spent launching kernels via CUDA API calls
+- C) `gpukernsum` shows only GPU kernel execution time, excluding memory transfers which appear in `gpumemtimesum`
+- D) `gpukernsum` and `gpumemtimesum` always sum to the total GPU wall-clock time
+
+**Answer: C**
+
+`gpukernsum` reports the aggregate execution time of CUDA kernels running on the GPU device — pure compute time. Memory transfers (HtoD/DtoH via `cudaMemcpy` or unified memory migrations) are reported separately in `gpumemtimesum`. A) is the most common misconception. B) describes `cudaapisum`, which tracks CPU-side API call overhead. D) is false — there can also be synchronization gaps, idle time, and other GPU activity not captured in either summary table.
 
 ---

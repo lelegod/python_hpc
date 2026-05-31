@@ -3,6 +3,8 @@
 > Topics: GIL, threading vs multiprocessing, static vs dynamic scheduling, time command output.
 > Exam frequency: **Every exam**.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--pure-python-loop-threading-vs-multiprocessing)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Pure Python Loop: Threading vs Multiprocessing
@@ -279,5 +281,231 @@ A script reads 500 CSV files from disk sequentially, taking 60 seconds total. Ea
 - B) Correct — the 10,000 calls are independent at the outer loop level. `nogil=True` means the GIL is released while each thread executes `simulate_single`, so threads are not serialized. `ThreadPoolExecutor` with N workers gives ~N× speedup with near-zero IPC overhead (no pickling, no process spawn).
 - C) Incorrect — the internal steps of `simulate_single` are sequentially dependent on each other (step n+1 uses step n's result). Passing a thread pool into the function cannot parallelize a data dependency chain. Parallelism must happen at the outer loop of independent calls.
 - D) Incorrect — `pool.map` creates multiprocessing workers (separate processes), which works but incurs unnecessary overhead. `chunksize=1` with multiprocessing is dynamic scheduling — reasonable for variable-time tasks but overkill here. The `nogil=True` flag specifically enables thread-based parallelism as the preferred approach.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets GIL behavior with threads vs multiprocessing, NumPy GIL release, Numba nogil, static vs dynamic scheduling, and choosing the right parallelism strategy
+
+---
+
+## Q14 — Threading with Pure Python vs NumPy Workloads
+
+> **Week reference:** Week 5
+
+You have two functions: `f1` computes a large sum with a pure Python `for` loop, and `f2` computes the same sum using `numpy.sum()` on an array. Both are called from 4 `threading.Thread` workers on a 4-core machine. Which statement is correct?
+
+- A) Both `f1` and `f2` achieve ~4× speedup because Python threads distribute work across cores
+- B) `f1` achieves ~4× speedup but `f2` sees no benefit because NumPy holds the GIL
+- C) `f1` sees no speedup (GIL serialises pure Python threads), but `f2` can achieve ~4× speedup (NumPy releases the GIL)
+- D) Neither achieves speedup; you must use `multiprocessing.Pool` for any CPU-bound work
+
+**Answer: C**
+
+Pure Python bytecode always holds the GIL; four `threading.Thread` workers executing a Python `for` loop are serialised — only one runs at a time, giving no speedup over serial. NumPy's C-extension functions explicitly release the GIL before entering their compute loops, so all 4 threads can run `numpy.sum` simultaneously, achieving near-linear speedup.
+
+- A) Incorrect — `f1` uses pure Python bytecode which holds the GIL; threads take turns one at a time, so no speedup.
+- B) Incorrect — this reverses the correct rule. NumPy releases the GIL; it is pure Python that keeps it.
+- C) Correct — GIL serialises pure Python threads; NumPy releases the GIL enabling genuine thread parallelism.
+- D) Incorrect — threading with NumPy workloads is a valid and efficient parallelism strategy; multiprocessing is not the only option.
+
+---
+
+## Q15 — Effect of `nogil=True` Being Absent
+
+> **Week reference:** Week 9
+
+A Numba function is declared `@njit` (shorthand for `@jit(nopython=True)`) without `nogil=True`. It is called from 8 threads using `ThreadPoolExecutor`. What behaviour do you observe?
+
+- A) The 8 threads run fully in parallel because `nopython=True` implicitly releases the GIL
+- B) The function raises a `NumbaError` at compile time because `nogil` is required for multi-threaded use
+- C) The 8 threads run sequentially — without `nogil=True` the GIL is still held during JIT execution, so all threads are serialised
+- D) The 8 threads run in parallel only after the JIT compilation warmup completes
+
+**Answer: C**
+
+`nopython=True` means the function is compiled to native machine code with no Python-object operations, but it does not automatically release the GIL. The GIL release is a separate, explicit opt-in controlled by `nogil=True`. Without it, Numba holds the GIL during execution; the 8 threads are serialised exactly as if they were executing Python bytecode.
+
+- A) Incorrect — `nopython=True` and GIL release are independent settings. `nopython` controls compilation mode, not GIL behaviour.
+- B) Incorrect — Numba does not raise a compile-time error for missing `nogil`; it simply keeps the GIL held at runtime.
+- C) Correct — GIL release requires the explicit `nogil=True` flag; threads are serialised without it.
+- D) Incorrect — JIT warmup affects the first call's latency but has no effect on whether subsequent parallel calls hold the GIL.
+
+---
+
+## Q16 — Amdahl's Law Ceiling with 10% Serial Fraction
+
+> **Week reference:** Week 5
+
+A computation has a serial fraction of 10% (the remaining 90% is perfectly parallelisable). You run it on a machine with 128 cores. What is the maximum theoretical speedup according to Amdahl's Law?
+
+- A) 128× — all 128 cores contribute equally when 90% is parallel
+- B) 90× — speedup scales with the parallel fraction
+- C) 10× — the serial 10% creates a hard ceiling: speedup = 1 / 0.10 = 10
+- D) 45× — speedup is (1 − serial_fraction) × number_of_cores
+
+**Answer: C**
+
+Amdahl's Law: speedup = 1 / (F + (1−F)/N) where F is the serial fraction and N is the number of cores. As N → ∞ this approaches 1/F. With F = 0.10: max speedup = 1/0.10 = 10, regardless of how many cores you add. Using 128 cores instead of 10 buys almost nothing — the serial bottleneck caps all gain at 10×.
+
+- A) Incorrect — 128 cores cannot be fully utilised when 10% of the work must run serially; the serial part becomes the bottleneck.
+- B) Incorrect — 90× would require the entire workload to be parallel; the 10% serial part limits the ceiling to 10×.
+- C) Correct — Amdahl's Law gives max speedup = 1/F = 1/0.10 = 10.
+- D) Incorrect — this formula is invented and does not correspond to Amdahl's Law or any standard model.
+
+---
+
+## Q17 — Mandelbrot Set: Static or Dynamic Scheduling?
+
+> **Week reference:** Week 6
+
+You are parallelising a Mandelbrot set computation. Each pixel requires iterating until the orbit escapes or a maximum iteration count is reached. Pixels inside the Mandelbrot set always hit the maximum iteration count; pixels outside escape quickly. Which scheduling strategy is appropriate and why?
+
+- A) Static scheduling — all pixels take the same number of iterations, so equal chunks give perfect load balance
+- B) Dynamic scheduling — pixels vary dramatically in iteration count; static chunks leave workers idle when their pixels happen to be inside the set
+- C) Static scheduling — the Mandelbrot set has a fixed boundary, so you can pre-compute which pixels are expensive
+- D) Dynamic scheduling is always better regardless of workload characteristics
+
+**Answer: B**
+
+The Mandelbrot set creates highly non-uniform work: pixels deep inside the set iterate to `max_iter` every time, while exterior pixels escape after very few iterations. Static equal-sized chunks that happen to contain many interior pixels run far longer than chunks of mostly exterior pixels, leaving workers idle. Dynamic scheduling (chunksize=1 or small chunksize with `imap_unordered`) redistributes remaining tasks to finishing workers, eliminating this imbalance.
+
+- A) Incorrect — pixels differ enormously in iteration count (1 vs max_iter). The workload is the canonical example of non-uniform task duration.
+- B) Correct — non-uniform per-pixel cost is the classic motivation for dynamic scheduling.
+- C) Incorrect — pre-computing the boundary requires solving the problem first; it is not feasible as a preprocessing step.
+- D) Incorrect — dynamic scheduling adds per-task IPC overhead. For uniform workloads it would be slower than static.
+
+---
+
+## Q18 — IPC Cost of Large Arrays in Multiprocessing
+
+> **Week reference:** Week 5
+
+A function `process_chunk(arr)` accepts a 500 MB NumPy array and performs a short computation on it. You call it from a `multiprocessing.Pool` worker. What happens to the array when the function is dispatched to a worker process?
+
+- A) The array is shared directly via memory mapping; no copying occurs
+- B) The array is pickled (serialised to bytes), sent over an OS pipe to the worker, and unpickled — this can dominate total runtime for large arrays
+- C) NumPy arrays are always passed by reference between processes because they live in shared memory
+- D) The pool detects NumPy arrays and uses zero-copy transfer automatically
+
+**Answer: B**
+
+`multiprocessing.Pool` communicates with workers via a queue backed by OS pipes. All data, including NumPy arrays, must be serialised (pickled) in the parent, written to the pipe, read by the worker, and deserialised (unpickled). For a 500 MB array this can cost several seconds — easily dominating a short computation. The solution is to use `multiprocessing.shared_memory` or memory-mapped files to share large arrays without copying.
+
+- A) Incorrect — `Pool` does not use memory mapping by default. Memory-mapped sharing requires explicit use of `multiprocessing.shared_memory` or `numpy.memmap`.
+- B) Correct — standard `Pool` pickles all arguments through an IPC queue; large arrays incur proportional serialisation cost.
+- C) Incorrect — processes have separate address spaces; NumPy arrays are not automatically shared.
+- D) Incorrect — `Pool` has no special handling for NumPy arrays; they are pickled like any other Python object.
+
+---
+
+## Q19 — Threading for I/O vs CPU-Bound Work
+
+> **Week reference:** Week 5
+
+A script has two phases: Phase 1 downloads 200 files from a remote server (I/O-bound, each takes ~0.5s), and Phase 2 processes each downloaded file with a pure Python parser (CPU-bound, each takes ~0.5s). Which pairing of parallelism strategy to phase is correct?
+
+- A) Phase 1: `multiprocessing.Pool`; Phase 2: `ThreadPoolExecutor` — multiprocessing is always better for network I/O
+- B) Phase 1: `ThreadPoolExecutor`; Phase 2: `multiprocessing.Pool` — GIL is released during I/O but not during pure Python CPU work
+- C) Phase 1: `ThreadPoolExecutor`; Phase 2: `ThreadPoolExecutor` — threading works for all workloads
+- D) Phase 1: `multiprocessing.Pool`; Phase 2: `multiprocessing.Pool` — processes are always safer than threads
+
+**Answer: B**
+
+During network I/O (Phase 1) the GIL is released while the OS waits for data, so threads genuinely run in parallel — low overhead, no process-spawn cost. During pure Python parsing (Phase 2) the GIL is held throughout; threads are serialised and provide no speedup, so separate processes with their own GILs are required.
+
+- A) Incorrect — multiprocessing for network I/O adds unnecessary process-spawn and IPC overhead when threading would work and cost less.
+- B) Correct — threading for I/O (GIL released); multiprocessing for pure Python CPU (needs separate GILs).
+- C) Incorrect — threading does not work for pure Python CPU-bound Phase 2; the GIL serialises all threads.
+- D) Incorrect — multiprocessing for I/O-bound work adds heavy process-spawn and IPC overhead unnecessarily.
+
+---
+
+## Q20 — `nogil=True` Requires `nopython=True`
+
+> **Week reference:** Week 9
+
+A developer writes `@jit(nogil=True)` without `nopython=True`, hoping to release the GIL from a Numba function. The function contains some Python object operations that force Numba into object mode. What actually happens?
+
+- A) The GIL is released as requested; `nogil=True` overrides the mode requirement
+- B) Numba raises a `TypingError` at JIT compile time, preventing the function from running
+- C) Numba silently ignores `nogil=True` in object mode because the function still calls Python C-API, which requires the GIL; no GIL release occurs
+- D) The function runs correctly in parallel after Numba automatically promotes it to nopython mode
+
+**Answer: C**
+
+`nogil=True` can only take effect in `nopython` mode. In object mode, the compiled function still invokes Python C-API functions (to handle arbitrary Python objects), and those API calls require holding the GIL. Numba silently accepts the `nogil=True` flag but cannot honour it in object mode; the GIL remains held. This is a common trap: always combine `nogil=True` with `nopython=True` (or use `@njit(nogil=True)`) to confirm the function compiles without object mode.
+
+- A) Incorrect — `nogil=True` cannot override the fundamental constraint that object-mode code needs the Python C-API, which requires the GIL.
+- B) Incorrect — Numba does not raise a compile-time error for this combination; the failure is silent at runtime.
+- C) Correct — object mode requires the GIL; `nogil=True` is silently ineffective without `nopython=True`.
+- D) Incorrect — Numba does not automatically promote to nopython mode; if object operations are present, it stays in object mode.
+
+---
+
+## Q21 — Pool Worker Count and HPC Job Allocation
+
+> **Week reference:** Week 5
+
+You are writing a Python script for DTU's HPC cluster. Your LSF job requests `#BSUB -n 8`. Which code correctly creates a Pool that respects the allocated core count?
+
+- A) `Pool()` — Python automatically detects the LSF allocation
+- B) `Pool(os.cpu_count())` — this reads the full node's CPU count
+- C) `Pool(int(os.environ.get('LSB_DJOB_NUMPROC', os.cpu_count())))` — reads the LSF-assigned core count from the environment, falling back to `os.cpu_count()`
+- D) `Pool(8)` is the only safe option because environment variables are unreliable on HPC systems
+
+**Answer: C**
+
+LSF sets `LSB_DJOB_NUMPROC` to the number of allocated cores. Reading this variable gives the correct worker count for your job without hardcoding. If the script is also run locally (where `LSB_DJOB_NUMPROC` is unset), `os.cpu_count()` provides a sensible fallback. Hardcoding `Pool(8)` (option D) works but is fragile — it breaks if the job script changes its `-n` value without updating the Python code.
+
+- A) Incorrect — `Pool()` calls `os.cpu_count()` which returns the total physical CPUs on the node (e.g. 32), not the LSF allocation.
+- B) Incorrect — same problem as A; this reads node-total CPUs and oversubscribes the allocation.
+- C) Correct — `LSB_DJOB_NUMPROC` is the standard LSF environment variable for allocated cores; this pattern is robust and portable.
+- D) Incorrect — reading `LSB_DJOB_NUMPROC` is the recommended portable approach; hardcoding creates a maintenance burden.
+
+---
+
+## Q22 — Choosing Between Static and Dynamic Based on Coefficient of Variation
+
+> **Week reference:** Week 6
+
+You benchmark a kernel across 50 input samples. The mean runtime is 300 ms with a standard deviation of 150 ms (coefficient of variation = 50%). You plan to run 400 such tasks on 8 workers. Which scheduling approach is best?
+
+- A) Static scheduling with `chunksize = 400 // 8 = 50` — equal chunks are always the simplest and most efficient approach
+- B) Dynamic scheduling with `chunksize=1` using `imap_unordered` — high CV means stragglers under static assignment; dynamic keeps all workers busy
+- C) Static scheduling — a 50% CV is within normal variation and static scheduling handles it well
+- D) Dynamic scheduling only helps when CV exceeds 100%; 50% CV is too low to benefit
+
+**Answer: B**
+
+A CV of 50% means the standard deviation equals half the mean — tasks range from near-zero to well over 600 ms (mean + 3σ ≈ 750 ms). Under static scheduling, workers assigned long-tail tasks finish long after others are idle. At 50% CV with 50 tasks per worker, the expected worst chunk is substantially longer than average. Dynamic scheduling (chunksize=1) redistributes remaining tasks to idle workers, eliminating straggler idle time at the cost of small per-task IPC overhead.
+
+- A) Incorrect — with CV = 50%, equal static chunks will have highly variable total chunk duration; stragglers leave workers idle.
+- B) Correct — 50% CV is high enough that dynamic scheduling meaningfully reduces idle time from stragglers.
+- C) Incorrect — 50% CV is a strong signal for dynamic scheduling; it is not "normal variation" that static handles well.
+- D) Incorrect — there is no hard CV threshold rule; any significant variance benefits from dynamic scheduling, and 50% is substantial.
+
+---
+
+## Q23 — Recognising When Multiprocessing Overhead Outweighs Benefit
+
+> **Week reference:** Week 5
+
+A function `quick_calc(x)` takes approximately 50 microseconds to run. You submit 10,000 calls to `multiprocessing.Pool(8).map(quick_calc, data)`. The result is slower than a serial loop. Which of the following correctly diagnoses the problem and suggests a fix?
+
+- A) The GIL prevents multiprocessing from parallelising pure Python; fix by using NumPy inside `quick_calc`
+- B) Process-spawn overhead and IPC serialisation cost (~10–100 µs per task) dominate the 50 µs task time; fix by batching into fewer, larger tasks (e.g. pass chunks of 1000 items, loop inside the worker)
+- C) `Pool(8)` creates too many workers for 10,000 tasks; fix by using `Pool(10000)` to match the task count
+- D) `pool.map` is synchronous and prevents tasks from overlapping; fix by using `pool.imap_unordered`
+
+**Answer: B**
+
+IPC overhead per task (argument pickling + queue write + queue read + result pickling) is typically 10–100 µs. When task duration is 50 µs, the overhead equals or exceeds the useful work — every task doubles the work just to communicate. The fix is to pass batches of inputs (e.g. lists of 1000 items) to each worker, have the worker loop over its batch, and return a list of results. This reduces IPC calls from 10,000 to 10, making overhead negligible.
+
+- A) Incorrect — the issue is not the GIL (multiprocessing has separate GILs) but task granularity and IPC cost.
+- B) Correct — IPC overhead per task dominates 50 µs task time; batching reduces IPC round-trips from 10,000 to ~10.
+- C) Incorrect — creating 10,000 processes would be catastrophically slow due to spawn overhead; fewer workers (8) is correct, but granularity is the problem.
+- D) Incorrect — `pool.map` tasks do overlap (workers run concurrently); the bottleneck is per-task IPC cost, not synchronisation order.
 
 ---

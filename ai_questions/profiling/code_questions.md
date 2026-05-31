@@ -3,6 +3,8 @@
 > Format: Each question shows cProfile or line_profiler output to interpret.
 > Exam frequency: **Every exam**.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--cprofile-bottleneck-at-scale)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — cProfile: Bottleneck at Scale
@@ -304,5 +306,302 @@ The developer wants to find the function that spends the most time in **its own 
 - B) Correct — tottime measures only own-code execution; integrate has tottime=44.700s (virtually all runtime) and calls no significant sub-functions, so its cumtime equals its tottime
 - C) Incorrect — percall (cum) is cumtime per primitive call and still includes callee time; simulate shows 0.450s but its own tottime is only 0.050s
 - D) Incorrect — ncalls identifies how many times a function was called, not how much of its own time it consumed
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets cProfile cumtime vs tottime, line profiler Hits interpretation, percall scaling, nsys GPU profiler output, and FLOP/s calculations
+
+---
+
+## Q11 — cProfile: Identifying Own-Code Bottleneck
+
+> **Week reference:** Week 2
+
+Given the following cProfile output, which function's **own code** is responsible for the most execution time?
+
+```
+ncalls  tottime  percall  cumtime  percall  filename:lineno(function)
+     1    0.002    0.002   88.000   88.000  main (app.py:1)
+     1    0.001    0.001   87.990   87.990  run_pipeline (pipe.py:4)
+   500    0.050    0.000   87.000    0.174  process_record (proc.py:9)
+   500   85.000    0.170   85.000    0.170  compress_data (codec.py:3)
+   500    1.900    0.004    1.900    0.004  write_output (io.py:7)
+```
+
+- A) `main` — it has the highest cumtime at 88.000 s
+- B) `run_pipeline` — it orchestrates all other functions
+- C) `compress_data` — it has the highest tottime at 85.000 s
+- D) `process_record` — it is called 500 times and has high cumtime per call
+
+**Answer: C**
+
+- A) Incorrect — `main` has tottime=0.002s; its cumtime of 88s is entirely from callees. Cumtime is the wrong column for isolating own-code cost.
+- B) Incorrect — `run_pipeline` has tottime=0.001s; it is a thin wrapper that delegates all work. High cumtime with tiny tottime is the signature of a pure orchestrator.
+- C) Correct — `compress_data` has tottime=85.000s and cumtime=85.000s (they are equal, meaning it calls no expensive sub-functions). It is doing 85s of real computation in its own code.
+- D) Incorrect — `process_record` has tottime=0.050s across 500 calls; it is largely a pass-through to `compress_data` and `write_output`.
+
+---
+
+## Q12 — line_profiler: Inferring N from Hits
+
+> **Week reference:** Week 2
+
+A `line_profiler` report for a batch processing function is shown below (timer unit: 1 µs):
+
+```
+Timer unit: 1e-06 s
+
+Total time: 0.620500 s
+File: batch.py
+Function: process_batch at line 1
+
+Line #   Hits       Time   Per Hit   % Time  Line Contents
+     3      1    1200.0    1200.0      0.2   config = load_config()
+     4   2501    5000.0       2.0      0.8   for idx in range(batch_size):
+     5   2500  614000.0     245.6     99.0       result[idx] = heavy_fn(idx)
+     6      1     300.0     300.0      0.0   return result
+```
+
+What is the value of `batch_size`?
+
+- A) 2501
+- B) 2500
+- C) 614000
+- D) Cannot be determined; the output does not contain enough information
+
+**Answer: B**
+
+- A) Incorrect — 2501 is the Hits count for line 4 (the loop header), which gets one extra execution when Python confirms the iterator is exhausted after the final iteration.
+- B) Correct — the loop body (line 5) executes exactly once per iteration: Hits = 2500 = batch_size. The loop header always shows n+1 hits for a range(n) loop.
+- C) Incorrect — 614000 is the total time in microseconds for line 5, not a hit count.
+- D) Incorrect — batch_size is directly readable from the loop body Hits column (2500).
+
+---
+
+## Q13 — cProfile: percall Arithmetic Verification
+
+> **Week reference:** Week 2
+
+A cProfile output row reads:
+
+```
+ncalls  tottime  percall  cumtime  percall  filename:lineno(function)
+    40    3.200    0.080   12.000    0.300  batch_transform (etl.py:15)
+```
+
+A student claims the `tottime percall` should be 0.085 s. Is the student correct?
+
+- A) Yes — percall = cumtime / ncalls = 12.000 / 40 = 0.300, so tottime percall must also be recalculated as cumtime / ncalls
+- B) No — percall = tottime / ncalls = 3.200 / 40 = 0.080 s, which matches the output exactly
+- C) Yes — percall = (cumtime − tottime) / ncalls = (12.000 − 3.200) / 40 = 0.220 s, not 0.080 s
+- D) No — percall is always rounded to the nearest 0.1 s, giving 0.1 s
+
+**Answer: B**
+
+- A) Incorrect — the first percall column = tottime / ncalls, not cumtime / ncalls. The student has mixed up the two percall columns. cumtime / ncalls = 0.300 s, which appears in the second percall column.
+- B) Correct — tottime percall = 3.200 / 40 = 0.080 s exactly. The student's claim of 0.085 is wrong; there is no rounding to 0.085 from 0.080.
+- C) Incorrect — (cumtime − tottime) / ncalls = callee time per call = 0.220 s, which is meaningful but not what the first percall column reports.
+- D) Incorrect — cProfile does not round to the nearest 0.1 s; it reports floating-point values with millisecond or better resolution.
+
+---
+
+## Q14 — nsys: Kernel vs Transfer Time Ratio
+
+> **Week reference:** Week 9
+
+An nsys profile of a GPU workload shows:
+
+```
+[gpukernsum]
+Kernel                         Total Time (ms)
+matmul_kernel                      450.000
+relu_kernel                         30.000
+
+[gpumemtimesum]
+Type    Total Time (ms)
+HtoD            20.000
+DtoH             5.000
+```
+
+What percentage of total GPU activity (kernels + transfers) is spent on memory transfers?
+
+- A) ~4.9% — transfers are a small fraction; the workload is compute-bound
+- B) ~50% — transfers and kernels are roughly balanced
+- C) ~20% — transfers dominate the workload
+- D) ~96% — almost all time is in kernel execution
+
+**Answer: A**
+
+- A) Correct — total kernel time = 450 + 30 = 480 ms; total transfer time = 20 + 5 = 25 ms; total = 505 ms; transfer fraction = 25/505 ≈ 4.95%. The application is compute-bound, making kernel optimisation (arithmetic intensity, occupancy) the correct focus.
+- B) Incorrect — 50% would require transfers ≈ 480 ms, but they total only 25 ms.
+- C) Incorrect — 20% would require transfers ≈ 120 ms. The actual 25 ms is far lower.
+- D) Incorrect — 96% applies to kernel time (480/505 ≈ 95.0%), not transfer time. The question asks about the transfer fraction.
+
+---
+
+## Q15 — cProfile: Projecting a Scaling Function
+
+> **Week reference:** Week 2
+
+A cProfile run on **200 documents** produces:
+
+```
+ncalls  tottime  percall  cumtime  percall  filename:lineno(function)
+   200    4.000    0.020   16.000    0.080  parse_document (parser.py:5)
+     1    0.800    0.800    0.800    0.800  build_index (index.py:3)
+```
+
+The production system processes **10,000 documents**. What is the estimated total wall time?
+
+- A) ~800 s (parse_document dominates: 0.020 × 10,000)
+- B) ~800.8 s (parse_document: 200 s + build_index: 0.8 s is wrong scale)
+- C) ~800.8 s (parse_document: 0.080 × 10,000 = 800 s + build_index: 0.8 s)
+- D) ~200 s (parse_document: 0.020 × 10,000 = 200 s + build_index: 0.8 s ≈ 201 s)
+
+**Answer: C**
+
+- A) Incorrect — this uses tottime percall (0.020 s) which only counts parse_document's own code. Using cumtime percall (0.080 s) gives the correct total end-to-end cost per document including all sub-calls.
+- B) Incorrect — the scale factor applied to parse_document's tottime (0.020 × 10,000 = 200 s) uses the wrong percall column and underestimates by 4×.
+- C) Correct — parse_document cumtime percall = 0.080 s; at 10,000 calls: 0.080 × 10,000 = 800 s. build_index is called once (fixed): 0.800 s. Total ≈ 800.8 s.
+- D) Incorrect — 200 s is the tottime projection using 0.020 s/call, which misses the ~600 s spent in parse_document's callees.
+
+---
+
+## Q16 — line_profiler: FLOP/s from Output
+
+> **Week reference:** Week 2
+
+The following line_profiler output is for a vector operation (timer unit: 1 µs). Each iteration performs 4 floating-point operations (2 multiplies + 2 adds):
+
+```
+Timer unit: 1e-06 s
+
+Line #   Hits       Time   Per Hit   % Time  Line Contents
+     8   5001     200.0       0.0      0.1   for i in range(n):
+     9   5000  200000.0      40.0     99.9       y[i] = a*x[i]**2 + b*x[i] + c
+```
+
+What is the FLOP/s throughput of this loop?
+
+- A) 100,000 FLOP/s (= 4 × 5000 / 200 µs — time in µs not seconds)
+- B) 100,000,000 FLOP/s = 100 MFLOP/s (= 4 × 5000 / 0.200 s)
+- C) 25,000,000 FLOP/s = 25 MFLOP/s (= 5000 / 0.200 s — missing FLOPs per iter)
+- D) 4,000,000 FLOP/s = 4 MFLOP/s (= 4 / 0.000040 s — wrong divisor)
+
+**Answer: B**
+
+- A) Incorrect — this correctly computes (4 × 5000) / total_time but uses 200 µs in the denominator instead of converting to seconds. 200,000 µs = 0.200 s. The correct result is 20,000 FLOPs / 0.200 s = 100,000,000 FLOP/s.
+- B) Correct — total FLOPs = 4 ops/iter × 5000 iters = 20,000 FLOPs; total time = 200,000 µs = 0.200 s; FLOP/s = 20,000 / 0.200 = 100,000,000 = 100 MFLOP/s.
+- C) Incorrect — this divides iterations by time rather than FLOPs by time, missing the 4× multiplier for operations per iteration.
+- D) Incorrect — this divides FLOPs per iteration (4) by the Per Hit time (40 µs = 0.000040 s), giving a per-iteration rate rather than the total throughput.
+
+---
+
+## Q17 — cProfile: ncalls and Fixed vs Variable Cost
+
+> **Week reference:** Week 2
+
+A cProfile output for a script processing N files shows:
+
+```
+ncalls  tottime  percall  cumtime  percall  filename:lineno(function)
+     1    0.100    0.100   60.000   60.000  orchestrate (main.py:1)
+    50    0.500    0.010   59.400    1.188  analyse_file (analyse.py:8)
+     1   10.000   10.000   10.000   10.000  generate_report (report.py:3)
+    50    8.000    0.160    8.000    0.160  read_file (io.py:5)
+```
+
+If N is doubled to 100 files, which functions' runtimes are expected to approximately double?
+
+- A) `orchestrate` and `generate_report` only
+- B) `analyse_file` and `read_file` only
+- C) All four functions — everything scales with N
+- D) None — cProfile percall values are constant so tottime does not change
+
+**Answer: B**
+
+- A) Incorrect — `orchestrate` has ncalls=1 (fixed, will stay at ~0.1s own code); `generate_report` also has ncalls=1 and will remain ~10s regardless of file count.
+- B) Correct — `analyse_file` (ncalls=50) and `read_file` (ncalls=50) scale linearly with N. At N=100 files, both ncalls double and tottime approximately doubles: read_file ~16s, analyse_file tottime ~1s.
+- C) Incorrect — fixed-ncalls functions (`generate_report`, `orchestrate`) do not scale with N; only per-file functions grow.
+- D) Incorrect — percall being constant means tottime = percall × ncalls scales with ncalls. As N doubles, per-file ncalls doubles, so tottime doubles for those functions.
+
+---
+
+## Q18 — nsys: Diagnosing PCIe Bottleneck
+
+> **Week reference:** Week 9
+
+An nsys report shows:
+
+```
+gpukernsum:    0.020 s total
+gpumemtimesum: 2.500 s total
+```
+
+A colleague suggests "just add more CUDA threads per block to speed this up." Is this advice correct?
+
+- A) Yes — more threads per block improves GPU occupancy and reduces both kernel and transfer time
+- B) No — the bottleneck is memory transfer (2.5 s >> 0.02 s); adding threads per block only affects kernel execution time, not PCIe bandwidth
+- C) Yes — higher occupancy hides the latency of memory transfers by overlapping them with computation
+- D) No — the only fix is to reduce the kernel's arithmetic operations
+
+**Answer: B**
+
+- A) Incorrect — threads per block affects compute occupancy and kernel throughput, but has no effect on PCIe transfer speed. With only 0.020 s of kernel time, improving kernel performance would change total time from 2.52 s to at most 2.50 s — negligible.
+- B) Correct — the 2.5 s transfer time (PCIe bottleneck) dwarfs the 0.020 s kernel time. The fix must target data movement: reduce total bytes transferred, use pinned memory, batch transfers, or keep data resident on GPU across multiple kernel calls.
+- C) Incorrect — CUDA streams can overlap transfers with computation, but the transfers themselves (2.5 s) must still complete. This technique helps amortize latency but does not reduce bandwidth consumption.
+- D) Incorrect — reducing kernel arithmetic is irrelevant when the kernel is only 0.020 s; the 2.5 s transfer is the bottleneck.
+
+---
+
+## Q19 — line_profiler: Hits Column Disambiguation
+
+> **Week reference:** Week 2
+
+A student profiles a function that calls a helper inside a nested loop:
+
+```
+Line #   Hits       Time   Per Hit   % Time  Line Contents
+    10      5     500.0     100.0      0.1   for batch in batches:
+    11      4   10000.0    2500.0      2.0       setup_batch(batch)
+    12      5     200.0      40.0      0.0       for item in batch:
+    13     20  490000.0   24500.0     97.9           process(item)
+```
+
+How many items are in each batch on average?
+
+- A) 20 (total items processed)
+- B) 4 (items per batch = total items / number of batches = 20 / 5)
+- C) 5 (number of batches)
+- D) Cannot be determined — line 11 Hits (4) differs from line 10 Hits (5), which indicates missing data
+
+**Answer: B**
+
+- A) Incorrect — 20 is the total Hits for line 13, which counts all item-processing across all batches, not per-batch count.
+- B) Correct — outer loop Hits = 5 batches (loop header 5+1=6 is not shown here, so 5 = actual iterations); inner loop body Hits = 20 total items across 5 batches → 20 / 5 = 4 items per batch on average. (Note: line 11's Hits=4 indicates one batch was skipped by an early-continue or the last iteration, but items per batch is still 20/5=4.)
+- C) Incorrect — 5 is the number of batches (Hits on line 10), not items per batch.
+- D) Incorrect — the discrepancy between line 10 (Hits=5) and line 11 (Hits=4) suggests line 11 was skipped once (e.g., an empty batch or a conditional), but item count per batch is still determinable from total items (20) / total batches (5).
+
+---
+
+## Q20 — cProfile: Sorting Strategy for Optimisation
+
+> **Week reference:** Week 2
+
+A developer has a cProfile report with 50 functions. She wants to find the function that, if optimised, would give the largest reduction in total wall-clock time. Which sort key and column should she use FIRST?
+
+- A) Sort by `ncalls` descending — most-called function has highest impact
+- B) Sort by `tottime` descending — find which function's own code takes the most time
+- C) Sort by `cumtime` descending — find which function's call tree costs the most end-to-end
+- D) Sort by `percall (tottime)` descending — costliest function per invocation matters most
+
+**Answer: C**
+
+- A) Incorrect — call frequency alone does not determine impact. A function called 10,000 times with 0.001 ms per call contributes 10 s total; a function called once with 30 s cumtime is a bigger target.
+- B) Incorrect — tottime is useful for finding where CPU instructions live, but a wrapper with low tottime and high cumtime hides the real opportunity. You could miss an entire slow call tree.
+- C) Correct — sort by cumtime descending to identify the highest-cost call trees first. The top entries show where wall-clock time is actually going. Then drill into those entries with tottime to distinguish wrappers from actual work.
+- D) Incorrect — percall (tottime) is useful when comparing functions called different numbers of times, but it ignores total impact. A function with 0.1 s/call called 1000 times (100 s total) is a better target than one with 1 s/call called once.
 
 ---

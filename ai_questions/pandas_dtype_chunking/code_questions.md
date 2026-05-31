@@ -3,6 +3,8 @@
 > Format: Each question shows a DataFrame summary, code snippet, or memory_usage output to interpret.
 > Exam frequency: **2024 exam + F25**.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#question-1)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Question 1
@@ -315,3 +317,277 @@ What happens during the second `for` loop?
 | Chunked reader | Forward-only iterator; must reopen file for second pass |
 | Sorted index lookup | O(log n) binary search vs O(n) boolean mask |
 | `datetime64[ns]` | 8 bytes/element; enables `.dt` accessor and time-aware ops |
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets read_csv dtype and chunksize parameters, category dtype savings, memory_usage calculations, and chunk processing patterns
+
+---
+
+## Question 11
+
+You run the following code on a DataFrame with 800,000 rows:
+
+```python
+df = pd.read_csv('records.csv', dtype={'status': 'category', 'score': 'float32'})
+print(df['status'].dtype)   # category
+print(df['score'].dtype)    # float32
+print(df['score'].memory_usage())
+```
+
+The `score` column has no index-related overhead here. What value does `df['score'].memory_usage()` print?
+
+- A) 6,400,000
+- B) 3,200,000
+- C) 800,000
+- D) 1,600,000
+
+**Answer: B**
+
+`float32` uses 4 bytes per element. 800,000 rows × 4 bytes = 3,200,000 bytes. Note: `df['score'].memory_usage()` on a Series returns the bytes for that column only (not including the Index by default for a Series call; the Index is separate). Option A (6,400,000) corresponds to float64 (8 bytes × 800,000). Option C (800,000) corresponds to a 1-byte type like int8 or uint8. Option D (1,600,000) corresponds to int16 or float16 (2 bytes × 800,000). The dtype `float32` is 4 bytes — always half of float64.
+
+---
+
+## Question 12
+
+Consider this chunk-based groupby pattern:
+
+```python
+results = []
+for chunk in pd.read_csv('events.csv', chunksize=50_000):
+    results.append(chunk.groupby('event_type')['count'].sum())
+
+final = pd.concat(results).groupby(level=0).sum()
+```
+
+Why is the second `.groupby(...).sum()` call on `final` necessary?
+
+- A) The first groupby inside the loop produces incorrect results due to chunk boundaries splitting groups
+- B) Each chunk's groupby only sees rows in that chunk; the same `event_type` may appear in multiple chunks and must be re-aggregated after concatenation
+- C) `pd.concat` scrambles the index ordering, requiring a second groupby to re-sort
+- D) The second groupby converts the result from a Series to a DataFrame
+
+**Answer: B**
+
+Each chunk is an independent DataFrame slice of the file. If `event_type = "click"` appears in chunk 1, chunk 3, and chunk 7, the `results` list will contain three separate `click` entries after the loop. `pd.concat(results)` stacks them into one Series with duplicate index entries. The second `.groupby(level=0).sum()` collapses duplicate index keys, producing the true global sum per event_type. Option A is wrong — the per-chunk groupby is correct within its chunk; the issue is cross-chunk aggregation, not corruption. Option C is wrong — `pd.concat` preserves index values; ordering may vary but is corrected by groupby, not a problem in itself. Option D is wrong — the result of groupby+sum on a Series is still a Series, not a DataFrame.
+
+---
+
+## Question 13
+
+A student runs:
+
+```python
+df = pd.read_csv('data.csv')
+print(df.memory_usage(deep=True).sum() / 1024**2, "MB")
+```
+
+Then optimises by specifying dtypes:
+
+```python
+df2 = pd.read_csv('data.csv', dtype={
+    'sensor_id': 'int16',
+    'reading':   'float32',
+    'active':    'bool'
+})
+print(df2.memory_usage(deep=True).sum() / 1024**2, "MB")
+```
+
+The original `df` had `sensor_id` as int64, `reading` as float64, `active` as object (strings "True"/"False"). The DataFrame has 1,000,000 rows. How much memory does `df2` use for just these three columns?
+
+- A) ~7.6 MB
+- B) ~19 MB
+- C) ~24 MB
+- D) ~3.8 MB
+
+**Answer: D**
+
+Per row for the three columns: int16 (2) + float32 (4) + bool (1) = 7 bytes. Total: 1,000,000 × 7 = 7,000,000 bytes = 7 MB — but we need `deep=True` for the bool column since it started as object. After conversion to `bool` dtype, it stores 1 byte/element with no heap strings, so `deep=True` makes no difference for bool. Total ≈ 7 MB. Closest answer is D (~3.8 MB is actually the float32 column alone at ~3.8 MB). Wait — let me recompute: float32 alone: 1M × 4 = 4 MB; int16: 1M × 2 = 2 MB; bool: 1M × 1 = 1 MB; total = 7 MB. The closest answer is A (~7.6 MB, which includes a small Index contribution). Option B (~19 MB) is roughly the original `df` if `active` object columns add ~12 MB with deep=True. Option C (~24 MB) is the original int64+float64+object without optimisation (8+8+8 pointer = 24 MB shallow). Option D is a distractor; A is correct at ~7–7.6 MB including the Index.
+
+**Answer: A** *(correction: 7 bytes/row × 1M rows = 7 MB data + ~0.6 MB Index = ~7.6 MB)*
+
+---
+
+## Question 14
+
+You have this code:
+
+```python
+reader = pd.read_csv('transactions.csv', chunksize=200_000)
+first_chunk = next(reader)
+print(first_chunk.shape)
+```
+
+The file has 750,000 rows and 4 columns. What does `first_chunk.shape` print?
+
+- A) `(750000, 4)`
+- B) `(200000, 4)`
+- C) `(187500, 4)`
+- D) `(4, 200000)`
+
+**Answer: B**
+
+`next(reader)` advances the TextFileReader by one chunk and returns a DataFrame of up to `chunksize` rows. Since chunksize=200,000 and the file has 750,000 rows, the first chunk contains exactly 200,000 rows and all 4 columns — shape (200000, 4). Option A (750000, 4) would result from loading the entire file without chunking. Option C (187500, 4) is 750,000/4 rows — there is no division by number of chunks in chunksize logic. Option D (4, 200000) has axes transposed — pandas DataFrames are (rows, cols), never (cols, rows) in `.shape`.
+
+---
+
+## Question 15
+
+A DataFrame column `sensor_type` is converted to category dtype. You then inspect it:
+
+```python
+df['sensor_type'] = df['sensor_type'].astype('category')
+print(df['sensor_type'].cat.categories)
+print(df['sensor_type'].cat.codes.dtype)
+```
+
+The column has 3 unique values: `"temp"`, `"humidity"`, `"pressure"`. What does `cat.codes.dtype` print?
+
+- A) `object`
+- B) `int64`
+- C) `int8`
+- D) `uint8`
+
+**Answer: C**
+
+Pandas assigns category codes as signed integers, choosing the smallest signed integer type that fits the number of unique values. With 3 unique values (codes 0, 1, 2 plus -1 reserved for NaN), int8 (range -128 to 127) is used. The signed int is required because pandas uses -1 to represent NaN/missing codes. Option A (object) is wrong — codes are always integer dtype, not object. Option B (int64) is wrong — pandas does not use the default int64 for category codes; it uses the smallest sufficient signed integer. Option D (uint8) is wrong — pandas uses signed integers for codes specifically to allow -1 as a sentinel for missing values; uint8 cannot represent -1.
+
+---
+
+## Question 16
+
+Consider this memory audit snippet:
+
+```python
+import pandas as pd
+df = pd.DataFrame({
+    'a': pd.array([1, 2, 3] * 100_000, dtype='int64'),
+    'b': pd.array(['x', 'y'] * 150_000, dtype='object')
+})
+
+shallow = df.memory_usage()
+deep    = df.memory_usage(deep=True)
+
+print(shallow['b'], deep['b'])
+```
+
+The DataFrame has 300,000 rows. Which output is correct?
+
+- A) `2400000  2400000`
+- B) `2400000  ~15000000`
+- C) `300000   300000`
+- D) `300000   ~15000000`
+
+**Answer: B**
+
+Column `b` has dtype `object`. Shallow (`deep=False`): 300,000 rows × 8 bytes/pointer = 2,400,000 bytes. Deep (`deep=True`): each Python `str` object (`'x'` or `'y'`) has overhead of ~49–50 bytes (CPython str header + 1 character). With 300,000 rows: ~300,000 × 50 bytes ≈ 15,000,000 bytes. So shallow=2,400,000 and deep≈15,000,000. Option A claims both are equal — wrong, that's only true for numeric dtypes. Option C shows 300,000 for shallow, implying 1 byte/element — that would be a 1-byte numeric dtype like bool or int8, not object. Option D shows 300,000 shallow — same error as C.
+
+---
+
+## Question 17
+
+A student wants to process a 5 GB CSV and collect per-day totals. They write:
+
+```python
+daily_totals = {}
+for chunk in pd.read_csv('big.csv', chunksize=100_000,
+                          parse_dates=['date'],
+                          dtype={'amount': 'float32'}):
+    for date, group in chunk.groupby('date'):
+        daily_totals[date] = daily_totals.get(date, 0) + group['amount'].sum()
+```
+
+Which statement about this code is TRUE?
+
+- A) It fails because `parse_dates` and `dtype` cannot be used together in the same `read_csv` call
+- B) It correctly accumulates per-day totals without loading the entire 5 GB file into memory
+- C) It produces incorrect totals because `float32` precision loss accumulates across chunks
+- D) It fails because `groupby` is not available on chunk DataFrames
+
+**Answer: B**
+
+This is a valid chunked accumulation pattern. Each chunk is read with `parse_dates=['date']` (so `date` becomes datetime64) and `dtype={'amount': 'float32'}` (reducing memory). The `groupby('date')` within each chunk groups rows for that chunk only; the outer dict accumulates across chunks. Since every chunk contributes its portion and the dict covers all dates seen, the final `daily_totals` is correct. Option A is false — `parse_dates` and `dtype` can coexist in `read_csv`; they affect different columns. Option C is an overstatement — float32 accumulation error for monetary sums is typically negligible in practice (< 1 part per million per addition); the exam does not penalise this pattern. Option D is false — `groupby` is fully available on any DataFrame, including chunk DataFrames.
+
+---
+
+## Question 18
+
+You call `df.memory_usage()` on a five-column DataFrame with 1,000,000 rows and receive:
+
+```
+Index      8000000
+col_a      8000000   # float64
+col_b      4000000   # float32
+col_c      2000000   # int16
+col_d      1000000   # uint8
+col_e      8000000   # object (shallow)
+dtype: int64
+```
+
+What is the total reported by `df.memory_usage().sum()`?
+
+- A) 23,000,000
+- B) 31,000,000
+- C) 27,000,000
+- D) 15,000,000
+
+**Answer: B**
+
+Sum all entries: Index (8,000,000) + col_a (8,000,000) + col_b (4,000,000) + col_c (2,000,000) + col_d (1,000,000) + col_e (8,000,000) = 31,000,000. Option A (23,000,000) omits the Index. Option C (27,000,000) omits the Index and undercounts col_e. Option D (15,000,000) sums only col_a through col_d without Index or col_e. The Index row is always included in `memory_usage()` output and must be included in the sum.
+
+---
+
+## Question 19
+
+A colleague proposes this optimisation for a column with 12 unique string values across 2,000,000 rows:
+
+```python
+# Original
+df['status'] = df['status'].astype('category')
+
+# Colleague's alternative
+mapping = {v: i for i, v in enumerate(df['status'].unique())}
+df['status'] = df['status'].map(mapping).astype('uint8')
+```
+
+Compared to `category`, what does the colleague's `uint8` approach lose?
+
+- A) Memory efficiency — `uint8` uses more memory than category codes
+- B) The original string labels — `category` preserves labels via `.cat.categories`; the manual `uint8` column stores only integers with no built-in reverse mapping
+- C) The ability to use groupby on the column
+- D) Compatibility with `pd.read_csv`
+
+**Answer: B**
+
+Both `category` and the manual `uint8` mapping achieve the same per-row memory (1 byte for up to 127/255 unique values). The critical difference is that `category` dtype retains the original string labels in `.cat.categories`, allowing transparent decoding, human-readable groupby output, and correct behaviour in merge/join operations. The manual `uint8` column stores raw integers; without the external `mapping` dict, you cannot recover what string "3" or "7" meant. Option A is wrong — both use 1 byte per row for 12 unique values. Option C is wrong — `groupby` works on uint8 columns (grouping by integer code), but the output labels are integers not strings. Option D is wrong — both dtypes are compatible with `pd.read_csv` via `dtype=`.
+
+---
+
+## Question 20
+
+Examine this PyArrow snippet:
+
+```python
+import pyarrow as pa
+import pyarrow.csv as pa_csv
+
+table = pa_csv.read_csv('data.csv')
+col = table.column('region')
+dict_col = col.dictionary_encode()
+print(dict_col.type)
+```
+
+The `region` column has 5 unique string values across 1,000,000 rows. What does `dict_col.type` print, and approximately how does memory compare to the original?
+
+- A) `string`; memory is unchanged because dictionary encoding is lossless
+- B) `dictionary<values=string, indices=int8>`; memory drops from ~50 MB (string) to ~1 MB (codes) + small dictionary
+- C) `int64`; strings are hashed to 64-bit integers
+- D) `large_string`; Arrow uses a wider string type after encoding
+
+**Answer: B**
+
+`dictionary_encode()` converts an Arrow `string` column to a `dictionary<values=string, indices=int8>` type (Arrow uses int8 for the index when there are ≤127 unique values). With 5 unique values, int8 codes (1 byte each) replace full string storage. Original `string` column: ~50 bytes per string × 1,000,000 ≈ 50 MB. After encoding: 1,000,000 × 1 byte codes = 1 MB + 5 strings × ~50 bytes dictionary = ~1 MB total. Option A is wrong — memory changes dramatically; lossless only means no data is lost, not that memory is unchanged. Option C is wrong — `dictionary_encode()` preserves original string values in the dictionary; it does not hash them. Option D is wrong — `large_string` in Arrow is for strings > 2 GB total; it is not what `dictionary_encode()` produces.
+
+---

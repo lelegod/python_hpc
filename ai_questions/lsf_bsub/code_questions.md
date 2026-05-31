@@ -3,6 +3,8 @@
 > Format: Each question shows a BSUB script or command output to interpret or fix.
 > Exam frequency: **Every exam** — second highest priority.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--total-memory-calculation)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Total Memory Calculation
@@ -463,5 +465,299 @@ How many CPU cores and how much **total** memory does this job request?
 - B) Incorrect — 16 GB would be 4 GB × 4 cores; this job uses 16 cores.
 - C) Correct — `-n 16` requests **16 CPU cores**. `rusage[mem=4GB]` is **per core**, so total memory = 4 GB × 16 = **64 GB**. `span[hosts=1]` constrains all 16 cores to a single physical node (required for shared memory usage) but does not change the core or memory count. `-W 2:00` sets a 2-hour wall time limit.
 - D) Incorrect — `span[hosts=1]` means "all requested cores must be on one host"; it does not reduce the number of cores to 1.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets rusage[mem=X] per-core semantics, GPU queue flags, -n vs span[hosts=1], wall time formats, and bjobs output interpretation
+
+---
+
+## Q13 — Reading Total Memory from a Script
+
+> **Week reference:** Week 1
+
+You receive this job script from a colleague:
+
+```bash
+#!/bin/bash
+#BSUB -J analysis
+#BSUB -q hpc
+#BSUB -n 6
+#BSUB -R "rusage[mem=3GB]"
+#BSUB -W 0:45
+#BSUB -o analysis_%J.out
+
+python run_analysis.py
+```
+
+How much **total** memory does this script request from the cluster?
+
+- A) 3 GB
+- B) 9 GB
+- C) 18 GB
+- D) 0.5 GB
+
+**Answer: C**
+
+`rusage[mem=X]` is per-core. With `-n 6` cores: 3 GB × 6 = **18 GB** total. A is the trap — reading `rusage[mem=3GB]` as the total rather than per-core. B (9 GB) would result from 3 GB × 3, as if only half the cores were counted. D inverts the math (3 GB ÷ 6), as if dividing rather than multiplying.
+
+---
+
+## Q14 — Fixing Over-Allocated Memory
+
+> **Week reference:** Week 1
+
+A student needs **12 GB** total for their job. They write:
+
+```bash
+#!/bin/bash
+#BSUB -J overalloc
+#BSUB -q hpc
+#BSUB -n 4
+#BSUB -R "rusage[mem=12GB]"
+#BSUB -W 1:00
+#BSUB -o overalloc_%J.out
+
+python heavy_computation.py
+```
+
+How much memory is **actually** reserved, and what is the corrected `rusage` line?
+
+- A) 12 GB is reserved; no change needed
+- B) 48 GB is reserved; change to `rusage[mem=3GB]`
+- C) 48 GB is reserved; change to `rusage[mem=6GB]`
+- D) 3 GB is reserved; change to `rusage[mem=12GB]`
+
+**Answer: B**
+
+`rusage[mem=12GB]` with `-n 4` reserves 12 × 4 = 48 GB — four times more than needed. The correct per-core value is 12 GB ÷ 4 = 3 GB. C applies the wrong divisor (÷2 instead of ÷4). D reads the rusage as per-core and tries to multiply up, but that math also yields 3 × 4 = 12 GB, making it a plausible distractor — however the question states the reservation is wrong, and `rusage[mem=3GB]` is the fix.
+
+---
+
+## Q15 — GPU Script: Spot the Bug
+
+> **Week reference:** Week 1 / Week 9
+
+A student submits the following script to run a CUDA neural network training job:
+
+```bash
+#!/bin/bash
+#BSUB -J cuda_train
+#BSUB -q gpuv100
+#BSUB -n 4
+#BSUB -R "rusage[mem=8GB]"
+#BSUB -W 4:00
+#BSUB -o train_%J.out
+
+python train_cuda.py
+```
+
+The job is submitted successfully but immediately fails when `train_cuda.py` tries to initialize CUDA. What is the most likely cause?
+
+- A) The wall time `-W 4:00` is too long for the GPU queue
+- B) `-n 4` requests too many cores for a GPU job; GPU jobs must use `-n 1`
+- C) The script never requested a GPU with `-gpu "num=1:mode=exclusive_process"`; no GPU device was allocated
+- D) `rusage[mem=8GB]` syntax is invalid for the gpuv100 queue
+
+**Answer: C**
+
+Switching to the `gpuv100` queue routes the job to a node that has GPUs, but it does not allocate a GPU to the process. Without `#BSUB -gpu "num=1:mode=exclusive_process"`, CUDA initialization finds zero devices and raises a runtime error. The queue flag and the GPU allocation flag are independent — you need both. Wall time, core count, and memory syntax are all fine.
+
+---
+
+## Q16 — Two Scripts: Which Gets a GPU?
+
+> **Week reference:** Week 1 / Week 9
+
+Compare these two job scripts. Which one will successfully use a GPU?
+
+**Script A:**
+```bash
+#BSUB -q gpuv100
+#BSUB -n 1
+#BSUB -R "rusage[mem=4GB]"
+python use_gpu.py
+```
+
+**Script B:**
+```bash
+#BSUB -q gpuv100
+#BSUB -n 1
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -gpu "num=1:mode=exclusive_process"
+python use_gpu.py
+```
+
+- A) Script A — it is in the GPU queue so a GPU is allocated automatically
+- B) Script B — it includes the `-gpu` flag that explicitly reserves a GPU device
+- C) Both — the GPU queue always allocates one GPU per job
+- D) Neither — you also need `-R "select[gpu=1]"` for GPU allocation
+
+**Answer: B**
+
+Script B includes `#BSUB -gpu "num=1:mode=exclusive_process"`, which is the directive that actually reserves and allocates the GPU device to the job. Script A lands on a GPU node (correct queue) but receives no GPU allocation — CUDA will see zero devices. The `-gpu` flag is mandatory for GPU access; the queue alone is not sufficient.
+
+---
+
+## Q17 — span[hosts=1] in a Shared Memory Script
+
+> **Week reference:** Week 1 / Week 6
+
+A student writes a job script for a shared-memory parallel program:
+
+```bash
+#!/bin/bash
+#BSUB -J shmem
+#BSUB -q hpc
+#BSUB -n 12
+#BSUB -R "rusage[mem=2GB]"
+#BSUB -W 1:30
+#BSUB -o shmem_%J.out
+
+python shared_parallel.py
+```
+
+`shared_parallel.py` uses `multiprocessing.shared_memory.SharedMemory` to share a large array across all 12 worker processes. What is the critical problem with this script?
+
+- A) `-n 12` requests too many cores; shared memory only works with up to 8 processes
+- B) `rusage[mem=2GB]` is too low; shared memory requires at least 8 GB per core
+- C) The script is missing `#BSUB -R "span[hosts=1]"`; without it, LSF may spread the 12 cores across multiple nodes where shared memory is inaccessible
+- D) The `-W 1:30` format is incorrect for jobs using shared memory
+
+**Answer: C**
+
+`multiprocessing.shared_memory.SharedMemory` creates a region in a single node's physical RAM. If LSF distributes the 12 cores across two or more nodes (which it may do without `span[hosts=1]`), processes on different nodes cannot access the same shared memory segment. Adding `#BSUB -R "span[hosts=1]"` forces all 12 cores onto a single physical node. Core count limit, memory per core, and wall time format are unrelated to shared memory correctness.
+
+---
+
+## Q18 — Wall Time: Script Killed Mid-Run
+
+> **Week reference:** Week 1
+
+A student submits this job:
+
+```bash
+#!/bin/bash
+#BSUB -J longrun
+#BSUB -q hpc
+#BSUB -n 2
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -W 0:30
+#BSUB -o longrun_%J.out
+
+python simulate.py  # takes about 45 minutes
+```
+
+What happens to the job?
+
+- A) LSF extends the wall time automatically when it detects the job is still running
+- B) The job is killed after 30 minutes without warning; output written before that point is preserved
+- C) The job is paused after 30 minutes and enters USUSP state, resumable later
+- D) `-W 0:30` is invalid syntax; the job will be rejected at submission time
+
+**Answer: B**
+
+`-W 0:30` sets a 30-minute hard wall time limit. LSF kills the job when the limit is reached, regardless of progress. Output files written before termination are preserved (they are on the filesystem), but any in-memory results not yet saved are lost. LSF does not extend wall time automatically, pause jobs into USUSP, or reject `HH:MM` format — `0:30` is perfectly valid (0 hours, 30 minutes).
+
+---
+
+## Q19 — Interpreting bjobs Output
+
+> **Week reference:** Week 1
+
+You run `bjobs -a` and see:
+
+```
+JOBID   USER    STAT  QUEUE   FROM_HOST   EXEC_HOST   JOB_NAME   SUBMIT_TIME
+78901   s252786 RUN   hpc     login1      n-62-18-2   crunch     May 30 14:02
+78902   s252786 PEND  hpc     login1      -           crunch2    May 30 14:03
+78903   s252786 EXIT  hpc     login1      n-62-10-5   prep       May 30 13:50
+78904   s252786 DONE  hpc     login1      n-62-10-5   setup      May 30 13:45
+```
+
+Which of the following statements is correct?
+
+- A) `crunch2` (PEND) is currently running on a node — PEND means the node is pending a health check
+- B) `prep` (EXIT) succeeded; EXIT means it exited normally from the queue
+- C) `crunch` (RUN) is actively executing on node `n-62-18-2`; `crunch2` (PEND) is waiting for resources or a dependency
+- D) `setup` (DONE) failed; DONE is a transitional state before final status is assigned
+
+**Answer: C**
+
+RUN means actively executing on the listed EXEC_HOST. PEND means waiting in queue (no EXEC_HOST shown — the dash confirms it has not started). EXIT means the job terminated with a non-zero exit code (failure). DONE means the job completed successfully (exit code 0). These are the four most common statuses and their exact meanings are frequently tested.
+
+---
+
+## Q20 — Per-Core Memory in MB vs GB
+
+> **Week reference:** Week 1
+
+A script specifies `#BSUB -R "rusage[mem=4096]"` with `-n 8`. The cluster interprets `rusage[mem=X]` values without a unit suffix as **MB**. What is the total memory reserved?
+
+- A) 4096 MB (4 GB) total
+- B) 32768 MB (32 GB) total
+- C) 512 MB (0.5 GB) total
+- D) 4096 GB total — LSF assumes GB when no unit is given
+
+**Answer: B**
+
+`rusage[mem=4096]` without a unit suffix is 4096 MB per core. With `-n 8`: 4096 MB × 8 = 32768 MB = 32 GB total. A is the per-core value, not total. C inverts the operation (4096 ÷ 8). D is wrong — the default unit in LSF is MB, not GB; 4096 GB would be an enormous and implausible allocation.
+
+---
+
+## Q21 — Combining rusage and span in -R
+
+> **Week reference:** Week 1
+
+A job script contains:
+
+```bash
+#BSUB -n 8
+#BSUB -R "rusage[mem=2GB] span[hosts=1]"
+```
+
+What does this single `-R` string request?
+
+- A) 2 GB total memory spread across 8 nodes, one node per core
+- B) 2 GB per core (16 GB total), all 8 cores on a single node
+- C) 2 GB per core only if the node has at least 1 GB free
+- D) 8 GB total (2 GB per pair of cores) distributed across available hosts
+
+**Answer: B**
+
+A single `-R` string can combine multiple resource clauses separated by spaces. `rusage[mem=2GB]` specifies 2 GB per core; with `-n 8` that is 16 GB total. `span[hosts=1]` forces all 8 cores onto one physical node. The two clauses are independent and both apply simultaneously. LSF does not split rusage across nodes, pair cores, or interpret span as a node count.
+
+---
+
+## Q22 — bkill on a Running vs Pending Job
+
+> **Week reference:** Week 1
+
+You want to cancel a job that is currently in RUN state (job ID 55001) and another that is in PEND state (job ID 55002). Which command correctly cancels both?
+
+```bash
+# Option A
+bkill 55001 55002
+
+# Option B
+bstop 55001 && bdel 55002
+
+# Option C
+bkill -pend 55002 && bkill -run 55001
+
+# Option D
+bjobs -kill 55001 55002
+```
+
+- A) Option A
+- B) Option B
+- C) Option C
+- D) Option D
+
+**Answer: A**
+
+`bkill` works on jobs in any state — RUN, PEND, USUSP, etc. You can pass multiple job IDs in one command. `bstop` suspends a running job (sets it to USUSP) rather than killing it. `bdel` is not a standard LSF command. `bkill -pend` and `bkill -run` are not valid flag forms. `bjobs -kill` does not exist. Option A is the simplest and correct approach.
 
 ---

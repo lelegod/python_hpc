@@ -3,6 +3,8 @@
 > Topics: Strides, loop ordering, row vs column access, cache hierarchy, spatial/temporal locality.
 > Exam frequency: **Every exam**.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--optimal-loop-order-from-strides)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Optimal Loop Order from Strides
@@ -262,5 +264,269 @@ What are the strides (in bytes) for a C-order float64 array of shape `(3, 4)`?
 - B) Incorrect — axis 1 stride should be 8 bytes (one float64 element), not 4. And axis 0 stride should span one full row of 4 elements: 4×8=32 bytes, not 8. This answer swaps the correct values.
 - C) Correct — axis 1 (innermost, last axis) stride = 1 element × 8 bytes/element = 8 bytes. Axis 0 stride = 4 elements per row × 8 bytes/element = 32 bytes. Strides = (32, 8). Verify: a[1,0] is at offset 1×32=32 bytes from a[0,0]; a[0,1] is at offset 1×8=8 bytes.
 - D) Incorrect — 24 = 3×8, which would be the axis 0 stride for a shape (3,3) array (3 columns × 8 bytes = 24 bytes per row). For a (3,4) array the row is 4 elements wide, giving axis 0 stride = 4×8 = 32, not 24.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets loop order optimization, cache-friendly strides, C vs Fortran order, and CPU vs CUDA layout differences
+
+---
+
+## Q13 — Fortran-Order Innermost Loop
+
+> **Week reference:** Week 3
+
+A NumPy float64 array `a` of shape `(4, 5)` is created with `np.asfortranarray`. Which loop order is most cache-efficient when iterating over all elements?
+
+- A) Outer loop over rows (axis 0), inner loop over columns (axis 1): `for i in range(4): for j in range(5)`
+- B) Outer loop over columns (axis 1), inner loop over rows (axis 0): `for j in range(5): for i in range(4)`
+- C) Either order is equally efficient because NumPy handles Fortran arrays transparently
+- D) Outer loop over rows, inner loop over rows again — use np.nditer for automatic ordering
+
+**Answer: B**
+
+Fortran-order (column-major) stores elements column by column: `a[0,0], a[1,0], a[2,0], a[3,0], a[0,1], ...`. The first axis (rows) varies fastest, so its stride = 8 bytes (one float64). The second axis (columns) has stride = 4×8 = 32 bytes.
+
+- A) Incorrect — with F-order, the innermost loop over axis 1 (columns) has a stride of 32 bytes. Each step skips 4 elements, causing cache misses. This is the optimal pattern for C-order, not F-order.
+- B) Correct — iterating axis 0 (rows) in the innermost loop steps through memory 8 bytes at a time. A single 64-byte cache line covers 8 consecutive row elements, giving maximum spatial reuse.
+- C) Incorrect — NumPy does not reorder Python loops. The programmer must choose the loop order to match the array's memory layout. `np.nditer` with `order='F'` can help, but plain nested loops must be ordered manually.
+- D) Incorrect — `np.nditer` can iterate in F-order, but the question asks about plain Python loops. Repeating axis 0 in both loops makes no sense and is not a valid traversal strategy.
+
+---
+
+## Q14 — np.ascontiguousarray Behavior
+
+> **Week reference:** Week 3
+
+After `b = a.T` where `a` is a C-order float64 array of shape `(100, 200)`, which statement about `np.ascontiguousarray(b)` is true?
+
+- A) It returns `b` itself unchanged, because `b` is already C-contiguous
+- B) It returns a new array with shape `(200, 100)` and strides `(800, 8)`, copying data
+- C) It returns a view of `b` with updated strides — no copy occurs
+- D) It raises a ValueError because transposed arrays cannot be made contiguous
+
+**Answer: B**
+
+`b = a.T` has shape `(200, 100)` and strides `(8, 1600)` — it is not C-contiguous (the first axis stride of 8 is smaller than the second axis stride of 1600, which violates C-order). `np.ascontiguousarray(b)` detects this and creates a new C-contiguous array with the same shape `(200, 100)`.
+
+For a C-contiguous `(200, 100)` float64 array: strides = `(100×8, 8)` = `(800, 8)`.
+
+- A) Incorrect — `b` is not C-contiguous. `b.flags['C_CONTIGUOUS']` is False. `np.ascontiguousarray` will make a copy.
+- B) Correct — the output has shape `(200, 100)` and C-order strides `(800, 8)`, produced by a data copy.
+- C) Incorrect — a view cannot change the physical memory layout. Making an array contiguous always requires copying data to a new buffer when the source is non-contiguous.
+- D) Incorrect — `np.ascontiguousarray` never raises on a valid array. It always succeeds, returning a copy if needed or the original if already C-contiguous.
+
+---
+
+## Q15 — Stride of 0 and Broadcasting
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+a = np.array([1.0, 2.0, 3.0])
+b = np.broadcast_to(a, (4, 3))
+print(b.strides)
+```
+
+What does this print, and what does a stride of 0 mean?
+
+- A) `(0, 8)` — the row stride is 0, meaning no new memory is allocated per row; all rows share the same data
+- B) `(24, 8)` — the row stride is 24 bytes (3 float64 elements), a normal C-order 2D array
+- C) `(8, 0)` — the column stride is 0, meaning all columns share the same element
+- D) `(0, 0)` — all strides are 0 because broadcast arrays have no real memory layout
+
+**Answer: A**
+
+`np.broadcast_to` creates a read-only view that expands dimensions without copying data. The original array `a` has 3 elements in memory. Broadcasting to `(4, 3)` repeats the same row 4 times by setting the row stride to 0: moving one step along axis 0 adds 0 bytes to the pointer, so each "row" points to the same memory.
+
+- A) Correct — strides `(0, 8)`: axis 1 steps 8 bytes (normal float64), axis 0 steps 0 bytes (same row repeated). Zero stride = virtual repetition with no data copy.
+- B) Incorrect — strides `(24, 8)` would describe a real 2D array with 3 float64 columns. `broadcast_to` does not allocate new rows; it uses stride 0 for the broadcast dimension.
+- C) Incorrect — a stride of 0 on axis 1 would mean all columns within a row are the same element (broadcasting a scalar across columns). Here the broadcast is across rows, so axis 0 stride is 0.
+- D) Incorrect — only the broadcast axis (axis 0) has stride 0. The original data axis (axis 1) retains its normal stride of 8 bytes.
+
+---
+
+## Q16 — CUDA Coalescing vs CPU Cache
+
+> **Week reference:** Week 9
+
+A CUDA kernel processes a 2D float array stored in C-order (row-major) with shape `(H, W)`. For **coalesced memory access**, adjacent threads in a warp should access adjacent memory addresses. How should thread indices map to array indices?
+
+- A) `threadIdx.x` → row index, `threadIdx.y` → column index — threads in a warp access different rows
+- B) `threadIdx.x` → column index, `threadIdx.y` → row index — threads in a warp access adjacent columns in the same row
+- C) Layout does not matter for CUDA; the L2 cache handles coalescing automatically
+- D) `threadIdx.x` → row index only; column access should always be sequential within a single thread
+
+**Answer: B**
+
+In CUDA, threads within a warp execute in lockstep. A warp consists of 32 threads that differ only in `threadIdx.x`. For coalesced access, these 32 threads should access 32 consecutive memory addresses simultaneously. In a C-order array, consecutive addresses are along the last axis (columns). Therefore `threadIdx.x` should map to the column index so adjacent threads in a warp read adjacent columns — 32 consecutive float32/float64 values = one or two 128-byte cache lines fetched in one transaction.
+
+- A) Incorrect — if `threadIdx.x` maps to rows, threads in a warp access `array[0,col]`, `array[1,col]`, `array[2,col]` etc. In C-order these are W×4 bytes apart — strided access, one memory transaction per thread, 32× memory traffic overhead.
+- B) Correct — `threadIdx.x` → column means warp threads access `array[row, 0]`, `array[row, 1]`, ..., `array[row, 31]`: 32 consecutive bytes, fully coalesced into a single memory transaction.
+- C) Incorrect — the L2 cache helps but cannot eliminate the penalty of uncoalesced access. Uncoalesced warps issue up to 32 separate memory transactions instead of 1, and this cannot be transparently fixed by hardware.
+- D) Incorrect — restricting column access to a single thread eliminates all parallelism across the column dimension. The whole point of GPU parallelism is that many threads access different columns simultaneously.
+
+---
+
+## Q17 — Column Sum vs Row Sum Performance
+
+> **Week reference:** Week 3
+
+For a C-contiguous float64 array `a` of shape `(1000, 1000)`, which operation is faster?
+
+- A) `a.sum(axis=0)` — summing along axis 0 produces a row vector by visiting each column
+- B) `a.sum(axis=1)` — summing along axis 1 produces a column vector by visiting each row
+- C) Both are equally fast because NumPy uses BLAS routines for both reductions
+- D) `a.sum(axis=0)` — DRAM bandwidth is higher for vertical access patterns
+
+**Answer: B**
+
+`a.sum(axis=1)` reduces along axis 1 (columns within each row). For each of the 1000 rows, NumPy reads 1000 consecutive float64 elements — sequential access with stride 8 bytes. Each 64-byte cache line delivers 8 useful values.
+
+`a.sum(axis=0)` reduces along axis 0 (rows within each column). For each of the 1000 columns, NumPy reads `a[0,j], a[1,j], ..., a[999,j]` — elements spaced 1000×8 = 8000 bytes apart. Each cache line load yields only 1 useful element.
+
+- A) Incorrect — axis=0 sum accesses each column in sequence, requiring a stride-8000-byte jump per element. This is cache-unfriendly and causes ~125,000 extra cache misses compared to row-wise access.
+- B) Correct — axis=1 sum iterates along rows (stride 8 bytes), maximally reusing every loaded cache line. This is the cache-friendly direction for C-order arrays.
+- C) Incorrect — NumPy does use optimized reduction code, but it cannot eliminate the fundamental stride difference. The axis=0 reduction still accesses memory with a large stride regardless of the underlying routine.
+- D) Incorrect — DRAM bandwidth is symmetric; there is no hardware advantage for vertical access. The bottleneck is cache-line utilization, not DRAM direction.
+
+---
+
+## Q18 — 3D Array Optimal Inner Loop
+
+> **Week reference:** Week 3
+
+You have a C-contiguous float64 array `vol` of shape `(D, H, W)` = `(32, 64, 128)`. You want to compute the sum of all elements with a triple nested loop. Which loop order is most cache-efficient?
+
+- A) Outermost: W, middle: H, innermost: D
+- B) Outermost: D, middle: H, innermost: W
+- C) Outermost: H, middle: D, innermost: W
+- D) Outermost: W, middle: D, innermost: H
+
+**Answer: B**
+
+For a C-contiguous array of shape `(D, H, W)`, strides are `(H×W×8, W×8, 8)`. The last axis (W) has the smallest stride (8 bytes). Cache-efficient traversal places the innermost loop over the axis with the smallest stride.
+
+Strides: axis 0 (D) = 64×128×8 = 65536 bytes, axis 1 (H) = 128×8 = 1024 bytes, axis 2 (W) = 8 bytes.
+
+Optimal order innermost to outermost: W (stride 8) → H (stride 1024) → D (stride 65536).
+
+- A) Incorrect — placing W outermost and D innermost means the innermost loop strides 65536 bytes per step — one cache miss per element, the worst possible case.
+- B) Correct — outermost D, middle H, innermost W. The innermost W loop walks through memory at 8-byte intervals, loading 8 elements per 64-byte cache line with perfect spatial reuse.
+- C) Incorrect — innermost W is correct, but middle D has a larger stride (65536 bytes) than H (1024 bytes). The correct middle axis is H, not D.
+- D) Incorrect — innermost H has stride 1024 bytes, skipping 128 elements per step. This is much worse than innermost W (stride 8 bytes).
+
+---
+
+## Q19 — np.asfortranarray Strides
+
+> **Week reference:** Week 3
+
+For a float64 array `a = np.asfortranarray(np.zeros((3, 5)))`, what are `a.strides`?
+
+- A) `(40, 8)` — row stride = 5 elements × 8 bytes, column stride = 8 bytes (C-order)
+- B) `(8, 24)` — row stride = 8 bytes (one element), column stride = 3 elements × 8 bytes (F-order)
+- C) `(8, 8)` — both strides are 8 bytes because all elements are contiguous
+- D) `(5, 3)` — strides equal the shape dimensions
+
+**Answer: B**
+
+Fortran-order (column-major) stores elements column by column: `a[0,0], a[1,0], a[2,0], a[0,1], a[1,1], ...`. Moving one step along axis 0 (rows) advances 1 element = 8 bytes. Moving one step along axis 1 (columns) advances the number of rows = 3 elements = 24 bytes.
+
+Strides for F-order `(3, 5)` float64: `(8, 3×8)` = `(8, 24)`.
+
+- A) Incorrect — `(40, 8)` are the C-order strides for shape `(3, 5)`: axis 0 stride = 5×8 = 40, axis 1 stride = 8. Fortran-order reverses which axis has the smallest stride.
+- B) Correct — F-order strides `(8, 24)`: axis 0 (rows) varies fastest with stride 8, axis 1 (columns) has stride 24.
+- C) Incorrect — if both strides were 8, adjacent elements along both axes would overlap in memory, which is impossible for a 2D array (each element has a unique address).
+- D) Incorrect — strides are in bytes, not element counts. The shape dimensions `(5, 3)` are irrelevant to the stride formula; and strides are never equal to dimension sizes except by coincidence.
+
+---
+
+## Q20 — Cache Efficiency of np.sum vs Python Loop
+
+> **Week reference:** Week 3
+
+For a large C-contiguous 2D float64 array `a`, which is faster: `np.sum(a)` or a Python double for-loop summing all elements?
+
+- A) The Python loop, because it avoids NumPy overhead and accesses elements directly
+- B) `np.sum(a)` by a large margin, because it uses vectorized C code with SIMD and cache-friendly sequential access
+- C) Both are equally fast for large arrays because memory bandwidth is the bottleneck for both
+- D) The Python loop with `j` in the outer loop and `i` in the inner loop, because column-major access is faster
+
+**Answer: B**
+
+`np.sum(a)` iterates over the flat contiguous buffer in C with SIMD (AVX/SSE) instructions, processing 4–8 float64 values per clock cycle. A Python double for-loop has: (1) Python interpreter overhead per iteration (~50–100 ns), (2) boxing/unboxing of each float, and (3) no SIMD vectorization. For a 1000×1000 array, the Python loop runs ~1000× slower.
+
+- A) Incorrect — Python loops have massive per-iteration overhead (interpreter bytecode dispatch, object boxing). NumPy's C-level loop with SIMD is orders of magnitude faster regardless of "overhead."
+- B) Correct — `np.sum` uses contiguous sequential access (stride 8) with SIMD instructions, achieving near-peak memory bandwidth efficiency.
+- C) Incorrect — memory bandwidth is the bottleneck only when the computation is trivially fast relative to data movement. Python loop overhead dominates long before memory bandwidth; the loop is CPU-bound in the interpreter, not memory-bound.
+- D) Incorrect — Python loop with `j` outer, `i` inner on a C-order array accesses columns (stride = num_cols × 8 bytes) in the innermost loop — cache-unfriendly. Even if cache-friendly, it would still be ~1000× slower than `np.sum` due to Python overhead.
+
+---
+
+## Q21 — Strides After Slicing
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+a = np.zeros((10, 20), dtype=np.float64)  # strides: (160, 8)
+b = a[::2, :]   # every other row
+```
+
+What are `b.strides`?
+
+- A) `(80, 8)` — row stride halved because every other row is selected
+- B) `(160, 8)` — row stride unchanged because slicing returns a view
+- C) `(320, 8)` — row stride doubled because every other row is skipped
+- D) `(160, 4)` — column stride halved because the column count is unchanged
+
+**Answer: C**
+
+Slicing with `[::2]` along axis 0 returns a view where consecutive "rows" of `b` are two original rows apart. In the original array, two rows are 160 bytes apart. Skipping every other row means `b[0]` → `a[0]`, `b[1]` → `a[2]`, `b[2]` → `a[4]` — each step jumps 2×160 = 320 bytes.
+
+Shape of `b`: `(5, 20)`. Strides of `b`: `(320, 8)`.
+
+- A) Incorrect — a stride of 80 would mean rows are closer together than in the original, which is impossible when skipping rows. Slicing cannot reduce stride below the original element spacing.
+- B) Incorrect — stride 160 would mean adjacent rows of `b` are 160 bytes apart, implying no rows were skipped. But `b[1]` corresponds to `a[2]`, which is 2×160 = 320 bytes from `a[0]`.
+- C) Correct — `::2` on axis 0 doubles the row stride from 160 to 320 bytes. No data is copied; this is a view with modified stride metadata.
+- D) Incorrect — the column stride (axis 1) is always determined by the element size (8 bytes for float64) and does not change when rows are sliced. Shape along axis 1 remains 20 columns.
+
+---
+
+## Q22 — C-Order vs F-Order for Matrix Multiply
+
+> **Week reference:** Week 3
+
+You are multiplying two square float64 matrices `A` (C-order) and `B` (F-order) using a naive triple loop with `k` as the innermost variable:
+
+```python
+for i in range(N):
+    for j in range(N):
+        for k in range(N):
+            C[i,j] += A[i,k] * B[k,j]
+```
+
+For `A` in C-order and `B` in F-order, what is the cache behavior of the innermost `k` loop?
+
+- A) Both `A[i,k]` and `B[k,j]` are accessed with stride 8 bytes — fully cache-efficient
+- B) `A[i,k]` is row-wise (stride 8), but `B[k,j]` is also stride 8 because F-order stores columns contiguously
+- C) `A[i,k]` is row-wise (stride 8), but `B[k,j]` accesses a column of B which in F-order is contiguous (stride 8)
+- D) Both are cache-unfriendly because mixed C/F order always causes cache thrashing
+
+**Answer: C**
+
+For C-order `A` of shape `(N, N)`: strides = `(N×8, 8)`. The innermost `k` loop varies the column index of A: `A[i, 0], A[i, 1], ..., A[i, N-1]` — stride 8 bytes (row-wise, cache-friendly).
+
+For F-order `B` of shape `(N, N)`: strides = `(8, N×8)`. The innermost `k` loop varies the row index of B: `B[0, j], B[1, j], ..., B[N-1, j]` — stride 8 bytes (column access in F-order is contiguous, cache-friendly).
+
+This is actually the one case where mixed C/F order produces good cache behavior for a naive `ijk` loop.
+
+- A) Incorrect in reasoning — the statement is correct that both are stride 8, but saying "fully cache-efficient" without explaining why B is stride 8 (F-order column contiguity) misses the key insight.
+- B) Incorrect phrasing — this describes the same result as C but imprecisely. "Row-wise" for B is wrong; B[k,j] with varying k accesses a column of B, not a row.
+- C) Correct — `A[i,k]` varying k is a row of C-order A (stride 8). `B[k,j]` varying k is a column of F-order B, which in F-order is physically contiguous (stride 8). Both are cache-friendly.
+- D) Incorrect — mixed order does not always cause thrashing. Here the access pattern happens to align perfectly with each array's layout: C-order A accessed row-wise, F-order B accessed column-wise.
 
 ---

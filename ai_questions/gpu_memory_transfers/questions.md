@@ -3,6 +3,8 @@
 > Topics: Numba auto-transfers, optimal transfer counts, nsys profiling, bandwidth calculation.
 > Exam frequency: **Every exam**.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--numba-auto-transfer-rule)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Numba Auto-Transfer Rule
@@ -266,5 +268,247 @@ A GPU implementation has a fixed overhead of 0.6 s (data transfer + context setu
 - B) Correct — break-even: `0.6 + N×0.05 = N×0.1` → `0.6 = N×(0.1 − 0.05)` → `0.6 = N×0.05` → `N = 12`. Check: GPU = 0.6 + 12×0.05 = 0.6 + 0.6 = 1.2 s; CPU = 12×0.1 = 1.2 s. Equal at exactly 12 iterations.
 - C) Incorrect — at N=20 the GPU wins (GPU = 0.6 + 20×0.05 = 1.6 s; CPU = 20×0.1 = 2.0 s; GPU is 0.4 s faster), but 20 is not the break-even point. The question asks for the minimum N where GPU ≥ CPU in speed, which is 12, not 20.
 - D) Incorrect — the algebra gives N = 0.6 / (0.1 − 0.05) = 0.6 / 0.05 = 12, not 24. Getting 24 suggests a factor-of-2 error, perhaps dividing by 0.025 instead of 0.05 or halving the overhead incorrectly.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets nsys bandwidth calculations, transfer counting in loops, pre-allocation benefits, and HtoD vs DtoH asymmetry
+
+---
+
+## Q13 — Bandwidth from nsys: Small Transfer
+
+> **Week reference:** Week 9
+
+An nsys profile shows that a DtoH transfer moved 200 MB in 0.025 seconds. What is the achieved DtoH bandwidth in GB/s?
+
+- A) 0.8 GB/s
+- B) 8 GB/s
+- C) 80 GB/s
+- D) 5 GB/s
+
+**Answer: B**
+
+Bandwidth = 200 MB / 0.025 s = 8,000 MB/s = 8 GB/s. This is consistent with PCIe 3.0 x16 performance (theoretical peak ~16 GB/s; real-world transfers typically achieve 8–12 GB/s).
+
+- A) Incorrect — 0.8 GB/s = 800 MB/s would imply 200 MB / 0.25 s; the denominator is 0.025 s, not 0.25 s. Off by a factor of 10, likely from a decimal point error.
+- B) Correct — 200 / 0.025 = 8,000 MB/s = 8 GB/s.
+- C) Incorrect — 80 GB/s = 80,000 MB/s would require 200 MB / 0.0025 s; far exceeds PCIe bandwidth limits and uses the wrong time value.
+- D) Incorrect — 5 GB/s = 5,000 MB/s would require 200 MB / 0.04 s; the given time is 0.025 s, not 0.04 s.
+
+---
+
+## Q14 — Transfer Count: Three Arrays, One Loop
+
+> **Week reference:** Week 9
+
+A Numba CUDA kernel is called with three NumPy arrays (A, B, C) as arguments, 20 times in a loop, using auto-transfer each iteration. How many total memory transfers does Numba perform?
+
+- A) 60 transfers
+- B) 120 transfers
+- C) 40 transfers
+- D) 180 transfers
+
+**Answer: B**
+
+Per iteration: 3 arrays × 2 directions (HtoD + DtoH) = 6 transfers. Over 20 iterations: 6 × 20 = 120 transfers.
+
+- A) Incorrect — 60 would be 3 transfers per iteration (only one direction), but Numba transfers every array both HtoD before and DtoH after.
+- B) Correct — 3 arrays × 2 directions × 20 iterations = 120 total transfers.
+- C) Incorrect — 40 would be 2 transfers per iteration, accounting for only one array both ways. All three arrays are transferred.
+- D) Incorrect — 180 would be 9 transfers per iteration. There is no basis for 9; the formula is 2 × (number of args) per call.
+
+---
+
+## Q15 — Pre-allocation Saves Transfers in a Loop
+
+> **Week reference:** Week 9
+
+A kernel processes the same fixed input array 100 times, writing results to an output array. With Numba auto-transfer, 400 transfers occur. After refactoring to use explicit `cuda.to_device()` and `cuda.device_array()` with both arrays hoisted outside the loop and a single `copy_to_host()` after, how many transfers occur?
+
+- A) 4 transfers
+- B) 2 transfers
+- C) 100 transfers
+- D) 1 transfer
+
+**Answer: B**
+
+Hoisting: `d_in = cuda.to_device(input_arr)` (1 HtoD) + `d_out = cuda.device_array(n)` (0 transfers) before the loop; loop runs 100 times with zero transfers; `result = d_out.copy_to_host()` (1 DtoH) after. Total = 2.
+
+- A) Incorrect — 4 would correspond to auto-transfer for a single call (2 HtoD + 2 DtoH). After refactoring over 100 iterations, the count drops to 2, not 4.
+- B) Correct — 1 HtoD (send input once) + 1 DtoH (retrieve output once) = 2 total, regardless of how many kernel invocations occur.
+- C) Incorrect — 100 would mean one transfer per iteration, as if only one direction was optimised. Both HtoD and DtoH are hoisted outside the loop, so the loop itself contributes zero transfers.
+- D) Incorrect — you need at least 1 HtoD to get input data onto the device and 1 DtoH to get the result back. A single transfer implies either the input or the output is skipped, which would produce wrong results.
+
+---
+
+## Q16 — HtoD vs DtoH Asymmetry
+
+> **Week reference:** Week 9
+
+An nsys profile reports: HtoD total = 24 ms, DtoH total = 0.2 ms. A student concludes "DtoH must be faster hardware." What is the more likely explanation?
+
+- A) The GPU's memory controller prioritises DtoH transfers on the PCIe bus.
+- B) DtoH transfers use NVLink while HtoD transfers use PCIe.
+- C) The amount of data transferred DtoH is much smaller than the amount transferred HtoD, so even at similar bandwidth DtoH finishes faster.
+- D) DtoH transfers are compressed automatically by CUDA.
+
+**Answer: C**
+
+In typical GPU workloads, large input arrays are sent HtoD, but only a small result (e.g., a scalar, a reduced array, or a single output frame) is returned DtoH. The time difference reflects data volume, not hardware asymmetry.
+
+- A) Incorrect — PCIe is a bidirectional bus and does not prioritise one direction. Both HtoD and DtoH share the same physical link with similar peak bandwidth in each direction.
+- B) Incorrect — NVLink connects GPU-to-GPU or GPU-to-CPU in specific server configurations (e.g., IBM Power9 + V100). Standard desktop/datacenter PCIe systems use PCIe for both directions. Unless the system is explicitly described as NVLink-equipped, this assumption is wrong.
+- C) Correct — the most common explanation is that far less data travels DtoH. For example, sending a 500 MB dataset HtoD but retrieving only a 4 KB result DtoH explains a 120,000× size difference, which more than accounts for the time difference.
+- D) Incorrect — CUDA does not apply transparent compression to memory transfers over PCIe. Data is copied as-is; no automatic compression layer exists in the standard CUDA memory transfer API.
+
+---
+
+## Q17 — Counting Transfers with a Conditional Inside a Loop
+
+> **Week reference:** Week 9
+
+```python
+d_weights = cuda.to_device(weights)
+for i in range(50):
+    if i == 0:
+        d_input = cuda.to_device(data)
+    output[i] = run_kernel(d_weights, d_input).copy_to_host()
+```
+
+`run_kernel` returns a `DeviceNDArray`. How many HtoD transfers occur in total?
+
+- A) 100 HtoD
+- B) 51 HtoD
+- C) 2 HtoD
+- D) 50 HtoD
+
+**Answer: C**
+
+`cuda.to_device(weights)` = 1 HtoD before the loop. `cuda.to_device(data)` inside `if i == 0` = 1 HtoD on the first iteration only, never again. `run_kernel` receives device arrays, so no implicit transfers. Total = 2 HtoD.
+
+- A) Incorrect — 100 HtoD would imply both `weights` and `data` are transferred every iteration. `d_weights` is created once before the loop, and `d_input` is created only when `i == 0`.
+- B) Incorrect — 51 would mean one of the two arrays is transferred each iteration plus one setup transfer. Neither matches the code; both `cuda.to_device` calls are guarded to run at most once each.
+- C) Correct — exactly 2 HtoD transfers total: one for `weights` (line 1) and one for `data` (first iteration of loop only).
+- D) Incorrect — 50 would imply `d_input` is re-transferred each iteration. The `if i == 0` guard means `cuda.to_device(data)` runs exactly once.
+
+---
+
+## Q18 — nsys Bandwidth: Converting Units Correctly
+
+> **Week reference:** Week 9
+
+An nsys report shows an HtoD transfer of 1,024 MB completed in 102.4 ms. What is the bandwidth in GB/s? (Use 1 GB = 1,000 MB for this calculation.)
+
+- A) 100 GB/s
+- B) 1 GB/s
+- C) 10 GB/s
+- D) 0.1 GB/s
+
+**Answer: C**
+
+Convert time: 102.4 ms = 0.1024 s. Bandwidth = 1,024 MB / 0.1024 s = 10,000 MB/s = 10 GB/s.
+
+- A) Incorrect — 100 GB/s = 100,000 MB/s would require 1,024 MB / 0.01024 s; the time is 0.1024 s, not 0.01024 s. Off by a factor of 10.
+- B) Incorrect — 1 GB/s = 1,000 MB/s would require 1,024 MB / 1.024 s; the time is 0.1024 s, not 1.024 s. Off by a factor of 10 in the other direction.
+- C) Correct — 1,024 MB / 0.1024 s = 10,000 MB/s = 10 GB/s. Plausible PCIe 3.0 x16 bandwidth.
+- D) Incorrect — 0.1 GB/s = 100 MB/s would require a transfer time of over 10 seconds for 1,024 MB. That would be slower than a USB 2.0 connection — not a realistic GPU result.
+
+---
+
+## Q19 — Why DtoH Can Be the Bottleneck Despite Small Size
+
+> **Week reference:** Week 9
+
+A GPU application waits on DtoH transfers before each loop iteration can proceed on the CPU. Which scenario best explains why DtoH is a bottleneck even when DtoH data volume is small?
+
+- A) DtoH transfers have lower PCIe bandwidth than HtoD transfers on all hardware.
+- B) The CPU is blocked waiting for the DtoH result to arrive before it can start the next iteration, creating a synchronisation stall that dominates latency.
+- C) CUDA always transfers DtoH before HtoD in its internal scheduler, causing head-of-line blocking.
+- D) The GPU's DMA engine is shared between DtoH and kernel execution, serialising the two.
+
+**Answer: B**
+
+Even a tiny DtoH transfer (e.g., 1 scalar) forces a CPU-GPU synchronisation point. If the CPU must act on that scalar before launching the next kernel, the entire pipeline stalls waiting for the GPU to finish and the transfer to complete — a latency bottleneck, not a bandwidth bottleneck.
+
+- A) Incorrect — PCIe bandwidth is symmetric in both directions; HtoD and DtoH share the same physical link with similar peak rates. DtoH is not hardware-disadvantaged.
+- B) Correct — the bottleneck is the synchronisation dependency: the CPU cannot proceed until the DtoH result arrives. Every iteration incurs a full round-trip latency (GPU kernel + DtoH transfer + CPU logic), and the pipeline cannot overlap iterations.
+- C) Incorrect — CUDA's internal scheduler uses streams and does not enforce a DtoH-before-HtoD ordering. Multiple streams can interleave HtoD, DtoH, and kernel execution concurrently.
+- D) Incorrect — modern GPUs have separate DMA engines for HtoD and DtoH that can operate concurrently with each other and with kernel execution (given separate CUDA streams). They do not share a single DMA engine with the compute units.
+
+---
+
+## Q20 — Optimal Transfer Count for a Reduction Kernel
+
+> **Week reference:** Week 9
+
+A reduction kernel takes a large input array (1 GB) and returns a single float64 scalar result. Using explicit transfers, what is the minimum data movement across PCIe?
+
+- A) 1 GB HtoD + 1 GB DtoH = 2 GB total
+- B) 1 GB HtoD + 8 bytes DtoH ≈ 1 GB total
+- C) 0 bytes (reduction happens in-place on device)
+- D) 2 GB HtoD + 8 bytes DtoH ≈ 2 GB total
+
+**Answer: B**
+
+The input must travel HtoD (1 GB). The scalar result (float64 = 8 bytes) travels DtoH. Total ≈ 1 GB + 8 bytes. No other transfers are needed with explicit management.
+
+- A) Incorrect — copying 1 GB back DtoH would mean returning the entire input array, not a scalar. A reduction compresses N elements into 1 value; the output is a single number, not an array of the same size as the input.
+- B) Correct — 1 GB HtoD for the input array + 8 bytes DtoH for the float64 scalar result. The 8-byte DtoH is negligible in practice but still counts as a transfer.
+- C) Incorrect — even an in-place reduction still requires the initial data to arrive on the device (1 GB HtoD) and the final scalar to be retrieved (8 bytes DtoH). "In-place" refers to the on-device computation, not to eliminating PCIe transfers.
+- D) Incorrect — 2 GB HtoD would imply the input is sent twice. With explicit transfers and a single kernel call, the input is transferred once. A second copy would only occur if the data was erroneously re-uploaded.
+
+---
+
+## Q21 — Comparing Auto-Transfer vs Explicit in One Call
+
+> **Week reference:** Week 9
+
+A single kernel call `process[bpg, tpb](out, inp)` is made once (not in a loop), where `inp` is a 100 MB read-only NumPy array and `out` is a 100 MB write-only NumPy array. Auto-transfer moves _____ MB; optimal explicit transfers move _____ MB.
+
+- A) Auto: 400 MB; Optimal: 200 MB
+- B) Auto: 200 MB; Optimal: 100 MB
+- C) Auto: 400 MB; Optimal: 100 MB
+- D) Auto: 200 MB; Optimal: 200 MB
+
+**Answer: A**
+
+Auto-transfer: `inp` HtoD (100 MB) + `out` HtoD (100 MB) + `inp` DtoH (100 MB) + `out` DtoH (100 MB) = 400 MB. Optimal: `d_inp = cuda.to_device(inp)` (100 MB HtoD) + `d_out = cuda.device_array(...)` (0 MB) + `d_out.copy_to_host()` (100 MB DtoH) = 200 MB.
+
+- A) Correct — auto-transfer moves both arrays in both directions = 4 × 100 MB = 400 MB. Optimal skips the unnecessary HtoD for `out` and DtoH for `inp`, saving 200 MB = 200 MB total.
+- B) Incorrect — auto-transfer is 400 MB (4 transfers), not 200 MB (2 transfers). 200 MB is the optimal count, not the auto count.
+- C) Incorrect — optimal is 200 MB, not 100 MB. You still need 100 MB HtoD for the input and 100 MB DtoH for the output. 100 MB would skip one of these essential transfers.
+- D) Incorrect — auto-transfer and optimal cannot be equal here. Auto-transfer always performs more transfers than optimal for write-only output arrays (it wastes an HtoD for `out` and a DtoH for `inp`).
+
+---
+
+## Q22 — Reading gpumemtimesum to Find Total Transfer Time
+
+> **Week reference:** Week 9
+
+An nsys `gpumemtimesum` report shows:
+
+```
+Type    Total Time (ms)   Count
+HtoD    40.0              10
+DtoH     5.0               5
+```
+
+The `gpukernsum` report shows kernel total = 15 ms. What fraction of total GPU-related time is spent on memory transfers (HtoD + DtoH combined)?
+
+- A) 25%
+- B) 75%
+- C) 45%
+- D) 55%
+
+**Answer: B**
+
+Total time = HtoD + DtoH + kernel = 40 + 5 + 15 = 60 ms. Transfer time = 40 + 5 = 45 ms. Fraction = 45 / 60 = 0.75 = 75%.
+
+- A) Incorrect — 25% would be 15 ms out of 60 ms, which is the kernel's share, not the transfers' share.
+- B) Correct — (40 + 5) / (40 + 5 + 15) = 45 / 60 = 75% of GPU-related time is memory transfers.
+- C) Incorrect — 45% would require transfer time / total = 0.45, i.e., transfer time = 27 ms, which matches neither (40 + 5 = 45 ms) nor any simple arithmetic on the given values.
+- D) Incorrect — 55% would require transfer time = 33 ms. The actual transfer time is 45 ms (40 + 5), giving 75%, not 55%.
 
 ---

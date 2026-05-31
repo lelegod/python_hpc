@@ -3,6 +3,8 @@
 > Topics: Thread blocks, warp coalescing, grid dimensions, memory access patterns, CPU vs CUDA layout rules.
 > Exam frequency: **Every exam** — 4+ questions per exam.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions (Q1–Q13)](#q1--best-block-shape-for-coalescing-row-major)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice (Q14–Q25)](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Best Block Shape for Coalescing (Row-Major)
@@ -294,5 +296,298 @@ A kernel reads `x[row, col]` where `row, col = cuda.grid(2)` and `x` is stored i
 - B) Incorrect — the hardware maximum is 1024 threads per block, so 256 is well within limits. Claiming 128 as the maximum is incorrect for any modern NVIDIA GPU.
 - C) Correct — with block shape (256, 1), `threadIdx.x` runs 0–255 and `threadIdx.y = 0` always. `cuda.grid(2)` assigns `row = blockIdx.x * 256 + threadIdx.x` and `col = blockIdx.y * 1 + 0`. Warp threads 0–31 differ in `row` but share `col`. For a 1000-column array, `x[row, col]` has stride 1000 elements = 4000 bytes between consecutive warp threads → 32 fully separate cache-line fetches → ~32× slower than coalesced (1, 256) access.
 - D) Incorrect — 256 is a multiple of 32 (256 = 8 × 32), so warp alignment is perfectly fine and all warps are fully populated. The real problem is entirely the strided memory access pattern caused by varying `row` indices within a warp, which has nothing to do with warp-size multiples.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets patterns from all three exams not in Set 1: nsys profiling, transfer counting, syncthreads, warp divergence, scheduling, GPU vs CPU timing, 3D coalescing, BSUB GPU flags.
+
+---
+
+## Q14 — Reading nsys Profiler Output
+
+> **Week reference:** Week 9
+
+**Mental Model:** Sum HtoD + DtoH + kernel time for total GPU-related time. Divide each by the total. HtoD usually dominates for large inputs; DtoH is often negligible (output is small).
+
+An nsys profile produces:
+
+| Report | Component | Total Time (ns) |
+|--------|-----------|-----------------|
+| gpumemtimesum | HtoD | 48,000,000 |
+| gpumemtimesum | DtoH | 500,000 |
+| gpukernsum | compute_kernel | 24,000,000 |
+
+Which component dominates and approximately what fraction does it represent?
+
+- A) The kernel — ~33%
+- B) HtoD transfers — ~66%
+- C) DtoH transfers — ~0.7%
+- D) HtoD transfers — ~33%
+
+**Answer: B**
+
+- A) Incorrect — kernel = 24 ms out of (48 + 0.5 + 24) = 72.5 ms total → 24/72.5 ≈ 33%; significant but not dominant
+- B) Correct — HtoD = 48 ms / 72.5 ms ≈ 66%; moving input data to the GPU is the bottleneck
+- C) Incorrect — DtoH = 0.5 ms is indeed ~0.7% of total, making it negligible; it is the smallest, not the largest, component
+- D) Incorrect — 33% is the kernel's fraction, not HtoD's
+
+---
+
+## Q15 — Numba Automatic Transfer Count (Naive)
+
+> **Week reference:** Week 9
+
+**Mental Model:** Numba auto-transfers EVERY NumPy argument both HtoD (before) and DtoH (after) for each kernel call. Device arrays (`cuda.to_device`, `cuda.device_array_like`) bypass automatic transfer entirely.
+
+A kernel takes 2 NumPy arrays as arguments and is called 40 times in a loop. How many automatic HtoD and DtoH transfers does Numba perform in total?
+
+- A) 40 HtoD + 40 DtoH (one set per call, not per array)
+- B) 80 HtoD + 80 DtoH (2 arrays × 40 calls, both directions)
+- C) 40 HtoD + 0 DtoH (only inputs are transferred)
+- D) 2 HtoD + 2 DtoH (Numba caches arrays across calls)
+
+**Answer: B**
+
+- A) Incorrect — Numba transfers each array separately; 2 arrays × 40 calls = 80 in each direction
+- B) Correct — 2 NumPy args × 40 calls = 80 HtoD before each call + 80 DtoH after each call = 160 total; Numba cannot know which arrays are pure inputs
+- C) Incorrect — Numba transfers all NumPy arguments DtoH after every call regardless of whether they are inputs or outputs
+- D) Incorrect — Numba re-transfers NumPy arrays fresh on every call; there is no cross-call caching
+
+---
+
+## Q16 — Optimised Transfer Count (Pre-allocated Device Arrays)
+
+> **Week reference:** Week 9
+
+**Mental Model:** `cuda.to_device(arr)` = 1 HtoD. `cuda.device_array_like(arr)` = 0 transfers (GPU-only allocation, no data). Passing device arrays to a kernel = 0 automatic transfers. `d_arr.copy_to_host()` = 1 DtoH. Pre-allocate once, reuse every call.
+
+Same 40-call scenario: both inputs are pre-transferred once with `cuda.to_device()` before the loop; the output is a `cuda.device_array_like()` copied to host once after the loop. How many total transfers?
+
+- A) 2 HtoD + 1 DtoH (3 total)
+- B) 80 HtoD + 80 DtoH (same as naive)
+- C) 40 HtoD + 1 DtoH (inputs re-transferred each call)
+- D) 0 HtoD + 40 DtoH (device arrays need no HtoD)
+
+**Answer: A**
+
+- A) Correct — `cuda.to_device()` × 2 = 2 HtoD (once before loop); 40 kernel calls with device-array args = 0 automatic transfers; `copy_to_host()` × 1 = 1 DtoH (once after loop); total = 3 transfers
+- B) Incorrect — passing device arrays to the kernel suppresses automatic transfer; Numba only auto-transfers NumPy arrays
+- C) Incorrect — `cuda.to_device()` copies once to a persistent device array; subsequent calls passing that device array do not re-transfer
+- D) Incorrect — the initial `cuda.to_device()` does require 2 HtoD; only the per-call overhead disappears
+
+---
+
+## Q17 — GPU vs CPU Total Time Calculation
+
+> **Week reference:** Week 9
+
+**Mental Model:** GPU wall-clock time = HtoD + kernel + DtoH. Compare this total to CPU time. The kernel alone being fast does not mean GPU wins if transfers are large.
+
+A workload takes 12 s on CPU. GPU pipeline: HtoD = 2.0 s, kernel = 1.5 s, DtoH = 0.5 s. How much faster is the GPU?
+
+- A) 8× faster — only the kernel counts (1.5 s vs 12 s)
+- B) 3× faster — total GPU = 4.0 s vs CPU 12 s
+- C) GPU is slower — total GPU = 14.0 s
+- D) 6× faster — HtoD and DtoH cancel out
+
+**Answer: B**
+
+- A) Incorrect — HtoD and DtoH are real pipeline latencies; ignoring them gives an overly optimistic result that won't match wall-clock timing
+- B) Correct — GPU total = 2.0 + 1.5 + 0.5 = 4.0 s; speedup = 12.0 / 4.0 = 3×
+- C) Incorrect — 2.0 + 1.5 + 0.5 = 4.0 s, not 14.0 s
+- D) Incorrect — HtoD and DtoH add to total time; they do not cancel
+
+---
+
+## Q18 — `cuda.syncthreads()` in Parallel Reduction
+
+> **Week reference:** Week 9
+
+**Mental Model:** In a block reduction each step writes partial sums, then reads neighbours' results. `syncthreads()` is a barrier: ALL threads in the block must arrive before any may proceed. Without it, a fast warp can start step N+1 before a slow warp finishes step N → race condition → wrong output.
+
+In a CUDA block reduction, `cuda.syncthreads()` is called at the end of each reduction step. What happens if it is removed?
+
+- A) Nothing — threads within a warp execute in lockstep so no synchronisation is needed
+- B) The kernel runs faster because barrier overhead is eliminated
+- C) Race condition: a warp may read another warp's stale partial result from the previous step, producing incorrect output
+- D) The kernel will not compile without `syncthreads()`
+
+**Answer: C**
+
+- A) Incorrect — lockstep only applies within a single warp (32 threads); a block has many warps that can be at different steps without a barrier
+- B) Incorrect — removing the barrier reduces overhead but corrupts results; correctness takes priority
+- C) Correct — without `syncthreads()`, warp 0 can advance to step s=2 while warp 1 is still writing step s=1 partial sums → warp 0 reads stale data → wrong final result
+- D) Incorrect — `syncthreads()` is a runtime call; the kernel compiles fine without it
+
+---
+
+## Q19 — Static vs Dynamic Scheduling for GPU Jobs
+
+> **Week reference:** Week 11 / Week 13
+
+**Mental Model:** Static scheduling assigns a fixed chunk upfront. If work per item has high variance, some GPUs finish early and sit idle. Dynamic scheduling assigns work on demand. For GPU kernels: high runtime variance → use dynamic to prevent idle GPUs.
+
+Two CUDA kernels profiled on 100 inputs: `kernel_A` (mean=50 ms, std=45 ms) and `kernel_B` (mean=50 ms, std=0.2 ms). You have 4 GPUs. Which needs dynamic scheduling?
+
+- A) `kernel_A` — high variance means some inputs take much longer; static leaves GPUs idle
+- B) `kernel_B` — low variance allows precise runtime prediction; use dynamic for precision
+- C) Both equally — variance doesn't affect GPU scheduling
+- D) Neither — GPU kernels must always use static scheduling
+
+**Answer: A**
+
+- A) Correct — with std=45 ms, some inputs could take ~140 ms while others take ~5 ms; static assignment (each GPU gets 25 inputs) means one GPU may still be running after the other three finish; dynamic eliminates this imbalance
+- B) Incorrect — `kernel_B`'s low variance makes static scheduling efficient: all GPUs finish at nearly the same time
+- C) Incorrect — variance is exactly what determines the static vs dynamic choice
+- D) Incorrect — job-array-based dynamic scheduling is standard practice for variable-runtime GPU workloads on LSF
+
+---
+
+## Q20 — GPU Amortisation Over Many Iterations
+
+> **Week reference:** Week 9
+
+**Mental Model:** Extract per-iteration GPU cost from two benchmarks: slope = (time2 − time1)/(n2 − n1). Fixed overhead = total − n × per_iteration. At large n, fixed overhead is negligible and the per-iteration comparison decides the winner.
+
+CPU: 0.2 s/iteration. GPU benchmark: 5 iterations = 1.5 s total, 10 iterations = 2.0 s total. At 1 million iterations, which is faster?
+
+- A) CPU — per-iteration GPU cost (0.3 s) is worse than CPU (0.2 s)
+- B) GPU — per-iteration GPU cost is 0.1 s, half the CPU cost; overhead is amortised
+- C) Tie — both scale linearly from the benchmark
+- D) CPU — GPU fixed overhead of 1.0 s always adds cost regardless of iteration count
+
+**Answer: B**
+
+- A) Incorrect — per-iteration cost = (2.0 − 1.5)/(10 − 5) = 0.1 s, not 0.3 s; GPU is 2× faster per iteration
+- B) Correct — GPU overhead = 1.5 − 5×0.1 = 1.0 s (fixed); at 1M iterations: GPU ≈ 0.1M + 1.0 ≈ 100,001 s vs CPU = 0.2M = 200,000 s; GPU wins by ~2×
+- C) Incorrect — the GPU has a 1.0 s fixed offset; it does not scale from zero
+- D) Incorrect — 1.0 s fixed overhead contributes ~0.000001 s/iteration at 1M iterations; it is effectively negligible
+
+---
+
+## Q21 — Warp Divergence with if/else
+
+> **Week reference:** Week 9
+
+**Mental Model:** Warp divergence = threads in the SAME warp take different branches. The SM executes both branches sequentially with masking. Throughput for those instructions is reduced by the number of distinct paths (2 paths → ~2× slower).
+
+A kernel contains: `if cuda.threadIdx.x % 2 == 0: data[i] *= 2; else: data[i] += 1`. With a 32-thread warp, what is the performance impact?
+
+- A) No impact — the condition is resolved at compile time
+- B) ~2× slowdown for this branch — SM serialises both paths, halving warp throughput
+- C) 32× slowdown — each thread executes both branches
+- D) No impact — if/else is always free on CUDA
+
+**Answer: B**
+
+- A) Incorrect — `threadIdx.x % 2` is a per-thread runtime value; it cannot be resolved at compile time
+- B) Correct — threads 0, 2, ..., 30 take the `*=2` path; threads 1, 3, ..., 31 take the `+=1` path; the SM executes one pass per path with the other 16 masked → effective throughput halved for these instructions
+- C) Incorrect — each thread executes only its own branch; the SM runs at most one pass per distinct path (here 2), not 32
+- D) Incorrect — intra-warp divergence is a well-known CUDA performance hazard; it always costs extra SM passes
+
+---
+
+## Q22 — 3D Array Coalescing: Which Block Shape?
+
+> **Week reference:** Week 9
+
+**Mental Model:** Row-major `vol[I, J, K]`: stride of i = J×K, stride of j = K, stride of k = 1. For coalesced access, adjacent warp threads must differ in k (the last, fastest axis). With `i, j, k = cuda.grid(3)`, set blockDim.x=1, blockDim.y=1, blockDim.z=32 so 32 threads differ in k.
+
+A 3D kernel accesses `vol[i, j, k]` where vol has shape `(D, H, W)` in row-major order, `i, j, k = cuda.grid(3)`. Which block shape gives the best coalescing?
+
+- A) `(32, 1, 1)` — 32 threads in i
+- B) `(1, 32, 1)` — 32 threads in j
+- C) `(1, 1, 32)` — 32 threads in k
+- D) `(8, 4, 1)` — spread across i and j
+
+**Answer: C**
+
+- A) Incorrect — 32 threads varying in i → stride = H×W elements between adjacent warp threads → worst coalescing
+- B) Incorrect — 32 threads varying in j → stride = W → strided access, not coalesced
+- C) Correct — blockDim=(1,1,32): 32 threads differ in k (z-dim, last axis, stride=1) → consecutive addresses → fully coalesced
+- D) Incorrect — i and j are both slow axes; spreading across them produces strided accesses in two dimensions
+
+---
+
+## Q23 — GPU Queue and Resource Flags (BSUB)
+
+> **Week reference:** Week 1
+
+**Mental Model:** Two changes always needed for GPU jobs: (1) switch queue to a GPU queue (`gpuv100`, `gpua100`), (2) add `-gpu "num=1:mode=exclusive_process"`. Without both, the job lands on a CPU-only node or fails to claim a GPU device.
+
+A job script has `#BSUB -q hpc`. Which two changes are required to run it on a GPU?
+
+- A) Add `#BSUB -n 1` and extend wall time `-W`
+- B) Change `-q hpc` to `-q gpuv100` and add `#BSUB -gpu "num=1:mode=exclusive_process"`
+- C) Add `#BSUB -R "rusage[gpu=1]"` and keep queue as `hpc`
+- D) Change queue to `-q gpu` and add `#BSUB -R "span[hosts=1]"`
+
+**Answer: B**
+
+- A) Incorrect — changing core count or wall time does not request a GPU node; queue and GPU resource flag are what matter
+- B) Correct — `gpuv100` (or `gpua100`, `hpcintgpu`) selects a GPU node; `-gpu "num=1:mode=exclusive_process"` allocates one GPU in exclusive mode so no other job shares it
+- C) Incorrect — `rusage[gpu=1]` is not valid syntax; the correct flag is `-gpu "num=N:mode=..."` and the queue must also be a GPU queue
+- D) Incorrect — `gpu` alone is not a valid DTU HPC queue name; `span[hosts=1]` is for multi-core CPU jobs to stay on one node, not for GPU allocation
+
+---
+
+## Q24 — `cuda.to_device` vs `cuda.device_array_like` Transfers
+
+> **Week reference:** Week 9
+
+**Mental Model:** `cuda.to_device(arr)` copies host → device (1 HtoD). `cuda.device_array_like(arr)` allocates device memory with matching shape/dtype but transfers NO data (0 transfers). Use `device_array_like` for output buffers written by the kernel.
+
+How many HtoD transfers does this code produce?
+
+```python
+x = np.random.rand(1000)
+d_x = cuda.to_device(x)
+d_out = cuda.device_array_like(x)
+my_kernel[bpg, tpb](d_x, d_out)
+```
+
+- A) 0 — both calls allocate without copying
+- B) 1 — only `cuda.to_device(x)` transfers data; `device_array_like` just allocates
+- C) 2 — one for `d_x` and one for `d_out`
+- D) 3 — both arrays plus the kernel launch itself
+
+**Answer: B**
+
+- A) Incorrect — `cuda.to_device(x)` explicitly copies `x` from host to device; that is one HtoD
+- B) Correct — `cuda.to_device(x)` = 1 HtoD; `cuda.device_array_like(x)` = 0 (allocates uninitialised GPU memory, no host data copied); kernel receives device pointers → no implicit transfer
+- C) Incorrect — `cuda.device_array_like` allocates empty GPU memory; there is no host data to copy for it
+- D) Incorrect — kernel launches do not inherently transfer data; only NumPy arguments to `@cuda.jit` kernels and explicit `to_device`/`copy_to_host` calls cause transfers
+
+---
+
+## Q25 — Transfer Count with Mixed NumPy and Device Arrays
+
+> **Week reference:** Week 9
+
+**Mental Model:** In a loop, count: explicit `cuda.to_device()` calls = HtoD per call; NumPy arguments passed to `@cuda.jit` = auto HtoD+DtoH each call; explicit `copy_to_host()` = DtoH per call. Device arrays passed to kernels = 0 transfers.
+
+```python
+d_weights = cuda.to_device(weights)   # once before loop
+for inp in inputs:                     # 10 NumPy arrays
+    d_out = cuda.device_array_like(inp)
+    kernel[bpg, tpb](inp, d_weights, d_out)
+    results.append(d_out.copy_to_host())
+```
+
+How many total HtoD transfers occur?
+
+- A) 10 HtoD (only `inp` per iteration, forget pre-load)
+- B) 20 HtoD (`inp` + `d_weights` re-transferred each iteration)
+- C) 11 HtoD (10 auto for `inp` + 1 explicit pre-load of `d_weights`)
+- D) 30 HtoD (all three kernel arguments each iteration)
+
+**Answer: C**
+
+- A) Incorrect — forgets the initial `cuda.to_device(weights)` = 1 HtoD before the loop
+- B) Incorrect — `d_weights` is already a device array; passing it to the kernel does not trigger a new HtoD; only NumPy arguments auto-transfer
+- C) Correct — `cuda.to_device(weights)` = 1 HtoD (before loop); each iteration: `inp` (NumPy) → 1 auto HtoD; `d_weights`, `d_out` (device arrays) → 0; total HtoD = 1 + 10 = 11. DtoH = 10 (one `copy_to_host()` per iteration).
+- D) Incorrect — `d_weights` and `d_out` are device arrays; they generate 0 automatic HtoD when passed to a kernel
 
 ---

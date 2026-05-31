@@ -3,6 +3,8 @@
 > Topics: dtype downcast decisions, object→datetime/category, memory budget calculation, chunked reading.
 > Exam frequency: **2024 exam + F25**.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--int64-mach_id-downcast)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — int64 mach_id Downcast
@@ -254,5 +256,211 @@ A `product_sku` column is stored as `object` with 50,000 unique string values ac
 - B) Incorrect — SKU codes are product identifiers, not timestamps. Converting to datetime64 is semantically wrong and would fail with a parse error on strings like "SKU-00043A". This answer conflates the dtype rule for timestamps with a different question.
 - C) Correct — with 50,000 unique values across 60,000 rows (83% uniqueness), the category overhead is severe. The lookup table holds 50,000 strings; the codes require int16 or int32 (2–4 bytes/row) since codes won't fit in int8. Compare: object = 8 bytes/row (pointer) + heap; category ≈ 4 bytes/row (int32 code) + 50,000-string table. Savings are marginal at best, negative at worst.
 - D) Incorrect — hashing destroys the original string values (hash collisions could map different SKUs to the same integer, and you cannot recover the original string from a hash). This is not a standard Pandas optimisation pattern and would corrupt the data semantically.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets read_csv dtype and chunksize parameters, category dtype savings, memory_usage calculations, and chunk processing patterns
+
+---
+
+## Q13 — read_csv dtype Parameter Effect
+
+> **Week reference:** Week 7
+
+You load a CSV with the following call:
+
+```python
+df = pd.read_csv('sensors.csv', dtype={'temperature': 'float32', 'pressure': 'float32'})
+```
+
+Without the `dtype` argument, pandas would have inferred both columns as `float64`. How much memory does specifying `dtype` save for these two columns across 2,000,000 rows?
+
+- A) 8 MB (25% savings)
+- B) 16 MB (50% savings)
+- C) 24 MB (75% savings)
+- D) No savings — pandas always uses the dtype of the source data
+
+**Answer: B**
+
+float64 uses 8 bytes/element; float32 uses 4 bytes/element. Per column: 2,000,000 × (8 − 4) = 8,000,000 bytes = 8 MB saved. Two columns: 16 MB saved. That is 50% of the original 32 MB (2 columns × 2M rows × 8 bytes). Option A is wrong — 8 MB is one column's savings, not both. Option C (75%) would require going from 8 bytes to 2 bytes, which corresponds to float16 or int16, not float32. Option D is wrong — without `dtype`, pandas auto-infers float64 for columns with decimals; specifying `dtype` explicitly prevents this.
+
+---
+
+## Q14 — chunksize Return Type
+
+> **Week reference:** Week 7
+
+A student calls:
+
+```python
+result = pd.read_csv('large.csv', chunksize=10_000)
+print(type(result))
+```
+
+What does `type(result)` print?
+
+- A) `<class 'pandas.core.frame.DataFrame'>`
+- B) `<class 'list'>`
+- C) `<class 'pandas.io.parsers.readers.TextFileReader'>`
+- D) `<class 'generator'>`
+
+**Answer: C**
+
+`pd.read_csv(..., chunksize=N)` returns a `TextFileReader` object, which is a lazy iterator that yields one DataFrame per chunk when iterated. It is not a DataFrame (A) — no data has been read yet at return time. It is not a list (B) — no chunks are eagerly materialised. It is not a Python generator (D) — it is a purpose-built iterator class, though it behaves similarly. The key exam fact: the return type is `TextFileReader`, and you must iterate it (e.g., `for chunk in result:`) to access data.
+
+---
+
+## Q15 — Category Memory Calculation
+
+> **Week reference:** Week 7
+
+A `city` column stores strings with exactly 4 unique values across 1,000,000 rows. The four city names average 10 characters each (10 bytes as ASCII). Approximately how much memory does the column use after converting to `category`?
+
+- A) ~1 MB (int8 codes only)
+- B) ~8 MB (object pointer array)
+- C) ~40 MB (full strings per row)
+- D) ~4 MB (int32 codes for all rows)
+
+**Answer: A**
+
+With 4 unique values, category uses int8 codes (1 byte each, sufficient for 0–3). Memory: 1,000,000 × 1 byte = 1,000,000 bytes ≈ 1 MB for the codes, plus a negligible lookup table of 4 strings × ~10 bytes = ~40 bytes. Total ≈ 1 MB. Option B (~8 MB) describes the object dtype pointer array (8 bytes/row) — without string heap allocation this already underestimates object, but it is not category. Option C (~40 MB) approximates the full object dtype with heap strings (~40 bytes per Python str object × 1M rows). Option D (~4 MB) would require int32 codes (4 bytes/row), which pandas only uses when there are more than 32,767 unique values; 4 unique values uses int8.
+
+---
+
+## Q16 — Chunk Accumulation Pattern
+
+> **Week reference:** Week 7
+
+You need to compute the total sum of a `sales` column across a 10 GB CSV. Which code pattern is correct?
+
+- A)
+```python
+df = pd.read_csv('sales.csv', chunksize=100_000)
+total = df['sales'].sum()
+```
+- B)
+```python
+total = 0
+for chunk in pd.read_csv('sales.csv', chunksize=100_000):
+    total += chunk['sales'].sum()
+```
+- C)
+```python
+chunks = list(pd.read_csv('sales.csv', chunksize=100_000))
+total = pd.concat(chunks)['sales'].sum()
+```
+- D)
+```python
+reader = pd.read_csv('sales.csv', chunksize=100_000)
+total = reader.sum()
+```
+
+**Answer: B**
+
+Option B is the correct chunked accumulation pattern: iterate the TextFileReader, compute `.sum()` on each chunk DataFrame, and accumulate. Option A fails immediately — `pd.read_csv(..., chunksize=N)` returns a TextFileReader, not a DataFrame; calling `df['sales']` raises a TypeError. Option C technically produces the correct answer but loads the entire 10 GB file into RAM via `pd.concat`, defeating the purpose of chunking. Option D fails because TextFileReader has no `.sum()` method; you must iterate it to access chunk DataFrames.
+
+---
+
+## Q17 — memory_usage Without deep=True
+
+> **Week reference:** Week 7
+
+A DataFrame with 200,000 rows has a `description` column of type `object` containing strings averaging 80 characters each. `df.memory_usage()['description']` reports 1,600,000 bytes. What does this number represent, and what is the approximate true memory usage?
+
+- A) It represents the total string bytes (200,000 × 8); true usage is the same
+- B) It represents 200,000 × 8-byte pointers; true heap usage is approximately 200,000 × ~96 bytes ≈ 19 MB
+- C) It represents 200,000 × 80 character bytes; true usage is the same
+- D) It represents 200,000 × 8-byte pointers; true heap usage is exactly 1,600,000 bytes
+
+**Answer: B**
+
+`df.memory_usage()` (without `deep=True`) counts only the pointer array: 200,000 × 8 bytes = 1,600,000 bytes. Each Python `str` object on the heap occupies ~49–57 bytes of header/metadata plus the character data. For 80-character ASCII strings: ~57 bytes header + 80 bytes data = ~137 bytes, but CPython aligns/interns, so roughly 96–140 bytes/string is typical. At ~96 bytes: 200,000 × 96 = ~19.2 MB. The 1,600,000-byte figure understates true memory by roughly 12×. Option A incorrectly assumes 8 bytes per string accurately captures string content. Option C would imply pandas measured character bytes per row, which it does not. Option D incorrectly claims shallow == true — the whole point of `deep=True` is that shallow undercounts.
+
+---
+
+## Q18 — float32 vs float64 Memory Saving Percentage
+
+> **Week reference:** Week 7
+
+A DataFrame has 5 columns all stored as `float64`. After converting all five to `float32`, what percentage of memory is saved?
+
+- A) 25%
+- B) 50%
+- C) 75%
+- D) 87.5%
+
+**Answer: B**
+
+float64 uses 8 bytes/element; float32 uses 4 bytes/element. Savings per element = 4 bytes = 50% of the original 8 bytes. This applies equally to all 5 columns, so the total DataFrame memory is halved. A common exam trap is confusing float64→float32 (50% saving) with int64→int8 (87.5% saving) or float64→float16 (75% saving). Option A (25%) would correspond to removing 2 out of 8 bytes (e.g., float64→float48, which does not exist). Option C (75%) corresponds to float64→float16 (2 bytes). Option D (87.5%) corresponds to int64→int8 (8 bytes → 1 byte).
+
+---
+
+## Q19 — read_csv dtype vs astype Timing
+
+> **Week reference:** Week 7
+
+Which statement correctly describes the difference between specifying `dtype` in `pd.read_csv()` versus calling `.astype()` after loading?
+
+- A) Both approaches produce identical memory usage; `dtype` in `read_csv` is just syntactic sugar for an immediate post-load `.astype()` call
+- B) Specifying `dtype` in `read_csv` prevents pandas from ever allocating float64 arrays; `.astype()` first allocates float64, then copies to float32, temporarily using 3× the memory of the final result
+- C) `dtype` in `read_csv` only works for integer columns; `.astype()` is required for float columns
+- D) `.astype()` is more memory-efficient because it operates in-place without creating a copy
+
+**Answer: B**
+
+When you call `pd.read_csv('file.csv', dtype={'col': 'float32'})`, pandas parses directly into float32 arrays — no float64 intermediate is ever created. When you load without `dtype` and then call `df['col'].astype('float32')`, pandas first reads into float64 (full allocation), then creates a new float32 array (second allocation), so peak memory briefly holds both the float64 original and the float32 copy simultaneously — roughly 1.5× the final float64 size (or 3× the final float32 size). Option A is incorrect — the memory profiles differ during loading. Option C is incorrect — `dtype` in `read_csv` works for any numpy-compatible dtype including floats. Option D is incorrect — `.astype()` is not in-place; it always returns a new array.
+
+---
+
+## Q20 — Category Codes Integer Width
+
+> **Week reference:** Week 7
+
+A `region` column is converted to `category` dtype. The column has 200 unique region names across 5,000,000 rows. What integer type does pandas use internally for the category codes, and how many bytes per row does this consume?
+
+- A) int8 — 1 byte per row (range 0–127 covers 200 unique values... wait, int8 max is 127 which is less than 200)
+- B) int16 — 2 bytes per row (range −32,768 to 32,767 covers 0–199)
+- C) int32 — 4 bytes per row (always used for safety)
+- D) int64 — 8 bytes per row (pandas default integer width)
+
+**Answer: B**
+
+Pandas assigns codes starting from 0. With 200 unique values, codes run from 0 to 199. int8 (signed) has a maximum of 127, which does not cover 199 — so int8 is eliminated. int16 (signed) has a maximum of 32,767, which covers 0–199 easily. Pandas uses int16 for category codes when there are between 128 and 32,767 unique values. Memory per row: 2 bytes. Total for this column: 5,000,000 × 2 = 10,000,000 bytes = 10 MB. Option A correctly identifies why int8 fails (127 < 200) but then labels the answer A which is the int8 option — it is a distractor designed to test careful reading of the int8 signed range. Option C (int32) would be used only for > 32,767 unique values. Option D (int64) is never used for category codes.
+
+---
+
+## Q21 — Correct chunksize for Memory Budget
+
+> **Week reference:** Week 7
+
+A CSV file has columns: `user_id` (int32), `score` (float32), `timestamp` (int64). You have 96 MB of free RAM. What chunksize should you pass to `pd.read_csv()` to stay within budget?
+
+- A) 1,000,000
+- B) 6,000,000
+- C) 6,000,001
+- D) 16,000,000
+
+**Answer: B**
+
+Bytes per row: int32 (4) + float32 (4) + int64 (8) = 16 bytes. Max rows = 96,000,000 bytes / 16 bytes per row = 6,000,000 rows. So `chunksize=6_000_000` exactly fits the budget. Option A (1,000,000) = 1M × 16 = 16 MB — only uses 1/6 of the budget, so chunking is overly conservative and slower (more loop iterations than necessary). Option C (6,000,001) = 6,000,001 × 16 = 96,000,016 bytes — exceeds the 96 MB budget by 16 bytes; technically over budget. Option D (16,000,000) = 16M × 16 = 256 MB — 2.67× the budget, causing memory pressure or OOM.
+
+---
+
+## Q22 — Arrow Dictionary Type vs Pandas Category
+
+> **Week reference:** Week 7
+
+In PyArrow, the `pa.dictionary()` type is described as analogous to pandas `category` dtype. Which statement best describes their shared underlying concept?
+
+- A) Both store raw strings end-to-end in a contiguous byte buffer for cache efficiency
+- B) Both replace repeated string values with compact integer indices pointing to a lookup table of unique strings, reducing memory when cardinality is low
+- C) Both compress strings using LZ4 block compression before storing them in memory
+- D) Both convert strings to datetime64 internally for uniform storage width
+
+**Answer: B**
+
+`pa.dictionary(pa.int8(), pa.string())` in Arrow and `category` dtype in pandas both implement the same dictionary-encoding pattern: store each unique string once in a "dictionary" (lookup table), and store a small integer index per row instead of the full string. This saves memory when cardinality is low (few unique values relative to row count). Option A describes raw string storage (what `object` dtype / `pa.string()` do) — not dictionary encoding. Option C (LZ4 compression) is a separate concept available in Arrow columnar format for on-disk storage, not the in-memory dictionary encoding. Option D is wrong — neither type converts strings to datetime; that would destroy the string values.
 
 ---

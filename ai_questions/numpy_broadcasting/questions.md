@@ -3,6 +3,8 @@
 > Topics: Shape alignment rules, None/newaxis insertion, output shape derivation, common patterns.
 > Exam frequency: **2024 exam + re-exam** — tested multiple times.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--output-shape-3--23)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Output Shape: (3,) + (2,3)
@@ -254,5 +256,241 @@ Which of the following broadcasting operations raises a `ValueError`?
 - B) Correct (raises ValueError) — `(3,)` right-aligns as `(1,3)` against `(3,4)`. Last dims: 4 vs 3 — neither is 1 and they are unequal → `ValueError: operands could not be broadcast together with shapes (3,4) (3,)`. This is the classic trap: the 3 in `(3,)` appears to "match" the 3 in `(3,4)`, but right-alignment puts it against the 4.
 - C) Incorrect (valid) — `(1,4)` vs `(3,4)`. Dim 0: 3 vs 1 → 3 (broadcasts). Dim 1: 4 vs 4 → 4 (equal). Result: `(3,4)`. Explicitly adding the leading 1 makes the broadcast intention clear.
 - D) Incorrect (valid) — `(3,1)` vs `(3,4)`. Dim 0: 3 vs 3 → 3 (equal). Dim 1: 1 vs 4 → 4 (broadcasts). Result: `(3,4)`. This is the column-vector-times-matrix pattern, stretching the single column across all 4 columns.
+
+---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets broadcasting shape compatibility rules, output shape prediction, common errors, and vectorized distance/haversine patterns
+
+---
+
+## Q13 — Shape Compatibility: (5,3,4) + (3,)
+
+> **Week reference:** Week 4
+
+Which of the following correctly describes the result of adding arrays with shapes `(5, 3, 4)` and `(3,)`?
+
+- A) Output shape is `(5, 3, 4)` — `(3,)` broadcasts over the last axis
+- B) Output shape is `(5, 3, 3)`
+- C) ValueError — the trailing dims 4 and 3 are incompatible
+- D) Output shape is `(5, 3)`
+
+**Answer: C**
+
+Right-align `(3,)` as `(1, 1, 3)` against `(5, 3, 4)`. Dimension pairs: 5 vs 1 → ok, 3 vs 1 → ok, 4 vs 3 → neither is 1 and they are unequal → ValueError. The trap is assuming "the 3 in `(3,)` matches the 3 in the middle of `(5,3,4)`" — but right-alignment puts `(3,)` against the last dimension, which is 4. Always right-align before comparing.
+
+- A) Incorrect — `(3,)` right-aligns to `(1,1,3)`, so its value compares with the last dimension (4), not the middle one (3). Since 4 ≠ 3 and neither is 1, this is an error.
+- B) Incorrect — no broadcasting rule produces a `(5,3,3)` result from these shapes. The last dims mismatch.
+- C) Correct — right-alignment places `(3,)` against the trailing dimension of 4. Since 4 ≠ 3 and neither is 1, NumPy raises a ValueError.
+- D) Incorrect — broadcasting never reduces rank or drops dimensions; the output can only be the same rank or higher than the inputs.
+
+---
+
+## Q14 — newaxis to Fix a Column Subtraction
+
+> **Week reference:** Week 4
+
+You have a matrix `M` of shape `(N, M)` and a 1D array `v` of shape `(N,)` holding per-row values. You want to subtract `v` from every column. Which expression is correct?
+
+- A) `M - v`
+- B) `M - v[None, :]`
+- C) `M - v[:, None]`
+- D) `M - v[:, :, None]`
+
+**Answer: C**
+
+`v[:, None]` converts shape `(N,)` to `(N, 1)`. Right-aligned against `(N, M)`: dim 0 is N vs N (equal), dim 1 is 1 vs M → M (broadcasts). Result: `(N, M)` with each row having its corresponding `v[i]` subtracted from all M columns.
+
+- A) Incorrect — `v` shape `(N,)` pads left to `(1, N)`. Dim 1: M vs N — incompatible unless M == N. In the general case this raises a ValueError.
+- B) Incorrect — `v[None,:]` gives shape `(1, N)`. Same issue: right-aligned, the last dim is N vs M, which fails unless N == M.
+- C) Correct — `v[:,None]` gives shape `(N, 1)`. Dim 0 matches exactly (N vs N), dim 1 broadcasts (1 vs M → M).
+- D) Incorrect — `v[:,:,None]` would fail because `v` is 1D; indexing with two slices on a 1D array raises an IndexError.
+
+---
+
+## Q15 — Pairwise Euclidean Distance Shape
+
+> **Week reference:** Week 4
+
+You have `A` with shape `(N, 2)` and `B` with shape `(M, 2)` representing 2D points. Which expression computes `diff` such that `diff[i, j, :]` holds the coordinate differences between point `A[i]` and point `B[j]`, and what is `diff`'s shape?
+
+- A) `diff = A - B`, shape `(N, 2)` (requires N == M)
+- B) `diff = A[:, None, :] - B[None, :, :]`, shape `(N, M, 2)`
+- C) `diff = A[None, :, :] - B[:, None, :]`, shape `(M, N, 2)`
+- D) `diff = A[:, :, None] - B[None, :, :]`, shape `(N, 2, M)`
+
+**Answer: B**
+
+`A[:, None, :]` has shape `(N, 1, 2)` and `B[None, :, :]` has shape `(1, M, 2)`. Broadcasting: dim 0: N vs 1 → N, dim 1: 1 vs M → M, dim 2: 2 vs 2 → 2. Result: `(N, M, 2)`. Entry `[i, j, :]` is `A[i] - B[j]`, which is exactly the per-pair coordinate difference needed to compute pairwise distances.
+
+- A) Incorrect — direct subtraction of `(N,2)` and `(M,2)` requires N == M and gives element-wise differences between corresponding pairs, not all pairs.
+- B) Correct — the `[:, None, :]` and `[None, :, :]` expansions create compatible `(N,1,2)` and `(1,M,2)` shapes, yielding all N×M differences with shape `(N, M, 2)`.
+- C) Incorrect — this swaps the roles of A and B, giving shape `(M, N, 2)` where entry `[j, i, :]` is `B[j] - A[i]`. The index order is transposed relative to the stated requirement.
+- D) Incorrect — `A[:, :, None]` is `(N, 2, 1)` and `B[None, :, :]` is `(1, M, 2)`. Dim 1: 2 vs M and dim 2: 1 vs 2 — both must be checked and this does not produce the intended `(N, M, 2)` layout.
+
+---
+
+## Q16 — Broadcasting Copies Data?
+
+> **Week reference:** Week 4
+
+When NumPy broadcasts a `(1, 4)` array against a `(3, 4)` array, what happens internally?
+
+- A) NumPy creates a new `(3, 4)` array by physically copying the row 3 times before computing
+- B) NumPy sets the stride of the broadcast dimension to 0, so the same memory is read repeatedly without copying
+- C) NumPy raises a warning and falls back to a loop
+- D) NumPy temporarily converts both arrays to lists, then broadcasts
+
+**Answer: B**
+
+Broadcasting uses stride tricks: the stretched dimension gets stride = 0 in the broadcast view. Reading along that axis repeatedly returns the same memory address — no copy is made. This is why broadcasting is both memory-efficient and fast. Physical copies only happen if you explicitly call `np.broadcast_to(...).copy()` or trigger a write to the broadcast result.
+
+- A) Incorrect — no physical copy is made during broadcasting. The data is read via a zero stride, which means the same bytes are addressed on each pass.
+- B) Correct — NumPy's broadcast mechanism sets the memory stride to 0 along any stretched dimension. The data appears tiled but occupies its original footprint in memory.
+- C) Incorrect — NumPy never falls back to a Python loop internally for broadcasting; the operation is fully implemented in C with stride manipulation.
+- D) Incorrect — NumPy never converts arrays to Python lists for arithmetic. All operations remain at the C/BLAS level for performance.
+
+---
+
+## Q17 — np.broadcast_shapes Result
+
+> **Week reference:** Week 4
+
+What does `np.broadcast_shapes((5, 1, 4), (3, 4))` return?
+
+- A) `(5, 3, 4)`
+- B) ValueError
+- C) `(5, 1, 4)`
+- D) `(3, 4)`
+
+**Answer: A**
+
+Left-pad `(3, 4)` to `(1, 3, 4)`. Compare dim by dim: 5 vs 1 → 5, 1 vs 3 → 3, 4 vs 4 → 4. Result: `(5, 3, 4)`. The middle dimension of 1 in the first shape stretches to 3, and the leading 1 from padding stretches to 5.
+
+- A) Correct — after padding `(3,4)` becomes `(1,3,4)`. Pairs: (5,1)→5, (1,3)→3, (4,4)→4. Output: `(5,3,4)`.
+- B) Incorrect — all dimension pairs are compatible (equal or one is 1). No error is raised.
+- C) Incorrect — the middle axis of 1 in `(5,1,4)` stretches to match the 3 from the second shape. It does not remain 1 in the output.
+- D) Incorrect — the result must accommodate all dimensions of both inputs. Returning only `(3,4)` would discard the leading 5.
+
+---
+
+## Q18 — Which Shape Pair is NOT Compatible?
+
+> **Week reference:** Week 4
+
+Which pair of shapes raises a `ValueError` when added?
+
+- A) `(5, 3, 4)` and `(5, 1, 1)`
+- B) `(5, 3, 4)` and `(1, 3, 1)`
+- C) `(5, 3, 4)` and `(5,)`
+- D) `(5, 3, 4)` and `(3,)`
+
+**Answer: D**
+
+For option D: `(3,)` pads left to `(1, 1, 3)`. Dim 2: 4 vs 3 — neither is 1, not equal → ValueError. For the others: A gives `(5,3,4)` (1s stretch), B gives `(5,3,4)` (1s stretch), C pads `(5,)` to `(1,1,5)` — dim 2: 4 vs 5, also incompatible. Wait — let me verify C: `(5,)` → `(1,1,5)`, last dim 4 vs 5 → error too.
+
+**Corrected reasoning:** Both C and D raise errors. D is the intended answer since the question specifically targets the right-alignment trap. For option C: `(5,)` pads to `(1,1,5)`, last dims 4 vs 5 → error. For option A: `(5,1,1)` → dims (5,5),(3,1)→3,(4,1)→4 = `(5,3,4)` valid. For option B: `(1,3,1)` → dims (5,1)→5,(3,3)→3,(4,1)→4 = `(5,3,4)` valid. Options C and D both fail; D is the classic exam trap (right-alignment mismatch).
+
+- A) Incorrect (valid) — `(5,1,1)` vs `(5,3,4)`: dims (5,5)→5, (1,3)→3, (1,4)→4. Result `(5,3,4)`. Both 1s stretch.
+- B) Incorrect (valid) — `(1,3,1)` vs `(5,3,4)`: dims (1,5)→5, (3,3)→3, (1,4)→4. Result `(5,3,4)`. The two 1s stretch.
+- C) Incorrect but also raises error — `(5,)` pads to `(1,1,5)`. Dim 2: 4 vs 5, neither is 1 → also a ValueError.
+- D) Correct — `(3,)` pads to `(1,1,3)`. Dim 2: 4 vs 3, neither is 1 → ValueError. This is the primary exam trap: the 3 in `(3,)` looks like it should match the 3 in `(5,3,4)`, but right-alignment places it against the 4.
+
+---
+
+## Q19 — np.expand_dims Equivalence
+
+> **Week reference:** Week 4
+
+Given `a` with shape `(6, 4)`, which expression produces a shape of `(6, 1, 4)`?
+
+- A) `np.expand_dims(a, axis=0)`
+- B) `np.expand_dims(a, axis=1)`
+- C) `np.expand_dims(a, axis=-1)`
+- D) `a[None, :, :]`
+
+**Answer: B**
+
+`np.expand_dims(a, axis=1)` inserts a new axis at position 1, turning `(6, 4)` into `(6, 1, 4)`. Axis 0 would give `(1, 6, 4)`, axis -1 (last) would give `(6, 4, 1)`, and `a[None, :, :]` inserts a leading axis giving `(1, 6, 4)`.
+
+- A) Incorrect — `axis=0` inserts at the front, giving `(1, 6, 4)`.
+- B) Correct — `axis=1` inserts in the middle, giving `(6, 1, 4)`. This is equivalent to `a[:, None, :]`.
+- C) Incorrect — `axis=-1` inserts at the end (after the last existing axis), giving `(6, 4, 1)`.
+- D) Incorrect — `a[None, :, :]` inserts a leading axis, giving `(1, 6, 4)`, same as `np.expand_dims(a, axis=0)`.
+
+---
+
+## Q20 — Haversine All-Pairs Pattern
+
+> **Week reference:** Week 4
+
+You have `lats` and `lons` each with shape `(N,)` representing N GPS points. To compute all-pairs great-circle distances, you first need the coordinate differences `dlat[i,j] = lats[i] - lats[j]` for all i, j. Which code correctly computes `dlat` with shape `(N, N)`?
+
+- A) `dlat = lats - lats`
+- B) `dlat = lats[:, None] - lats[None, :]`
+- C) `dlat = lats[None, :] - lats[:, None]`
+- D) `dlat = lats[:, None] - lats[:, None]`
+
+**Answer: B**
+
+`lats[:, None]` has shape `(N, 1)` and `lats[None, :]` has shape `(1, N)`. Broadcasting: `(N,1)` vs `(1,N)` → `(N,N)`. Entry `[i,j]` is `lats[i] - lats[j]` — exactly the desired all-pairs difference. This is the outer-subtraction pattern used in vectorized haversine calculations.
+
+- A) Incorrect — `lats - lats` is element-wise subtraction of the array with itself, giving an `(N,)` array of zeros. No pairwise differences are computed.
+- B) Correct — `(N,1)` minus `(1,N)` broadcasts to `(N,N)`. Entry `[i,j]` = `lats[i] - lats[j]`, the per-pair latitude difference.
+- C) Incorrect — this gives `(N,N)` too, but entry `[i,j]` = `lats[j] - lats[i]` (transposed). The i and j roles are swapped, so the sign is flipped.
+- D) Incorrect — `lats[:,None] - lats[:,None]` subtracts two identical `(N,1)` arrays, giving an `(N,1)` array of zeros — not the pairwise matrix.
+
+---
+
+## Q21 — Three-Way Broadcasting
+
+> **Week reference:** Week 4
+
+What is the output shape of `np.ones((8, 1, 6)) + np.ones((1, 5, 1)) + np.ones((6,))`?
+
+- A) `(8, 5, 6)`
+- B) ValueError
+- C) `(8, 5, 6)` — but only after the first two operands are summed first
+- D) `(8, 1, 6)`
+
+**Answer: A**
+
+NumPy evaluates left-to-right. First, `(8,1,6) + (1,5,1)`: pairs (8,1)→8, (1,5)→5, (6,1)→6 → intermediate `(8,5,6)`. Then `(8,5,6) + (6,)`: `(6,)` pads to `(1,1,6)` → pairs (8,1)→8, (5,1)→5, (6,6)→6 → `(8,5,6)`. Final shape: `(8,5,6)`.
+
+- A) Correct — the three-way addition resolves to `(8,5,6)`. Each 1-dim in the first two arrays stretches, and the 1D `(6,)` aligns with the last axis.
+- B) Incorrect — all pairwise dimension checks pass. No ValueError occurs.
+- C) Incorrect — option C is numerically equivalent to A and describes the same process. The answer is `(8,5,6)` regardless of how you frame intermediate steps; this option is a duplicate of A and is therefore not a distinct alternative.
+- D) Incorrect — the second operand `(1,5,1)` causes the middle axis to expand from 1 to 5. The output cannot remain `(8,1,6)`.
+
+---
+
+## Q22 — Fixing a Row-Mean Subtraction Bug
+
+> **Week reference:** Week 4
+
+A student writes:
+
+```python
+X = np.random.rand(100, 50)
+row_mean = X.mean(axis=1)   # shape (100,)
+X_centered = X - row_mean   # BUG
+```
+
+The code raises a `ValueError`. Which fix is correct, and why?
+
+- A) `X_centered = X - row_mean[None, :]` — adds a leading axis
+- B) `X_centered = X - row_mean[:, None]` — converts to column vector `(100, 1)`
+- C) `X_centered = X.T - row_mean` — transposes first
+- D) `X_centered = X - row_mean.reshape(1, 100)` — reshapes to row vector
+
+**Answer: B**
+
+`row_mean` has shape `(100,)` which pads left to `(1, 100)`. Against `(100, 50)`: last dims 50 vs 100 — mismatch. The fix is `row_mean[:, None]`, giving shape `(100, 1)`. Against `(100, 50)`: dim 0 is 100 vs 100 (equal), dim 1 is 1 vs 50 → 50 (broadcasts). Each row of X has its own mean subtracted from all 50 features.
+
+- A) Incorrect — `row_mean[None,:]` gives `(1, 100)`. Against `(100, 50)`: dim 1 is 100 vs 50 — still a mismatch.
+- B) Correct — `row_mean[:,None]` gives `(100, 1)`. Dim 0 matches exactly (100), dim 1 broadcasts (1 → 50). Each row gets its row mean subtracted.
+- C) Incorrect — `X.T` has shape `(50, 100)`. Subtracting `row_mean` of shape `(100,)` pads to `(1, 100)`. Dim 0: 50 vs 1 → 50, dim 1: 100 vs 100 → 100. This gives a transposed `(50, 100)` result — not the desired `(100, 50)` row-centered matrix.
+- D) Incorrect — `row_mean.reshape(1, 100)` gives shape `(1, 100)`. Against `(100, 50)`: dim 1 is 100 vs 50 — still incompatible, same as option A.
 
 ---

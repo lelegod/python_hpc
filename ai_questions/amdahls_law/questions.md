@@ -3,6 +3,8 @@
 > Topics: S(p) formula, solving for F, maximum speedup, efficiency, serial time calculations.
 > Exam frequency: **Every exam** — highest priority topic.
 
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--compute-speedup-f09-p8)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+
 ---
 
 ## Q1 — Compute Speedup F=0.9 p=8
@@ -256,3 +258,207 @@ Program A has parallel fraction F_A = 0.9 and Program B has parallel fraction F_
 - D) Incorrect — S(p) approaches but never reaches S_max with finite p. S_A(20)≈6.9 is well below S_max_A=10, and S_B(20)≈10.3 is well below S_max_B=20. Reaching S_max requires p→∞.
 
 ---
+
+## Set 2 — Generated Practice Questions (Exam-Day Focus)
+
+> Targets reverse-solving for F and p, efficiency calculations, and multi-program comparisons at scale
+
+---
+
+## Q13 — Reverse-Solve for F from Raw Times
+
+> **Week reference:** Week 5
+
+A program runs for T(1) = 120 seconds on one core. On 6 cores it runs for T(6) = 30 seconds. Using Amdahl's Law rearranged to solve for F, what is the parallel fraction?
+
+- A) F = 0.80
+- B) F = 0.90
+- C) F ≈ 0.933
+- D) F ≈ 0.967
+
+**Answer: B**
+
+- A) Incorrect — F = 0.80 gives S(6) = 1/(0.2 + 0.8/6) = 1/0.333 ≈ 3.0, meaning T(6) = 120/3 = 40s, not 30s. F = 0.80 produces too little speedup.
+- B) Correct — S = 120/30 = 4. Using F = p(1 - 1/S)/(p-1): F = 6(1 - 0.25)/5 = 6 × 0.75 / 5 = 4.5/5 = 0.90. Verify: S(6) = 1/(0.1 + 0.15) = 1/0.25 = 4.0 ✓.
+- C) Incorrect — F = 0.933 gives S(6) = 1/(0.067 + 0.933/6) = 1/(0.067 + 0.155) = 1/0.222 ≈ 4.5, meaning T(6) ≈ 26.7s — too fast for the observed 30s.
+- D) Incorrect — F = 0.967 gives S(6) ≈ 1/(0.033 + 0.161) = 1/0.194 ≈ 5.15, meaning T(6) ≈ 23.3s — again too fast. A higher F implies higher speedup and shorter T(6).
+
+---
+
+## Q14 — Minimum Cores for Target Speedup
+
+> **Week reference:** Week 5
+
+A program has parallel fraction F = 0.8. A developer needs at least S = 3× speedup. What is the minimum integer number of cores p that achieves this?
+
+- A) p = 4
+- B) p = 6
+- C) p = 8
+- D) p = 10
+
+**Answer: B**
+
+- A) Incorrect — S(4) = 1/(0.2 + 0.8/4) = 1/0.4 = 2.5 < 3. Four cores fall short of the target.
+- B) Correct — Solve: 3 = 1/(0.2 + 0.8/p) → 0.8/p = 1/3 - 0.2 = 2/15 → p = 0.8 × 15/2 = 6. S(6) = 1/(0.2 + 0.1333) = 1/0.3333 = 3.0 exactly. Six is the minimum.
+- C) Incorrect — S(8) = 1/(0.2 + 0.1) = 1/0.3 ≈ 3.33 also exceeds the target, but 6 already meets it — 8 is not the minimum.
+- D) Incorrect — S(10) = 1/(0.2 + 0.08) = 1/0.28 ≈ 3.57 exceeds the target by even more but wastes four extra cores relative to the minimum of 6.
+
+---
+
+## Q15 — Efficiency Comparison Across Core Counts
+
+> **Week reference:** Week 5
+
+A program with F = 0.85 is run on 4 cores and again on 16 cores. Which of the following correctly describes how efficiency E(p) = S(p)/p changes?
+
+- A) E(4) ≈ 0.69, E(16) ≈ 0.31 — efficiency decreases as more cores are added.
+- B) E(4) ≈ 0.69, E(16) ≈ 0.69 — efficiency stays constant as long as F is fixed.
+- C) E(4) ≈ 0.85, E(16) ≈ 0.85 — efficiency equals the parallel fraction F.
+- D) E(4) ≈ 0.69, E(16) ≈ 0.85 — efficiency increases toward F as more cores are added.
+
+**Answer: A**
+
+- A) Correct — S(4) = 1/(0.15 + 0.2125) = 1/0.3625 ≈ 2.759; E(4) = 2.759/4 ≈ 0.69. S(16) = 1/(0.15 + 0.053125) = 1/0.203125 ≈ 4.923; E(16) = 4.923/16 ≈ 0.31. Efficiency strictly falls as p rises.
+- B) Incorrect — Efficiency is not constant with fixed F. Speedup grows sub-linearly because the serial fraction bottleneck is unchanged, so S(p)/p falls as p increases.
+- C) Incorrect — Efficiency equals F only at p = 1. For any p > 1, the serial fraction causes idle time on each core, pulling E below F.
+- D) Incorrect — The trend is reversed. Efficiency decreases toward zero as p → ∞, not toward F. The serial fraction wastes a proportionally larger share of total core-time at high core counts.
+
+---
+
+## Q16 — Gustafson's Law vs Amdahl's Law
+
+> **Week reference:** Week 5
+
+A program has a serial fraction α = 0.1 (10% serial). Using Gustafson's Law on p = 16 cores, what is the scaled speedup S_G(16)?
+
+- A) S_G = 10 — same as Amdahl's S_max with F = 0.9.
+- B) S_G = 14.5 — computed as p - α(p - 1).
+- C) S_G = 6.4 — same as Amdahl's S(16) with F = 0.9.
+- D) S_G = 16 — because 90% of the work is parallelisable.
+
+**Answer: B**
+
+- A) Incorrect — 10 is Amdahl's S_max = 1/(1-0.9) = 1/0.1, which fixes problem size. Gustafson's Law grows the problem size with p, so it predicts a higher scaled speedup.
+- B) Correct — S_G(16) = p - α(p-1) = 16 - 0.1 × 15 = 16 - 1.5 = 14.5. Gustafson allows speedup to grow nearly linearly with p when the workload scales with core count.
+- C) Incorrect — 6.4 is Amdahl's fixed-size formula result: S(16) = 1/(0.1 + 0.9/16) = 1/0.15625 = 6.4. Gustafson's scaled speedup of 14.5 is much higher.
+- D) Incorrect — Perfect speedup of 16 would require α = 0. With 10% serial work, Gustafson gives 14.5, not 16.
+
+---
+
+## Q17 — Two Programs, Large Core Count
+
+> **Week reference:** Week 5
+
+Program X has F_X = 0.92 and Program Y has F_Y = 0.96. As the number of cores p grows very large, what is the ratio S_max_Y / S_max_X?
+
+- A) Ratio ≈ 1.04 — the programs have nearly equal maximum speedup.
+- B) Ratio = 3.0 — Program Y's maximum speedup is three times that of Program X.
+- C) Ratio = 2.0 — halving the serial fraction doubles the maximum speedup.
+- D) Ratio ≈ 1.5 — Program Y is 50% faster at large core counts.
+
+**Answer: C**
+
+- A) Incorrect — 0.96/0.92 ≈ 1.04 compares the F values directly. S_max depends on the serial fraction (1-F), not F itself: (1-0.92) = 0.08 and (1-0.96) = 0.04, a 2:1 ratio, not 1.04:1.
+- B) Incorrect — Ratio = 3.0 would require (1-F_X)/(1-F_Y) = 3. Here 0.08/0.04 = 2, not 3. Three-fold difference would need, e.g., serial fractions of 0.12 and 0.04.
+- C) Correct — S_max_X = 1/0.08 = 12.5; S_max_Y = 1/0.04 = 25. Ratio = 25/12.5 = 2.0. Halving the serial fraction from 8% to 4% exactly doubles S_max because S_max = 1/(1-F) is inversely proportional to the serial fraction.
+- D) Incorrect — Ratio = 1.5 would require S_max_Y = 1.5 × 12.5 = 18.75, meaning 1-F_Y = 1/18.75 ≈ 0.053. The actual serial fraction is 0.04, not 0.053.
+
+---
+
+## Q18 — Finding T(1) From T(p) and S_max
+
+> **Week reference:** Week 5
+
+A program's speedup curve saturates at S_max = 5. On 4 cores it takes T(4) = 20 seconds. What is the single-core runtime T(1)?
+
+- A) T(1) = 40 seconds
+- B) T(1) = 50 seconds
+- C) T(1) = 80 seconds
+- D) T(1) = 100 seconds
+
+**Answer: B**
+
+- A) Incorrect — T(1) = 40s implies S(4) = 40/20 = 2.0. With F = 0.8 the formula gives S(4) = 1/(0.2+0.2) = 2.5 ≠ 2.0. These numbers are inconsistent.
+- B) Correct — S_max = 5 → F = 0.8. S(4) = 1/(0.2 + 0.8/4) = 1/0.4 = 2.5. T(1) = T(4) × S(4) = 20 × 2.5 = 50s.
+- C) Incorrect — T(1) = 80s implies S(4) = 4.0. For S(4) = 4 with p = 4 the denominator must be 0.25; solving (1-F) + F/4 = 0.25 gives F = 1.0. But F = 0.8, so 80s is impossible.
+- D) Incorrect — T(1) = 100s implies S(4) = 5.0 = S_max. S_max is only reached as p → ∞; with finite p = 4, S(4) is always strictly less than S_max. S(4) = 2.5 < 5 here.
+
+---
+
+## Q19 — Amdahl at Extreme Core Counts
+
+> **Week reference:** Week 5
+
+A program with F = 0.95 is run on 20 cores and then on 10000 cores. Which of the following is closest to the ratio S(10000) / S(20)?
+
+- A) About 1.05 — the two speedups are nearly equal.
+- B) About 1.9 — S(10000) is roughly double S(20).
+- C) About 500 — speedup scales almost linearly with core count at high F.
+- D) Exactly 20 — S(10000) equals S_max.
+
+**Answer: B**
+
+- A) Incorrect — The two speedups differ by nearly a factor of 2. S(20) ≈ 10.3 and S(10000) ≈ 20.0; going from 20 to 10000 cores still closes most of the gap to S_max = 20.
+- B) Correct — S(20) = 1/(0.05 + 0.0475) = 1/0.0975 ≈ 10.26; S(10000) = 1/(0.05 + 0.000095) ≈ 19.96. Ratio ≈ 19.96/10.26 ≈ 1.94, i.e., roughly double. The remaining headroom between S(20) and S_max = 20 is almost fully exploited by 10000 cores.
+- C) Incorrect — Linear scaling requires F = 1.0. With S_max = 20 (serial fraction 5%), even infinite cores yield only 20×. A ratio of 500 is impossible.
+- D) Incorrect — S_max = 1/(1-0.95) = 20 is the limit as p → ∞. At p = 10000, S ≈ 19.96, very close but not exactly equal to 20. Exact equality requires infinite cores.
+
+---
+
+## Q20 — Serial Fraction Bottleneck at Scale
+
+> **Week reference:** Week 5
+
+A data-science pipeline with F = 0.98 runs on a 128-core node. A colleague claims that switching to a 256-core node would approximately double the speedup. Is the colleague correct?
+
+- A) Yes — doubling cores always doubles speedup when F > 0.5.
+- B) No — at p = 128 the program is already near S_max, so doubling cores gives minimal gain.
+- C) No — S(256) is actually lower than S(128) because communication overhead grows with core count.
+- D) Yes — S(256) ≈ 2 × S(128) because the program is 98% parallel.
+
+**Answer: B**
+
+- A) Incorrect — Doubling cores doubles speedup only when the program is far below S_max (efficiency near 1). With S_max = 50 and S(128) ≈ 36.2 the program is already at ~72% of its ceiling; doubling gives only ~16% gain.
+- B) Correct — S_max = 1/0.02 = 50. S(128) = 1/(0.02 + 0.007656) ≈ 36.2; S(256) = 1/(0.02 + 0.003828) ≈ 41.9. That is only a 16% improvement, far from doubling.
+- C) Incorrect — Pure Amdahl's Law predicts S(256) > S(128) (more cores never hurt). The real issue is diminishing returns, not a slowdown. Communication overhead is a real concern but is outside the Amdahl model.
+- D) Incorrect — A high F does not guarantee proportional scaling once you approach S_max. At 72% of the ceiling, adding cores buys diminishing returns regardless of how large F is.
+
+---
+
+## Q21 — Comparing Efficiency Before and After Optimization
+
+> **Week reference:** Week 5
+
+Before optimization a program has F = 0.75. After optimization the serial fraction is halved from 25% to 12.5%, giving F = 0.875. Both are run on 8 cores. Which answer correctly shows both efficiencies?
+
+- A) E_before ≈ 0.36, E_after ≈ 0.53 — efficiency increases by about 17 percentage points.
+- B) E_before ≈ 0.36, E_after ≈ 0.36 — efficiency is unchanged because p is the same.
+- C) E_before ≈ 0.75, E_after ≈ 0.875 — efficiency equals the parallel fraction F.
+- D) E_before ≈ 0.36, E_after ≈ 0.59 — efficiency increases by about 23 percentage points.
+
+**Answer: A**
+
+- A) Correct — S_before(8) = 1/(0.25 + 0.75/8) = 1/0.34375 ≈ 2.909; E_before = 2.909/8 ≈ 0.364. S_after(8) = 1/(0.125 + 0.875/8) = 1/0.234375 ≈ 4.267; E_after = 4.267/8 ≈ 0.533. Efficiency increases by ~17 percentage points.
+- B) Incorrect — Efficiency depends on both F and p. Reducing the serial fraction changes S(p) and therefore E(p) even when p is held fixed.
+- C) Incorrect — E = F only at p = 1. For any p > 1, the serial fraction creates idle time on each core, pulling E strictly below F.
+- D) Incorrect — E_after ≈ 0.59 corresponds to F = 0.90 (serial fraction 10%), not F = 0.875 (serial fraction 12.5%). The optimization halves 25% to 12.5%, not to 10%.
+
+---
+
+## Q22 — Amdahl Limit When Serial Work is Fixed Overhead
+
+> **Week reference:** Week 5
+
+A program always spends exactly 4 seconds on serial setup regardless of problem size. The total single-core runtime is T(1) = 40 seconds. What is S_max, and what speedup S(8) does Amdahl's Law predict on 8 cores?
+
+- A) S_max = 10, S(8) ≈ 4.71
+- B) S_max = 10, S(8) = 8.0
+- C) S_max = 40, S(8) ≈ 4.71
+- D) S_max = 20, S(8) ≈ 4.71
+
+**Answer: A**
+
+- A) Correct — Serial fraction = 4/40 = 0.10, so F = 0.90. S_max = 1/(1-0.9) = 10. S(8) = 1/(0.1 + 0.9/8) = 1/(0.1+0.1125) = 1/0.2125 ≈ 4.71.
+- B) Incorrect — S(8) = 8.0 requires perfect linear speedup (F = 1.0). With 4 seconds of mandatory serial work, the parallel part alone takes at least 4s on any number of cores, so T(8) ≥ 4s and S(8) ≤ 10. Linear speedup is impossible.
+- C) Incorrect — S_max = 40 would require 1/(1-F) = 40, meaning 1-F = 0.025, so F = 0.975. That corresponds to only 1 second of serial work. The problem states 4 seconds (10% of 40s).
+- D) Incorrect — S_max = 20 requires F = 0.95 (serial fraction 5%), which corresponds to 2 seconds of serial work. The setup is 4 seconds (10%), giving S_max = 10, not 20.
