@@ -7,6 +7,10 @@
 
 ## Q1 — Job Array Index Range
 
+> **Week reference:** Week 11
+
+**Mental Model:** LSF arrays are 1-based — the range in `[1-10]` is both the index range and the literal values `$LSB_JOBINDEX` takes. Python lists are 0-based. The mismatch means you always need a `- 1` when indexing Python structures from `$LSB_JOBINDEX`.
+
 You submit a job array with `#BSUB -J myjob[1-10]`. What values does `$LSB_JOBINDEX` take across the 10 array elements?
 
 - A) 0, 1, 2, ..., 9
@@ -16,14 +20,18 @@ You submit a job array with `#BSUB -J myjob[1-10]`. What values does `$LSB_JOBIN
 
 **Answer: B**
 
-- A) Incorrect — $LSB_JOBINDEX is 1-based, not 0-based; index 0 does not exist.
-- B) Correct — LSF numbers array elements starting from 1, giving exactly the range specified.
-- C) Incorrect — The range [1-10] produces exactly 10 elements, not 11.
-- D) Incorrect — [1-10] is inclusive on both ends, so index 10 is included.
+- A) Incorrect — `$LSB_JOBINDEX` is 1-based in LSF, not 0-based. Index 0 does not exist; the first array element always has index 1. Choosing A is the most common off-by-one error when coming from zero-indexed programming languages.
+- B) Correct — LSF numbers array elements starting from 1, matching the range specified in the directive. The range `[1-10]` is inclusive on both ends, giving exactly 10 elements with indices 1 through 10.
+- C) Incorrect — the range `[1-10]` produces exactly 10 elements (10 − 1 + 1 = 10). Including index 0 would require the directive `[0-10]`, giving 11 elements.
+- D) Incorrect — `[1-10]` is inclusive on the upper bound; index 10 is included. The range `[1-9]` would give 9 elements.
 
 ---
 
 ## Q2 — Job Array Step Syntax
+
+> **Week reference:** Week 11
+
+**Mental Model:** The syntax `[start-end:step]` mirrors Python's slice notation but is 1-based. Starting at 1 with step 2 gives odd numbers. This is useful for partitioning work: one array gets odds, another gets evens, covering all files without overlap.
 
 You submit `#BSUB -J sim[1-100:2]`. Which indices are created?
 
@@ -34,14 +42,18 @@ You submit `#BSUB -J sim[1-100:2]`. Which indices are created?
 
 **Answer: C**
 
-- A) Incorrect — The `:2` step means every second index is skipped; not all 100 are created.
-- B) Incorrect — Starting from 1 with a step of 2 gives odd numbers, not even.
-- C) Correct — Starting at 1 and incrementing by 2 yields 1, 3, 5, ..., 99 (50 elements total).
-- D) Incorrect — LSF arrays are 1-based; index 0 never exists.
+- A) Incorrect — the `:2` step means every second value is skipped; not all 100 are created. Without a step, `[1-100]` would create all 100. The `:2` reduces the count to 50.
+- B) Incorrect — starting from 1 (not 0) with a step of 2 gives 1, 3, 5, ... (odd numbers). Even numbers would require starting at 2: `[2-100:2]`.
+- C) Correct — starting at 1 and incrementing by 2 yields 1, 3, 5, ..., 99, giving 50 elements total. These are the odd-numbered indices in the 1–100 range.
+- D) Incorrect — LSF arrays are 1-based; index 0 never exists in any LSF job array. The lowest possible index is always 1.
 
 ---
 
 ## Q3 — Zero-Based Array Access in Python
+
+> **Week reference:** Week 11
+
+**Mental Model:** `$LSB_JOBINDEX` is 1-based, Python lists are 0-based. Always subtract 1. If element 1 should process `file_list[0]`, element 2 should process `file_list[1]`, etc. — that is `file_list[index - 1]`. This is the most commonly tested indexing trap on the exam.
 
 A Python script is submitted as part of a job array. The script reads a list of input files called `file_list`. Which line correctly picks the file for the current array element?
 
@@ -52,14 +64,18 @@ A Python script is submitted as part of a job array. The script reads a list of 
 
 **Answer: B**
 
-- A) Incorrect — $LSB_JOBINDEX starts at 1; index 1 on a list skips the first element.
-- B) Correct — Subtracting 1 converts the 1-based LSF index to a 0-based Python list index.
-- C) Incorrect — Adding 1 would skip one extra element and cause an off-by-one error.
-- D) Incorrect — SLURM_ARRAY_TASK_ID is a SLURM variable; DTU HPC uses LSF/BSUB.
+- A) Incorrect — `$LSB_JOBINDEX` starts at 1, so for element 1, index 1 skips `file_list[0]`. The last element would try `file_list[N]` which raises an `IndexError` (off by one at both ends).
+- B) Correct — subtracting 1 converts the 1-based LSF index to a 0-based Python list index. Element 1 → `file_list[0]`, element 2 → `file_list[1]`, ..., element N → `file_list[N-1]`. This is the correct mapping.
+- C) Incorrect — adding 1 compounds the off-by-one error in the wrong direction. Element 1 accesses `file_list[2]`, skipping `file_list[0]` and `file_list[1]`, and the last element would cause an `IndexError`.
+- D) Incorrect — `SLURM_ARRAY_TASK_ID` is the SLURM scheduler's equivalent variable; DTU HPC uses LSF/BSUB where the variable is `LSB_JOBINDEX`. This line would raise a `KeyError` because the environment variable does not exist in LSF.
 
 ---
 
 ## Q4 — Per-Element Log Files
+
+> **Week reference:** Week 11
+
+**Mental Model:** `%J` = job ID (same for all elements in the array), `%I` = array index (unique per element). To get unique filenames per run AND per element, you need both. Using only `%J` causes all 50 elements to write to the same file simultaneously, producing garbled output.
 
 You want each element of a 50-element job array to write to its own log file. Which `#BSUB` output directive achieves this?
 
@@ -70,14 +86,18 @@ You want each element of a 50-element job array to write to its own log file. Wh
 
 **Answer: C**
 
-- A) Incorrect — `%J` expands to the parent job ID only; all 50 elements share the same file and outputs are interleaved.
-- B) Incorrect — `%I` gives the array index but omits the job ID, which can cause collisions between different runs.
-- C) Correct — `%J` (job ID) + `%I` (array index) together produce a unique filename per element per run.
-- D) Incorrect — A fixed filename means all 50 elements write to the same file, mixing output unpredictably.
+- A) Incorrect — `%J` expands to the parent job ID (e.g. `12345`), which is the same for all 50 array elements. All elements would write to `results_12345.out` simultaneously, interleaving output unpredictably and making debugging impossible.
+- B) Incorrect — `%I` gives the array index (1, 2, ..., 50), producing unique files per element. However, if you rerun the job (new job ID), the new run's output overwrites the old one since the filenames are the same. Missing `%J` causes collisions across runs.
+- C) Correct — combining `%J` (job ID, unique per submission) and `%I` (array index, unique per element within a run) produces a fully unique filename like `results_12345_3.out` per element per run. This is the standard pattern for job array logging.
+- D) Incorrect — a fixed filename means all 50 elements compete to write to `results.out` at the same time, producing a race condition on the file and mixed-up output from different array elements.
 
 ---
 
 ## Q5 — Email Notification with Job Arrays
+
+> **Week reference:** Week 11
+
+**Mental Model:** LSF treats each array element as an independent job for all purposes, including notifications. `-N` on an array of 200 = 200 separate "job finished" emails. Never use `-N` with large arrays — use a dependency job to monitor completion instead.
 
 A developer adds `#BSUB -N` to a job array script `#BSUB -J process[1-200]` so they know when the work is done. What is the consequence?
 
@@ -88,14 +108,18 @@ A developer adds `#BSUB -N` to a job array script `#BSUB -J process[1-200]` so t
 
 **Answer: B**
 
-- A) Incorrect — LSF treats each array element as an independent job for notification purposes.
-- B) Correct — `-N` sends one email per array element, which means 200 emails flood the inbox.
-- C) Incorrect — `-N` is syntactically valid with job arrays; it just behaves unexpectedly at scale.
-- D) Incorrect — `-N` sends an end notification only, not a start notification; but there is still one per element.
+- A) Incorrect — LSF treats each array element as an independent job for notification purposes; there is no "all elements done" aggregation built into `-N`. A single summary email would require a dependency job to detect completion.
+- B) Correct — `-N` sends one end-of-job notification email per array element. For `process[1-200]`, this means 200 emails flood the inbox, one per completed element. This is a well-known LSF gotcha.
+- C) Incorrect — `-N` is syntactically valid with job arrays; LSF accepts the directive without error. It just behaves unexpectedly at scale, sending one email per element instead of one total.
+- D) Incorrect — `-N` sends only an end notification, not a start notification. Start notifications require a separate flag (`-B`). Even then, 200 elements × 1 email each = 200 emails, not 400.
 
 ---
 
 ## Q6 — Orphan Background Process
+
+> **Week reference:** Week 11
+
+**Mental Model:** A backgrounded process (`&`) becomes an orphan when the shell script exits — it keeps running under the init/systemd process tree. LSF's job slot stays occupied until the process exits or the wall-clock limit is reached. This wastes allocated compute time.
 
 A job script launches a monitoring process in the background and then runs the main computation:
 
@@ -113,14 +137,18 @@ The Python script finishes in 2 hours. The wall-clock limit is 4 hours. What hap
 
 **Answer: C**
 
-- A) Incorrect — The shell script exits after Python finishes, but the backgrounded `mymonitor` process keeps running.
-- B) Incorrect — Background processes are not automatically killed when the foreground script ends on most HPC systems.
-- C) Correct — The orphan process holds the job slot open, wasting 2 hours of allocated compute time.
-- D) Incorrect — LSF does not automatically reap background child processes spawned by the job script.
+- A) Incorrect — the shell script exits after Python finishes, but the backgrounded `mymonitor` process was not a child of the shell's foreground process group in a way that LSF monitors directly. The job remains "running" as long as any process in the job's cgroup is alive.
+- B) Incorrect — background processes are not automatically killed when the foreground script ends on most HPC systems. The process is detached from the shell but continues running in the same LSF job cgroup, holding the slot open.
+- C) Correct — `mymonitor` holds the LSF job slot open for the remaining 2 hours (from job end to wall limit). This wastes 2 CPU-hours of allocated time and delays other users' jobs from starting on that slot.
+- D) Incorrect — LSF does not automatically reap background child processes spawned by the job script unless the wall-clock limit is explicitly reached. There is no "orphan detection" grace period.
 
 ---
 
 ## Q7 — Correct Cleanup of Background Process
+
+> **Week reference:** Week 11
+
+**Mental Model:** Capture PID immediately after `&` with `$!`, run the main work, then `kill $PID` and `wait $PID`. The `wait` ensures the kill completes before the script exits. Missing any step leaves an orphan or a race condition.
 
 Which job script pattern correctly ensures `mymonitor` is killed when the main script finishes?
 
@@ -131,14 +159,18 @@ Which job script pattern correctly ensures `mymonitor` is killed when the main s
 
 **Answer: D**
 
-- A) Incorrect — No PID is captured and no kill is issued, leaving an orphan process.
-- B) Incorrect — `$!` must be captured immediately after `&`; this line assigns `$!` before launching `mymonitor`.
-- C) Incorrect — `$!` is captured before `mymonitor &`, so it refers to a different (or no) process.
-- D) Correct — `mymonitor &` runs first, `$!` captures its PID immediately, Python runs, then the monitor is killed and waited on.
+- A) Incorrect — no PID is captured and no `kill` is issued. `mymonitor` runs as a background process with no cleanup mechanism, leaving a guaranteed orphan when the script exits.
+- B) Incorrect — `MONITOR_PID=$!` must be captured immediately after the `&` on the same logical line. In this version `$!` is assigned *after* the semicolon, but the shell expands `$!` before running `mymonitor &`, so it captures the PID of a previous background job (or nothing). No `wait` means the kill may not complete before the script exits.
+- C) Incorrect — `$!` is captured *before* `mymonitor &` is executed, so it refers to the PID of whatever previously ran in the background (possibly none), not to `mymonitor`. The kill targets the wrong process.
+- D) Correct — `mymonitor &` runs first; `$!` is immediately captured into `MONITOR_PID`; Python runs; then `kill $MONITOR_PID` sends SIGTERM; `wait $MONITOR_PID` blocks until the process actually exits. This is the complete and correct pattern.
 
 ---
 
 ## Q8 — Thread Environment Variables and Oversubscription
+
+> **Week reference:** Week 11
+
+**Mental Model:** OpenBLAS, MKL, and OpenMP query `os.cpu_count()` (the full hardware count) by default — they have no knowledge of LSF allocations. On a 32-core node where you requested 8 cores, each NumPy call can spawn 32 threads, using 4× your allocation and degrading everyone else on that node.
 
 A job requests `#BSUB -n 8` (8 CPU cores). The job runs on a node with 32 physical cores. No thread count variables are set. A NumPy operation internally uses OpenBLAS. How many threads does OpenBLAS likely spawn?
 
@@ -149,14 +181,18 @@ A job requests `#BSUB -n 8` (8 CPU cores). The job runs on a node with 32 physic
 
 **Answer: C**
 
-- A) Incorrect — OpenBLAS has no awareness of LSF allocations; it queries the OS directly.
-- B) Incorrect — OpenBLAS defaults to multi-threaded using all cores it can detect.
-- C) Correct — Without `OPENBLAS_NUM_THREADS` being set, OpenBLAS spawns threads up to the hardware core count (32).
-- D) Incorrect — There is no half-core heuristic; OpenBLAS uses all available cores by default.
+- A) Incorrect — OpenBLAS has no awareness of LSF allocations or cgroups. It queries `sysconf(_SC_NPROCESSORS_ONLN)` directly, which returns the total hardware core count on the node, not the LSF-allocated count.
+- B) Incorrect — OpenBLAS defaults to multi-threaded using all detectable cores. Single-threaded mode requires explicitly setting `OPENBLAS_NUM_THREADS=1` or using a single-threaded build.
+- C) Correct — without `OPENBLAS_NUM_THREADS` being set, OpenBLAS spawns up to the hardware core count (32 in this case), causing oversubscription: the job uses 4× its allocated resources and interferes with co-resident jobs on the same node.
+- D) Incorrect — there is no half-core heuristic in OpenBLAS; it uses all available hardware threads. The "use half" behaviour is not a feature of any standard BLAS library.
 
 ---
 
 ## Q9 — Fixing Thread Oversubscription
+
+> **Week reference:** Week 11
+
+**Mental Model:** Three independent threading backends — OpenMP, MKL, OpenBLAS — each respect only their own environment variable. Setting just one leaves the others unconstrained. Always set all three to match your `#BSUB -n` allocation.
 
 A job requests 8 cores (`#BSUB -n 8`). To prevent NumPy/SciPy from oversubscribing, which environment variables should be set to `8` in the job script?
 
@@ -167,14 +203,18 @@ A job requests 8 cores (`#BSUB -n 8`). To prevent NumPy/SciPy from oversubscribi
 
 **Answer: C**
 
-- A) Incorrect — `LSF_NUM_THREADS` is not a real variable; LSF does not set thread limits through such an env var.
-- B) Incorrect — Setting only OpenMP threads leaves MKL and OpenBLAS free to use all hardware cores.
-- C) Correct — All three commonly used threading backends must be explicitly capped to match the allocated core count.
-- D) Incorrect — Neither `PYTHON_NUM_THREADS` nor `NUMPY_NUM_THREADS` exist as standard environment variables.
+- A) Incorrect — `LSF_NUM_THREADS` is not a real environment variable. LSF does not expose a standard variable that BLAS libraries read for thread limits. Setting this variable does nothing.
+- B) Incorrect — `OMP_NUM_THREADS` caps OpenMP-based parallelism (used by some NumPy builds and SciPy routines) but leaves MKL-based and OpenBLAS-based thread pools uncapped. Those can still spawn up to 32 threads each.
+- C) Correct — `OMP_NUM_THREADS` caps OpenMP; `MKL_NUM_THREADS` caps Intel MKL (used when NumPy is linked against MKL, e.g. on Anaconda); `OPENBLAS_NUM_THREADS` caps OpenBLAS (used in many conda/pip builds). All three must be set to prevent any backend from oversubscribing.
+- D) Incorrect — neither `PYTHON_NUM_THREADS` nor `NUMPY_NUM_THREADS` exist as standard environment variables. NumPy does not expose a unified thread-count variable; you must configure each underlying library separately.
 
 ---
 
 ## Q10 — multiprocessing.Pool Default Worker Count
+
+> **Week reference:** Week 11
+
+**Mental Model:** `Pool()` calls `os.cpu_count()` internally, which returns the total hardware logical CPUs — not the LSF-allocated count. On a 32-core node with an 8-core allocation, `Pool()` spawns 32 workers, oversubscribing by 4× and slowing down all co-resident jobs.
 
 A script submitted with `#BSUB -n 8` on a 32-core node contains:
 
@@ -193,14 +233,18 @@ How many worker processes does `Pool()` create?
 
 **Answer: C**
 
-- A) Incorrect — `Pool()` with no arguments calls `os.cpu_count()`, which is unaware of LSF allocations.
-- B) Incorrect — There is no half-core default in Python's multiprocessing.
-- C) Correct — `os.cpu_count()` returns the total logical CPUs on the node (32), causing oversubscription.
-- D) Incorrect — `Pool()` with no arguments does NOT default to serial; it spawns `os.cpu_count()` workers.
+- A) Incorrect — `Pool()` with no arguments calls `os.cpu_count()`, which is completely unaware of LSF allocations or cgroups. Python has no built-in mechanism to read the LSF `-n` allocation.
+- B) Incorrect — there is no half-core default in Python's multiprocessing. `os.cpu_count()` returns the full logical CPU count without any reduction factor.
+- C) Correct — `os.cpu_count()` queries the OS for total logical CPUs (32 on a typical HPC node), so `Pool()` spawns 32 workers. The fix is to use `Pool(processes=int(os.environ.get("LSB_MAX_NUM_PROCESSORS", os.cpu_count())))` or hard-code the allocated count.
+- D) Incorrect — `Pool()` with no arguments does NOT default to serial execution. It spawns `os.cpu_count()` worker processes, which is the oversubscription problem being tested.
 
 ---
 
 ## Q11 — Map-Reduce Job Dependency
+
+> **Week reference:** Week 11
+
+**Mental Model:** `done()` = all specified jobs reached DONE (success only). `ended()` = any termination including EXIT (failure). For a cleanup/reduce job that should only run after all map jobs succeed, use `done()`. Using `ended()` would run reduce even if half the map jobs failed.
 
 You have a map phase as job array `#BSUB -J map[1-20]` and a reduce job that should run only after ALL map elements succeed. Which `#BSUB` directive achieves this on the reduce job?
 
@@ -211,14 +255,18 @@ You have a map phase as job array `#BSUB -J map[1-20]` and a reduce job that sho
 
 **Answer: A**
 
-- A) Correct — `done(map)` waits until ALL elements of the array named `map` reach DONE status.
-- B) Incorrect — `ended` is satisfied when jobs end in any state (including EXIT/failure), not just successful completion.
-- C) Incorrect — `map[*]` is not valid LSF dependency syntax; the correct form uses the array name without subscript.
-- D) Incorrect — `-hold_jid` is a Sun Grid Engine / UGE directive, not LSF/BSUB syntax.
+- A) Correct — `done(map)` waits until ALL elements of the array named `map` reach DONE status (successful completion). Using the array name without a subscript applies the condition to the entire array, making the reduce job wait for every element.
+- B) Incorrect — `ended` is satisfied when jobs end in any state, including EXIT (failure). If 5 out of 20 map jobs fail, the reduce job would still run on incomplete data, which is almost certainly wrong for a reduce step.
+- C) Incorrect — `map[*]` is not valid LSF dependency syntax. The correct form uses the array name without any subscript notation: `done(map)`. The `[*]` glob is a shell or SLURM construct, not LSF.
+- D) Incorrect — `-hold_jid` is a Sun Grid Engine (SGE/UGE) directive, not LSF/BSUB syntax. On DTU HPC (which uses LSF), this directive is silently ignored or causes a submission error. The LSF equivalent uses `-w`.
 
 ---
 
 ## Q12 — Login Node vs Compute Node
+
+> **Week reference:** Week 11
+
+**Mental Model:** The login node is a shared gateway used by all users for file transfers, job submission, and light editing. Running computation there degrades the experience for everyone and violates HPC cluster etiquette. Even "just 5 minutes" of CPU-intensive work is unacceptable — use `bsub` or `linuxsh` for interactive work.
 
 A student connects to `login.hpc.dtu.dk` and runs a CPU-intensive simulation directly in the terminal. What is the correct response?
 
@@ -229,9 +277,9 @@ A student connects to `login.hpc.dtu.dk` and runs a CPU-intensive simulation dir
 
 **Answer: B**
 
-- A) Incorrect — Even "short" computation on the login node is not acceptable; use `linuxsh` for interactive work.
-- B) Correct — The login node is a shared gateway; running computation there slows login/file operations for every user and violates cluster usage policy.
-- C) Incorrect — Login nodes are not provisioned with more RAM for computation; they are lightweight gateway machines.
-- D) Incorrect — LSF does not auto-migrate processes started outside of `bsub`; the process simply runs on the login node.
+- A) Incorrect — even "short" computation on the login node is not acceptable practice. The 10-minute threshold does not exist in DTU HPC policy; even a 2-minute heavy job can noticeably slow login and file operations for all users. Use `linuxsh` for any interactive computation.
+- B) Correct — the login node is a lightweight shared gateway. Running CPU-intensive work there consumes shared resources (CPU time, RAM), slows down SSH logins for everyone, and violates cluster usage policy. The correct approach is `bsub` for batch jobs or `linuxsh`/`bsub -Is` for interactive sessions on compute nodes.
+- C) Incorrect — login nodes are not provisioned with extra RAM for computation. They are typically configured with moderate RAM for handling many concurrent SSH sessions, not for running large simulations.
+- D) Incorrect — LSF does not auto-migrate processes started outside of `bsub`. Any process started directly in the terminal runs on the login node and stays there; LSF only manages jobs explicitly submitted via `bsub`.
 
 ---

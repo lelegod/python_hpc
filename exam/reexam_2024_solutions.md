@@ -35,6 +35,8 @@ python classify.py data.csv
 
 What resources does this job script request? Mention maximum wall-time, memory usage and cpu cores.
 
+**Mental Model:** This is a "read and interpret BSUB directives" question, with a hidden typo trap. The key insight is that `rusage[mem=...]` is memory *per core*, not total — so you must multiply by `n`. The thought process is: (1) wall-time is read directly from `-W`, (2) cores is read directly from `-n`, (3) memory = per-core value × n cores. The trap is (a) stating memory as "4 GB" without noting it is per core and computing the total, and (b) not noticing the typo `#BSUG` which invalidates the `span[hosts=1]` line so it has no effect.
+
 **Full Solution:**
 
 The job script requests the following resources:
@@ -54,6 +56,8 @@ Note: The `#BSUG -R "span[hosts=1]"` line on line 7 has a typo (`#BSUG` instead 
 To improve performance, the engineers have restructured `classify.py` to run their algorithm on a GPU.
 
 How would you change the job script above such that the program is run on a node with a GPU?
+
+**Mental Model:** This is a "GPU job submission on DTU HPC" question. There are exactly two required changes: (1) switch to a GPU-capable queue, (2) add the `-gpu` resource directive. The thought process is: CPU jobs use `-q hpc`; GPU jobs need a queue that has GPU nodes (`gpuv100`, `gpua100`, `hpcintogpu`), plus an explicit GPU count request via `#BSUB -gpu`. The trap is only changing the queue without adding the `-gpu` directive — on DTU HPC you need both, or the scheduler won't allocate a GPU to your job even if the queue has GPU nodes.
 
 **Full Solution:**
 
@@ -88,6 +92,8 @@ Another engineer is working on a different program using CPU parallel processing
 
 How many minutes would the program take to run on 1 processor?
 
+**Mental Model:** This is an "Amdahl's Law in reverse" question. The key insight is that you first compute the speedup S(4) from F and p=4, then use T(1) = T(4) × S(4) to back out the serial time. The thought process is: (1) write S(p) = 1/((1-F) + F/p), (2) plug in F=0.8, p=4, compute S(4) = 1/(0.2 + 0.2) = 2.5, (3) T(1) = T(4) × S(4) = 10 × 2.5 = 25 min. The trap is trying to directly compute T(1) = T(4) / F or T(1) = T(4) × (1-F) without using the full Amdahl formula — these give wrong answers.
+
 **Full Solution:**
 
 Using Amdahl's Law, the speedup on p processors is:
@@ -115,6 +121,8 @@ The program would take **25 minutes** on 1 processor.
 An engineer now claims they can reduce the run time of the non-parallelizable part by 3 minutes.
 
 Given the reduced serial run time, what will the new run time on 4 processors be?
+
+**Mental Model:** This is a "only the serial portion changes" question. The key insight is to split T(1) into its serial and parallel components, modify only the serial part, then re-apply the parallel execution formula T(p) = T_serial + T_parallel/p. The thought process is: (1) from Q3, T(1) = 25 min, F = 0.8, so T_serial = 0.2 × 25 = 5 min and T_parallel = 20 min, (2) reduce serial by 3: new T_serial = 2 min, (3) T_parallel unchanged = 20 min, (4) T_new(4) = 2 + 20/4 = 7 min. The trap is re-applying the Amdahl speedup formula from Q3 with the new serial time, which requires recomputing F and is more complex than directly using T = T_serial + T_parallel/p.
 
 **Full Solution:**
 
@@ -162,13 +170,15 @@ Only considering the above application, which of the following block shapes for 
 - b) 100 × 1000
 - c) 1000 × 100
 
+**Mental Model:** This is a "Zarr block shape vs access pattern" question. The key insight is that Zarr reads whole blocks from disk when any element of a block is accessed, so you want one column access to touch as few blocks as possible. The thought process is: (1) the access pattern is x[:, i] — entire column of 1000 rows, (2) for each block shape, count how many blocks contain all 1000 rows for a single column: you need (1000 rows / block_rows) blocks per column, (3) 1000×100 → 1000/1000 = 1 block per column, 100×1000 → 1000/100 = 10 blocks, 10×10000 → 1000/10 = 100 blocks. The trap is choosing the wide block (10×10000) thinking "it spans more columns so it covers more data" — wide blocks mean more blocks are needed to span the full column height.
+
 **Correct Answer: c) 1000 × 100**
 
-**Why c) is correct:** Zarr reads data in whole blocks from disk whenever any element of a block is accessed. The code accesses entire columns: `x[:, i]` reads all 1000 rows for a single column index `i`. With block shape 1000 × 100, each block spans all 1000 rows and 100 columns. A single column access `x[:, i]` touches exactly **one block** (since the block covers the full column height). This minimizes the number of block reads from disk.
+**Why c) is correct:** Zarr reads data in whole blocks from disk whenever any element of a block is accessed. The code accesses entire columns: `x[:, i]` reads all 1000 rows for a single column index `i`. With block shape 1000 × 100, each block spans all 1000 rows and 100 columns. A single column access `x[:, i]` touches exactly **one block** (since the block covers the full column height of 1000 rows). This minimizes the number of block reads from disk.
 
 **Why the others are wrong:**
-- a) 10 × 10000: Each block covers only 10 rows but 10000 columns. To read an entire column of 1000 rows, you need 1000/10 = **100 block reads**. Very inefficient.
-- b) 100 × 1000: Each block covers 100 rows and 1000 columns. To read an entire column of 1000 rows, you need 1000/100 = **10 block reads**. Better than (a) but still worse than (c).
+- a) 10 × 10000: Each block covers only 10 rows but 10000 columns. To read an entire column of 1000 rows, you need 1000/10 = **100 block reads**. The width is irrelevant — you still need all 1000 rows, requiring 100 partial blocks. Very inefficient.
+- b) 100 × 1000: Each block covers 100 rows and 1000 columns. To read an entire column of 1000 rows, you need 1000/100 = **10 block reads**. Better than (a) but still 10x worse than (c). A student who sees "100 is closer to 1000 than 10 is" but fails to compute the block reads ends up here.
 
 ---
 
@@ -177,6 +187,8 @@ Only considering the above application, which of the following block shapes for 
 The matrix is 1000 × 100000 with data type `float64`. Using the best block shape from Question 5 (1000 × 100):
 
 How much memory will it take to load a single block into memory?
+
+**Mental Model:** This is a "array size in bytes" calculation. The thought process is exactly: elements = rows × cols = 1000 × 100 = 100,000; bytes = elements × bytes_per_element = 100,000 × 8 = 800,000 bytes = 800 KB. There is no trap here — it is a direct calculation. The only mistake would be forgetting that float64 = 8 bytes (not 4 bytes like float32).
 
 **Full Solution:**
 
@@ -210,6 +222,8 @@ Line #    Hits        Time  Per Hit   % Time  Line Contents
 
 How many steps was the simulation run for, i.e., what was the value of `n_steps`?
 
+**Mental Model:** This is a "loop body hits = number of iterations" question. The key insight is that the loop body lines are executed once per iteration, so their hit count equals n_steps. The thought process is: (1) look at lines 8, 9, 10 (inside the loop body) — each has Hits = 10000, (2) each runs once per iteration, so n_steps = 10000. The loop header (line 7) has 10001 hits because the condition `i < n_steps` is evaluated n_steps+1 times (the final check that terminates the loop). The trap is reading 10001 from the loop header instead of 10000 from the body, or misidentifying which line is the "loop counter" vs "loop body".
+
 **Full Solution:**
 
 The loop body lines (8, 9, 10) were each hit **10000 times**. The loop header (line 7) was hit **10001 times** — once for each iteration plus once for the final check that terminates the loop.
@@ -231,6 +245,8 @@ How many FLOP/s (floating point operations per second) does the above function a
 - b) 3.33 × 10^6 FLOP/s
 - c) 4.67 × 10^6 FLOP/s
 
+**Mental Model:** This is a "count FLOPs carefully then divide by time" question. The key insight is to count only *floating-point* operations (not integer index arithmetic), then use the total time from the loop body lines only. The thought process is: (1) line 8: multiply + add = 2 FLOPs, (2) line 9: divide = 1 FLOP (the `n - i - 1` is integer arithmetic, not floating-point), (3) line 10: divide + add = 2 FLOPs, (4) total = 5 FLOPs/iteration × 10000 iterations = 50,000 FLOPs, (5) total time = (5000 + 5000 + 3000) μs = 15,000 μs = 0.015 s, (6) FLOP/s = 50,000 / 0.015 = 3.33 × 10^6. The trap is counting `n - i - 1` as a FLOP (it's integer) giving 7 FLOPs/iteration and landing on answer c.
+
 **Correct Answer: b) 3.33 × 10^6 FLOP/s**
 
 **Why b) is correct:**
@@ -238,7 +254,7 @@ How many FLOP/s (floating point operations per second) does the above function a
 Count the floating point operations per loop iteration (only operations inside the loop body count):
 
 - **Line 8:** `a = x[i] * x[i] + 4` — 1 multiply + 1 add = **2 FLOPs**
-- **Line 9:** `b = y[n - i - 1] / x[i]` — 1 divide = **1 FLOP** (integer arithmetic `n - i - 1` does not count)
+- **Line 9:** `b = y[n - i - 1] / x[i]` — 1 divide = **1 FLOP** (integer arithmetic `n - i - 1` does not count; it operates on integer indices, not floating-point values)
 - **Line 10:** `z = z + a / b` — 1 divide + 1 add = **2 FLOPs**
 
 Total FLOPs per iteration = 2 + 1 + 2 = **5 FLOPs**
@@ -254,8 +270,8 @@ Total time (from profiler, lines 8 + 9 + 10):
 FLOP/s = 50,000 / 0.015 = (50 × 10^3) / (15 × 10^-3) = (10/3) × 10^6 = **3.33 × 10^6 FLOP/s**
 
 **Why the others are wrong:**
-- a) 2.67 × 10^6 FLOP/s: Would result from undercounting FLOPs (e.g., only counting 4 FLOPs per iteration instead of 5), or using too large a time.
-- c) 4.67 × 10^6 FLOP/s: Would result from overcounting FLOPs (e.g., counting 7 FLOPs per iteration) or using too small a time (e.g., not including all loop lines).
+- a) 2.67 × 10^6 FLOP/s: This results from undercounting FLOPs as 4 per iteration instead of 5 (e.g., missing one of the operations on line 10), giving 40,000 FLOPs / 0.015 s = 2.67 × 10^6. A student who counts divide-then-add as 1 operation instead of 2 falls here.
+- c) 4.67 × 10^6 FLOP/s: This results from overcounting FLOPs as 7 per iteration (e.g., counting `n - i - 1` as floating-point operations, adding 2 extra integer subtractions), giving 70,000 / 0.015 = 4.67 × 10^6. This is the most common mistake — including integer index arithmetic in the FLOP count.
 
 ---
 
@@ -268,18 +284,20 @@ Which of the following NumPy expressions will compute the same value as the `sim
 - b) `np.sum((x * x + 4) / (y / x))`
 - c) `np.sum((x * x + 4) / (y[::-1] / x))`
 
+**Mental Model:** This is a "trace the loop, vectorize each operation, check two details" question. The two details to get right are: (1) does the code reverse `y`? Yes — `y[n - i - 1]` accesses y in reverse order as i goes from 0 to n-1, (2) is the result a scalar sum or an array? The function accumulates z with `z += a/b`, so the result is a scalar — requiring `np.sum()`. The thought process: trace each line to its vectorized form, then check both traps. The first trap is forgetting `np.sum()` (choosing a). The second trap is forgetting `[::-1]` (choosing b).
+
 **Correct Answer: c) `np.sum((x * x + 4) / (y[::-1] / x))`**
 
 **Why c) is correct:**
 
 Tracing the loop logic:
 - `a = x[i] * x[i] + 4` — vectorized as `x * x + 4`
-- `b = y[n - i - 1] / x[i]` — `y[n - i - 1]` reverses `y`, so vectorized as `y[::-1] / x`
+- `b = y[n - i - 1] / x[i]` — `y[n - i - 1]` accesses `y` in reverse order (as i increases from 0 to n-1, the index n-i-1 decreases from n-1 to 0), so vectorized as `y[::-1] / x`
 - `z = z + a / b` — accumulates sum of `a / b` over all iterations, so the total is `np.sum((x * x + 4) / (y[::-1] / x))`
 
 **Why the others are wrong:**
-- a) `(x * x + 4) / (y[::-1] / x)`: Missing the `np.sum(...)` — this returns an array of per-iteration values rather than their accumulated sum. The `simulate` function returns a scalar (the running sum `z`).
-- b) `np.sum((x * x + 4) / (y / x))`: The `y` is not reversed. The loop uses `y[n - i - 1]` which accesses `y` in reverse order. Without `[::-1]`, this computes a different value.
+- a) `(x * x + 4) / (y[::-1] / x)`: Correctly reverses y but is missing the `np.sum(...)`. This returns an array of per-iteration `a/b` values rather than their accumulated sum `z`. The `simulate` function returns a single scalar; this option returns an array.
+- b) `np.sum((x * x + 4) / (y / x))`: Has the `np.sum(...)` correctly but fails to reverse `y`. The loop uses `y[n - i - 1]`, not `y[i]`. Using plain `y` computes a completely different sum because each term pairs `x[i]` with the wrong element of `y`.
 
 ---
 
@@ -295,6 +313,8 @@ Given the operation `c = a + b`, what is the shape of the output array `c`?
 - a) 100 × 100 × 6 × 3
 - b) 100 × 1 × 6 × 3
 - c) Won't broadcast.
+
+**Mental Model:** This is a "broadcasting with left-padding" question. The key insight is that NumPy left-pads the shorter shape with 1s to match the rank of the longer shape before applying the broadcasting rules. The thought process is: (1) a is 4D, b is 3D — left-pad b to 4D: 1 × 100 × 1 × 3, (2) compare dimension by dimension: (100 vs 1) → 100, (1 vs 100) → 100, (6 vs 1) → 6, (3 vs 3) → 3, (3) output = 100 × 100 × 6 × 3. The trap is option b (100 × 1 × 6 × 3), which forgets to apply the left-padding step and treats b's first dimension (100) as aligning with a's second dimension (1), leaving it as 1 instead of broadcasting to 100.
 
 **Correct Answer: a) 100 × 100 × 6 × 3**
 
@@ -327,8 +347,8 @@ Output shape: **100 × 100 × 6 × 3**
 All dimensions are compatible (each pair is either equal or one is 1), so broadcasting succeeds.
 
 **Why the others are wrong:**
-- b) 100 × 1 × 6 × 3: Incorrect — this forgets to broadcast the second dimension. After padding, `a` has size 1 in dim 2 and `b` has size 100 in dim 2, so the result is 100, not 1.
-- c) Won't broadcast: Incorrect — all dimension pairs are compatible. No conflicting non-1 sizes exist.
+- b) 100 × 1 × 6 × 3: Incorrect — this forgets to left-pad `b`. A student who skips the padding step and assumes b's size-100 dimension aligns with a's second dimension (size 1) and then "broadcasts to 1" makes this error. But correctly padded, b's second dimension is 100, and a's second dimension is 1, so the result is 100, not 1.
+- c) Won't broadcast: Incorrect — all dimension pairs after padding are compatible (every pair is equal or one is 1). There is no conflicting pair of non-1 unequal sizes, so broadcasting succeeds cleanly.
 
 ---
 
@@ -355,6 +375,8 @@ Which of the following thread block configurations will have the **best** perfor
 - b) 256 × 1
 - c) 1 × 256
 
+**Mental Model:** This is a "CUDA warp coalescing — threads must vary in the column dimension" question. The key insight is: threads in a warp execute the same instruction simultaneously; for coalesced memory access they must touch *consecutive* memory addresses. In row-major storage, consecutive addresses are along the column (last) axis. Therefore, threads in a warp must differ in their `col` index — which means the block's second (column) dimension should span 256 threads. The thought process is: (1) identify which index varies fastest in a warp (the column index in a 2D grid), (2) choose the configuration where 256 threads are spread across columns (1 × 256). The trap is choosing b (256 × 1) by thinking "256 threads must mean 256 in the first dimension" without understanding which index changes within a warp.
+
 **Correct Answer: c) 1 × 256**
 
 **Why c) is correct:**
@@ -364,8 +386,8 @@ At each iteration of the inner loops, every thread in a **warp** accesses an ele
 With block shape 1 × 256: threads are laid out with 1 row and 256 columns. Threads in the same warp differ in their `col` index while sharing the same `row` index. When they access `x[row + i, col + j]`, with fixed `i` and `j`, they access elements that are consecutive in the same row — which are contiguous in memory. This gives **coalesced memory access**.
 
 **Why the others are wrong:**
-- a) 16 × 16: Threads in a warp span multiple rows and columns. Memory accesses are not fully coalesced — threads in the same warp access elements from different rows, which are not adjacent in memory. Performance is worse than (c).
-- b) 256 × 1: Threads are laid out with 256 rows and 1 column. Threads in the same warp differ in their `row` index while sharing the same `col` index. When they access `x[row + i, col + j]`, they access elements in different rows — these are separated by n elements in memory (stride = n). This is **strided access**, which is very cache-inefficient and results in the worst performance.
+- a) 16 × 16: Threads in a warp span multiple rows and columns. Memory accesses are not fully coalesced — threads in the same warp access elements from different rows, which are not adjacent in memory. Performance is worse than (c) because each warp load spans multiple rows instead of a clean contiguous stripe.
+- b) 256 × 1: Threads are laid out with 256 rows and 1 column. Threads in the same warp differ in their `row` index while sharing the same `col` index. When they access `x[row + i, col + j]`, they access elements in different rows — these are separated by n elements in memory (stride = n). This is **strided access**, which is the worst possible access pattern for a GPU and results in the lowest performance. A student who picks this by thinking "more threads = better" without considering memory layout falls here.
 
 ---
 
@@ -373,11 +395,13 @@ With block shape 1 × 256: threads are laid out with 1 row and 256 columns. Thre
 
 Explain your reasoning for the answer to Question 11.
 
+**Mental Model:** This is the same reasoning as Q11 but written out explicitly. The key insight to state clearly is: coalesced access means threads in a warp access consecutive addresses simultaneously; row-major storage makes consecutive addresses go along columns; therefore the warp must vary in the column dimension (1 × 256). The trap is giving a vague answer like "256 × 1 is bad" without specifically explaining the stride vs. contiguous memory argument.
+
 **Full Solution:**
 
 At each iteration of the loops, every thread in a warp (or thread block) accesses an element of `x` at the same time. For good performance, the threads should access **sequential elements** in order to be cache-efficient (coalesced memory access).
 
-Since NumPy arrays (and CUDA device arrays) are stored **row-wise** (C-order), sequential elements are those in the same row at adjacent column indices. 
+Since NumPy arrays (and CUDA device arrays) are stored **row-wise** (C-order), sequential elements are those in the same row at adjacent column indices.
 
 With configuration 1 × 256, all threads in a warp have the same row index and consecutive column indices. When accessing `x[row + i, col + j]`, they access elements at the same row offset but consecutive column positions — these are contiguous in memory. This achieves **coalesced access**.
 
@@ -403,19 +427,21 @@ def sumavg(x_all, threadsperblock, blockspergrid):
 
 How many host-to-device (HtoD) and device-to-host (DtoH) transfers will `sumavg` perform if called with `x_all`?
 
+**Mental Model:** This is a "Numba auto-transfer behavior" question. The key insight is that Numba transfers ALL NumPy args HtoD before the kernel AND DtoH after — regardless of whether the array is input or output. It does not know which arrays you intend to read back. Per iteration: 1 HtoD for x, 1 HtoD for y, kernel runs, 1 DtoH for x, 1 DtoH for y → 2 HtoD + 2 DtoH per iteration → 200 HtoD + 200 DtoH total. The trap is thinking Numba only brings back y (output) and not x (input) — it transfers everything both ways.
+
 **Full Solution:**
 
 Both `x` and `y` are NumPy arrays residing in **host memory**. When Numba's `@cuda.jit` kernel is called with host arrays, Numba automatically transfers each array to the GPU before the kernel and transfers it back after.
 
 In each iteration of the loop:
-- `x` (a 2000 × 2000 image slice) is transferred **HtoD** (1 transfer)
-- `y` (the 2000 × 2000 accumulator) is transferred **HtoD** (1 transfer) and **DtoH** (1 transfer) — it must be sent to the GPU and retrieved back so the next iteration can send the updated version
+- `x` (a 2000 × 2000 image slice) is transferred **HtoD** (1 transfer) and **DtoH** (1 transfer) — Numba transfers ALL NumPy args back after the kernel, even input-only arrays it didn't modify
+- `y` (the 2000 × 2000 accumulator) is transferred **HtoD** (1 transfer) and **DtoH** (1 transfer) — sent to GPU so the kernel can add to it, then retrieved so the next iteration can send the updated version
 
 With 100 images (m = 100):
 - **HtoD transfers:** 100 (for `x`) + 100 (for `y`) = **200 HtoD transfers**
-- **DtoH transfers:** 100 (for `y` after each kernel call) = **200 DtoH transfers**
+- **DtoH transfers:** 100 (for `x`) + 100 (for `y`) = **200 DtoH transfers**
 
-Total: **200 HtoD and 200 DtoH transfers**.
+Total: **200 HtoD and 200 DtoH transfers** = 400 total.
 
 **Key concept tested:** Understanding that Numba automatically transfers host arrays to/from GPU on every kernel invocation when they are not explicitly allocated on the device.
 
@@ -424,6 +450,8 @@ Total: **200 HtoD and 200 DtoH transfers**.
 ## Question 14 — Optimal GPU Transfer Count for sumavg
 
 How many transfers would be needed in an optimal implementation of `sumavg`?
+
+**Mental Model:** This is a "keep data on the GPU between iterations" question. The key insight is: if `y` is pre-allocated *on the GPU* using `cuda.device_array`, it never needs to cross the PCIe bus between iterations — only transferred back once at the very end. The thought process is: (1) x images must still come in one at a time: 100 HtoD transfers, (2) y stays on GPU the whole loop: 0 intermediate DtoH transfers, only 1 at the end, (3) total = 100 HtoD + 1 DtoH = 101. The trap is thinking that all 100 x images could also be sent once (they can't — the question states `x_all` is in host memory and only one image is processed at a time).
 
 **Full Solution:**
 
@@ -437,7 +465,7 @@ The optimal implementation avoids redundant transfers by keeping data on the GPU
 
 **Total optimal transfers: 100 HtoD + 1 DtoH = 101 transfers**
 
-Compared to the current 400 transfers, this is a substantial improvement.
+Compared to the current 400 transfers (200 HtoD + 200 DtoH), this is a substantial improvement.
 
 **Key concept tested:** GPU memory management — pre-allocating output arrays on the device and minimizing round-trips by only transferring results back once at the end.
 
@@ -491,13 +519,15 @@ When will the `compute` job start?
 - b) When the remaining jobs have finished
 - c) Never
 
+**Mental Model:** This is a "done vs ended and the effect of a failed job" question. The key insight is that `done()` requires all jobs to exit successfully, and a job already in EXIT state has permanently failed — it will never change to DONE. The thought process is: (1) the dependency is `done(prepare)`, (2) `done()` requires ALL array jobs to exit with success, (3) the bjobs output shows EXIT=1 — one job has already failed, (4) a failed job cannot un-fail, so `done(prepare)` will never be satisfied, (5) the compute job will never start. The trap is choosing b ("when the remaining jobs finish"), reasoning that once all currently running jobs complete, the condition will be met — forgetting that the already-failed job permanently prevents `done()` from being satisfied.
+
 **Correct Answer: c) Never**
 
 **Why c) is correct:** The `compute` job has the dependency condition `#BSUB -w done(prepare)`. The `done()` condition is only satisfied when **all jobs** in the `prepare` array finish with **success** (EXIT code 0). The `bjobs -A` output shows 1 job in the `EXIT` state — meaning one job has already exited with a **failure**. Since a failed job will never re-run and the `done()` condition requires all jobs to complete successfully, this condition can **never** be fulfilled. The `compute` job will never start.
 
 **Why the others are wrong:**
-- a) As soon as possible: Incorrect — there is a `#BSUB -w done(prepare)` dependency preventing immediate start, and even if there weren't, one job has already failed.
-- b) When the remaining jobs have finished: Incorrect — even when the remaining 5 running jobs finish, the 1 already-failed job means `done(prepare)` will still never be satisfied. The failed job cannot change its state to done.
+- a) As soon as possible: Incorrect — there is an active dependency condition `#BSUB -w done(prepare)` preventing immediate start. Additionally, 5 jobs are still running. There is no scenario under which the compute job starts immediately.
+- b) When the remaining jobs have finished: This is the most tempting wrong answer. A student who correctly identifies that "done(prepare) means all jobs finish" but forgets that a job already in EXIT state can never become DONE chooses this. When the 5 running jobs finish, we will have 4 DONE + 1 EXIT + 5 new DONE = 9 DONE + 1 EXIT. `done()` still requires all 10 to be DONE — the 1 permanent EXIT failure prevents this forever.
 
 ---
 
@@ -520,6 +550,8 @@ Assume n is large enough that a row/column cannot fit in the CPU cache.
 
 Which of the two parallel implementations would you expect to be faster? Explain your reasoning.
 
+**Mental Model:** This is a "row-major storage and sequential vs strided access" question. The key insight is that iterating over a row accesses contiguous memory (sequential), while iterating over a column accesses elements n positions apart (strided). The thought process is: (1) NumPy arrays are C-order (row-major), so row elements are contiguous, (2) summing a row = sequential scan = cache-friendly, (3) summing a column = stride-n access = one useful element per cache line = very cache-unfriendly, (4) row sum wins. The trap is thinking `x.T` just changes the view so performance is equivalent — but transposing changes the access pattern from strided to sequential or vice versa, and since n is large (so columns don't fit in cache), the penalty is severe.
+
 **Full Solution:**
 
 The **parallel row sum** implementation is expected to be faster.
@@ -541,6 +573,8 @@ Therefore, the row sum implementation benefits from sequential/coalesced memory 
 This implementation uses multi-threading (via `ThreadPool`). The engineer worries whether it would be better to use multi-processing instead.
 
 Is it appropriate to use multi-threading instead of multi-processing in this case? Explain why/why not.
+
+**Mental Model:** This is a "NumPy releases the GIL" question. The key insight is that the GIL only blocks parallel Python bytecode execution — NumPy operations run in C and explicitly release the GIL. The thought process is: (1) the concern is the GIL preventing parallel CPU work, (2) but the computation here is `a.sum()` which is a NumPy C-level operation, (3) NumPy releases the GIL during its internal C computations, (4) so threads genuinely run in parallel. The trap is answering "No, use multiprocessing because of the GIL" — correct in general for pure Python CPU-bound code, but wrong here because NumPy is not pure Python.
 
 **Full Solution:**
 
@@ -566,12 +600,14 @@ Another engineer suggests reshaping `x` to a flat array of length n^2 and perfor
 
 How much faster would a parallel reduction be compared to the approach from Question 16? Explain your reasoning and provide your answer as a function of n.
 
+**Mental Model:** This is a "O(n) vs O(log n) parallel time complexity" question. The key insight is to separately analyze the time complexity of each approach under the assumption of unlimited processors. The thought process is: (1) parallel row sum: each row takes O(n) time to sum (sequentially within each row), then the serial final sum of n row-sums takes O(n) time — total O(n), (2) parallel reduction on n^2 elements: each step halves the problem, takes O(log(n^2)) = O(2 log n) steps, (3) speedup = O(n) / O(log n) = n/log2(n). The trap is thinking the parallel row sum takes O(1) time (forgetting that within each row, the sum is still sequential), or using log base 10 instead of log base 2 for the reduction.
+
 **Full Solution:**
 
 **Time for the parallel row sum approach (from Q16):**
 
 The parallel row sum has two phases:
-1. **Parallel phase:** Each of the n rows is summed in parallel. Each row has n elements, so each row sum takes time proportional to n. With unlimited cores, all rows run simultaneously. Time = n.
+1. **Parallel phase:** Each of the n rows is summed in parallel. Each row has n elements, so each row sum takes time proportional to n (serial scan within a row). With unlimited cores, all rows run simultaneously. Time = n.
 2. **Serial phase:** The n row sums are summed serially: `sum(rowsums)`. This takes time proportional to n.
 
 Total time for parallel row sum = n + n = **2n**.

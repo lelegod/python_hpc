@@ -32,6 +32,8 @@ The program usually runs best with 8 cores. It uses 16 GB of memory and takes at
 
 **How would you change the job script above to accommodate this? Use only the resources you need.**
 
+**Mental Model:** This is a "read the spec and translate to BSUB directives" question. The key insight is that `rusage[mem=...]` specifies memory *per core*, not total memory — this is the single most common trap. The thought process is: (1) wall-time = what the problem states directly, (2) cores = what the problem states directly, (3) memory = total / cores because `rusage` is per-slot, (4) ask "will multiple cores be on the same node?" — yes for shared-memory programs, so add `span[hosts=1]`. The trap is writing `16GB` for memory without dividing by the number of cores, which wastes cluster resources and may cause the job to fail or be queued indefinitely.
+
 **Full Solution:**
 
 The corrected script is:
@@ -76,6 +78,8 @@ Another engineer is considering using multi-processing. A previous engineer crea
 - C) 0.8
 - D) 0.9
 
+**Mental Model:** This is a "Amdahl's Law inversion from a saturation value" question. The key insight is that a speedup curve that flattens and saturates at a maximum value S_max directly gives you the parallel fraction through the formula F = 1 - 1/S_max. The thought process is: (1) read the saturation value from the plot (~5), (2) plug into S_max = 1/(1-F) and solve for F, giving F = 1 - 1/5 = 0.8. The trap is picking option A (0.2) by confusing the serial fraction (1-F = 0.2) with the parallel fraction (F = 0.8) — a sign-flip error.
+
 **Correct Answer: C) 0.8**
 
 **Why C is correct:** Amdahl's Law states that the theoretical maximum speed-up with infinite processors is:
@@ -89,15 +93,15 @@ where F is the parallel fraction. The plot clearly saturates (levels off) at a s
 ```
 5 = 1 / (1 - F)
 1 - F = 1/5 = 0.2
-F = 0.8
+F = 1 - 0.2 = 0.8
 ```
 
 Therefore the parallel fraction is 0.8.
 
 **Why the others are wrong:**
-- A) 0.2 — This would give S_max = 1/(1-0.2) = 1/0.8 = 1.25. The plot clearly shows speedups well above 1.25, so 0.2 cannot be the parallel fraction.
-- B) 0.5 — This would give S_max = 1/(1-0.5) = 2. The plot saturates at ~5, not at 2.
-- D) 0.9 — This would give S_max = 1/(1-0.9) = 10. The plot saturates well below 10 (at ~5), so 0.9 is too high.
+- A) 0.2 — This is the *serial* fraction (1 - F), not the parallel fraction. Confusing 1-F with F is the classic trap. Plugging F=0.2 back: S_max = 1/(1-0.2) = 1.25, but the plot clearly shows speedups well above 1.25.
+- B) 0.5 — This would give S_max = 1/(1-0.5) = 2. The plot saturates at ~5, not 2. A student who misreads the saturation level as 2 might land here.
+- D) 0.9 — This would give S_max = 1/(1-0.9) = 10. The plot saturates well below 10 (at ~5), so 0.9 is too high. A student who overestimates the saturation level, or who forgets to read the plot carefully, ends up here.
 
 ---
 
@@ -106,6 +110,8 @@ Therefore the parallel fraction is 0.8.
 Management wants at least a speed-up of 4 before they consider parallelization to be worth it. Currently, the most powerful machine at the company has 8 cores.
 
 **Given your estimated parallel fraction (F = 0.8), should they pursue parallelization? Explain your reasoning.**
+
+**Mental Model:** This is a "apply Amdahl's Law to a real hardware constraint and threshold" question. The key insight is that you must evaluate S(p) at the *actual* hardware limit p=8, not at the theoretical infinite-core maximum. The thought process is: (1) write the full Amdahl formula S(n) = 1/((1-F) + F/n), (2) plug in F=0.8 and n=8, (3) compute the result, (4) compare to the threshold of 4. The trap is comparing the threshold to S_max=5 (infinite cores) and incorrectly concluding "yes, since 5 > 4" — but the question explicitly constrains hardware to 8 cores.
 
 **Full Solution:**
 
@@ -149,19 +155,23 @@ They want to use parallelization to spread the work out to several workers.
 - B) Multi-processing
 - C) Does not matter
 
+**Mental Model:** This is a "GIL identification" question. The key insight is to ask: is this code pure Python CPU-bound work, or does it release the GIL? The thought process is: (1) look at the code — it is a pure Python `for` loop doing integer arithmetic, (2) pure Python loops hold the GIL continuously, (3) threads cannot run this code simultaneously because the GIL serializes them, (4) therefore processes (which each have their own GIL) are required. The trap is choosing "Does not matter" by thinking parallelism is parallelism — it does matter because threads literally cannot run in parallel here.
+
 **Correct Answer: B) Multi-processing**
 
-**Why B is correct:** The `process_number` function is pure Python CPU-bound computation (a Python `for` loop doing arithmetic). Python has the Global Interpreter Lock (GIL), which prevents multiple threads from executing Python bytecode simultaneously. Multi-threading in Python does NOT provide parallelism for CPU-bound pure-Python code — threads take turns holding the GIL. Multi-processing creates separate processes, each with its own GIL and Python interpreter, so they can run truly in parallel on multiple CPU cores.
+**Why B is correct:** The `process_number` function is pure Python CPU-bound computation (a Python `for` loop doing arithmetic). Python has the Global Interpreter Lock (GIL), which prevents multiple threads from executing Python bytecode simultaneously. Multi-threading in Python does NOT provide parallelism for CPU-bound pure-Python code — threads take turns holding the GIL one at a time. Multi-processing creates separate processes, each with its own GIL and Python interpreter, so they can run truly in parallel on multiple CPU cores.
 
 **Why the others are wrong:**
-- A) Multi-threading — The GIL prevents true parallel execution of CPU-bound Python code. Multiple threads would execute serially (taking turns), providing no speed-up for this pure-Python loop.
-- C) Does not matter — It does matter. Multi-threading would not help here due to the GIL; only multi-processing provides genuine parallelism.
+- A) Multi-threading — The GIL prevents true parallel execution of CPU-bound Python code. Choosing threads here means each thread must acquire the GIL before executing any bytecode instruction; only one thread runs at a time, giving no speed-up over serial code and actually adding overhead from context switching.
+- C) Does not matter — A student might reason "either way creates workers so either way is fine." This is wrong because multi-threading is actively harmful here: it adds scheduling overhead while delivering zero parallel speedup due to the GIL.
 
 ---
 
 ## Question 5 — Static vs. Dynamic Scheduling for `process_number` (Open-ended)
 
 **Should they use static scheduling or dynamic scheduling for this task? Explain your answer.**
+
+**Mental Model:** This is a "workload balance" question. The key insight is to ask: is the execution time of each task uniform or variable? The thought process is: (1) `process_number(n)` runs exactly `n` iterations, so its time is proportional to `n`, (2) the input array goes from 1 to 100,000,000, so task times vary by a factor of 100 million, (3) static scheduling pre-assigns fixed chunks of inputs to workers — with uniform chunks by index, one worker gets the large numbers and works vastly longer than others, (4) dynamic scheduling hands out tasks on demand so no worker idles. The trap is defaulting to static because "it's simpler" without considering that extreme workload imbalance makes static scheduling catastrophically inefficient here.
 
 **Full Solution:**
 
@@ -189,6 +199,8 @@ def abssum(x, y):
 However, they are having trouble getting correct answers consistently.
 
 **Explain why this function cannot be used with the parallel reduction tree framework. What should the engineer do instead?**
+
+**Mental Model:** This is an "associativity requirement for reduction trees" question. The key insight is that a reduction tree applies the combining function in different orderings depending on how the tree is structured — if the function is not associative, different tree shapes give different answers. The thought process is: (1) recall the associativity requirement: f(f(a,b),c) must equal f(a,f(b,c)), (2) try a concrete counterexample with a sign-cancelling case, (3) show the two groupings give different numbers. The trap is thinking "abs(x+y) looks like it gives the same result as abs(x) + abs(y)" or thinking the function is fine because addition itself is associative — the absolute value wrapper breaks it.
 
 **Full Solution:**
 
@@ -233,15 +245,22 @@ An engineer is working with a collection of RGB images stored as an N x H x W x 
 - B) `images - mim[:, :, None]`
 - C) `images - mim[None]`
 
+**Mental Model:** This is a "NumPy broadcasting alignment" question. The key insight is that broadcasting aligns shapes from the *right*, and you need to manually add axes to `mim` until it has the right rank and the dimensions align correctly. The thought process is: (1) `images` is (N, H, W, 3), (2) `mim` is (H, W) — 2D, (3) we want mim to broadcast across N and the channel axis, (4) so we need mim to become (H, W, 1) to match the last 3 dimensions of images as (H, W, 3). The trap is `mim[None]` which prepends a dimension giving (1, H, W) — this aligns the W axis against the 3-channel axis, which is wrong.
+
 **Correct Answer: B) `images - mim[:, :, None]`**
 
 **Why B is correct:** `images` has shape (N, H, W, 3). We want to subtract a value for each (H, W) pixel position from all N images and all 3 channels. `mim` has shape (H, W). We need to broadcast `mim` across the N and channel dimensions.
 
-`mim[:, :, None]` reshapes `mim` from (H, W) to (H, W, 1). NumPy broadcasting then expands this to (N, H, W, 3) by prepending a new axis for N and expanding the trailing 1 to 3. This correctly subtracts the same mean pixel value from each channel at each spatial position in each image.
+`mim[:, :, None]` reshapes `mim` from (H, W) to (H, W, 1). NumPy broadcasting then aligns shapes from the right:
+```
+images:          (N, H, W, 3)
+mim[:,:,None]:   (   H, W, 1)   → broadcasts to (N, H, W, 3)
+```
+The trailing 1 expands to 3 (channels), and N is prepended automatically. This correctly subtracts the same mean pixel value from each channel at each spatial position in each image.
 
 **Why the others are wrong:**
-- A) `images - mim` — NumPy tries to broadcast (N, H, W, 3) against (H, W). Broadcasting aligns shapes from the right: the last two dimensions of `images` are (W, 3) and `mim` has shape (H, W). These are not compatible (W != H in general, and there is no channel axis in `mim`). This will raise a shape error or produce wrong results.
-- C) `images - mim[None]` — `mim[None]` reshapes `mim` from (H, W) to (1, H, W). Broadcasting against (N, H, W, 3) aligns as: the last dimension of `mim[None]` is W and the last dimension of `images` is 3. Unless W == 3, this will fail or produce wrong results. Even if W == 3, the semantics would be wrong.
+- A) `images - mim` — Broadcasting aligns from the right: `images` has last two dims (W, 3) and `mim` has dims (H, W). The rightmost dims are 3 vs W — unless H happens to equal 3, this raises a shape mismatch error. Even if sizes happened to match by coincidence, the semantic alignment would be wrong. A student who thinks "subtract an array" naively without checking alignment falls into this trap.
+- C) `images - mim[None]` — `mim[None]` gives shape (1, H, W). Broadcasting against (N, H, W, 3): the rightmost dim of `mim[None]` is W but the rightmost dim of `images` is 3. This misaligns the channel axis with the width axis, producing wrong results or an error. A student who correctly thinks "add a leading dimension" but inserts it at the wrong end lands here.
 
 ---
 
@@ -264,15 +283,17 @@ They tried reversing the loop order but it did not help. You inspect the strides
 
 **Based on this information, how would you re-order the loops in the `process` function? Explain your answer.**
 
+**Mental Model:** This is a "stride-based loop ordering" question. The key insight is that the innermost loop should index the axis with the *smallest* stride, because smaller stride means consecutive iterations touch closer memory addresses, maximizing cache line reuse. The thought process is: (1) list the stride for each axis, (2) sort axes by stride ascending, (3) the smallest-stride axis goes innermost, the largest goes outermost. The trap — which the problem explicitly mentions — is "reversing" the loop order (giving innermost = l with stride 200) without actually sorting by stride value. Reversing is not the same as stride-sorting.
+
 **Full Solution:**
 
 For cache-efficient memory access, the innermost loop should iterate over the axis with the **shortest (smallest) stride**, because the shortest stride means consecutive iterations access memory locations that are closest together — maximally exploiting spatial locality and cache line reuse.
 
 The strides are:
-- Axis 0 (i, images N-axis): stride 600
-- Axis 1 (j, images H-axis): stride 40
-- Axis 2 (k, images W-axis): stride 8
-- Axis 3 (l, images channel-axis): stride 200
+- Axis 0 (i, N-axis): stride 600
+- Axis 1 (j, H-axis): stride 40
+- Axis 2 (k, W-axis): stride 8
+- Axis 3 (l, channel-axis): stride 200
 
 Ranking from shortest to longest stride:
 1. Axis 2 (k): stride 8 — shortest, should be the **innermost** loop
@@ -280,7 +301,9 @@ Ranking from shortest to longest stride:
 3. Axis 0 (i): stride 600
 4. Axis 3 (l): stride 200
 
-Ordering from innermost to outermost: **k, j, l, i**
+Ordering from innermost to outermost by ascending stride: **k (8) → j (40) → i (600) → l (200)**
+
+Wait — sorting all four by stride ascending: 8, 40, 200, 600 → axes k, j, l, i. So from outermost to innermost: **i → l → j → k**.
 
 The re-ordered function:
 
@@ -331,19 +354,23 @@ ncalls  tottime  percall  cumtime  percall filename:lineno(function)
 - B) 5
 - C) 10
 
+**Mental Model:** This is a "read ncalls to infer loop count" question. The key insight is that a function called once per sample will have ncalls equal to the number of samples. The thought process is: (1) identify which function corresponds to per-sample processing — `process_sample` is named for it, (2) read its ncalls = 10, (3) conclude there were 10 samples. The traps are: option A (2) from misreading the `2/1` entry for `exec` (that is an interpreter artifact), and option B (5) from confusing the per-call time (0.505 s) or dividing total time (5.055) by per-call (0.505) and misidentifying 5 as the answer — but 5.055/0.505 = 10.01, confirming ncalls=10.
+
 **Correct Answer: C) 10**
 
-**Why C is correct:** The profiler shows that `process_sample` (ourlib.py:13) was called **10 times** (`ncalls = 10`). Looking at the program code, `process_sample` is called once per sample inside the loop `for s in samples`. Therefore, the data subset contained exactly 10 samples.
+**Why C is correct:** The profiler shows that `process_sample` (ourlib.py:13) was called **10 times** (`ncalls = 10`). In the program, `process_sample` is called once per sample inside the loop `for s in samples`. Therefore, the data subset contained exactly 10 samples.
 
 **Why the others are wrong:**
-- A) 2 — The only entry with ncalls=2 is the built-in `exec` call (shown as `2/1` which means 2 total calls, 1 primitive). This is an interpreter artifact, not related to sample count.
-- B) 5 — No function appears 5 times. The per-call time for `process_sample` is 0.505 seconds, and 10 * 0.505 = 5.055, but the number of calls is 10, not 5.
+- A) 2 — The only entry with a call count near 2 is the built-in `exec` call (shown as `2/1`, meaning 2 total calls including recursive calls, 1 primitive call). This is a Python interpreter artifact for module execution, not related to sample count. A student who scans for any "2" in the ncalls column and stops there picks this incorrectly.
+- B) 5 — There is no function called 5 times. A student might mistakenly divide the total cumtime (5.055 s) by the per-call time (0.505 s) and think the answer is 10, then round down, or misread 0.505 as "5 calls" due to the decimal — but the ncalls column clearly shows 10.
 
 ---
 
 ## Question 10 — Which Function to Optimize for Normal Workloads (Open-ended)
 
 **On what function would you focus your optimization efforts with respect to normal workloads? Explain your answer.**
+
+**Mental Model:** This is a "profiler output extrapolation to realistic workload" question. The key insight is that one-time setup functions (load_params, prepare_model) are fixed costs that don't scale, while per-sample functions scale linearly with sample count. The thought process is: (1) separate functions into "called once" vs "called per sample", (2) project the per-sample cost to the stated normal workload size (1000+ samples), (3) compare projected costs. The trap is optimizing `load_params` (20 seconds) because it looks like the biggest cost in the profiler output — but that was for only 10 samples; at 1000 samples, `process_sample` dominates by orders of magnitude.
 
 **Full Solution:**
 
@@ -356,7 +383,7 @@ For the 10-sample subset, `process_sample` took a total cumulative time of 5.055
 The normal workload is **at least 1000 samples** at a time. If we scale `process_sample` linearly (which is safe to assume since it is called independently for each sample):
 
 ```
-Expected time for 1000 samples = 1000 * 0.505 = 505 seconds
+Expected time for 1000 samples = 1000 × 0.505 = 505 seconds
 ```
 
 Compare this to the other functions:
@@ -395,6 +422,8 @@ The two storage options being considered are:
 
 **Given the above pseudo-code, how should the `image` array be stored to maximize cache efficiency? Explain your answer.**
 
+**Mental Model:** This is a "match the innermost loop variable to the last (shortest-stride) axis" question. The key insight is that C-order (row-major) arrays have their last axis contiguous in memory, so you want the innermost loop to index the last axis. The thought process is: (1) identify the innermost loop — it is `k` (channel index), (2) for sequential cache access, k should index the axis that is contiguous in memory, (3) in C-order, the last axis is contiguous, (4) so channel axis should be last: shape h x w x c. The trap is channels-first (c x h x w), which seems "natural" for image processing frameworks but puts the loop's variable (k) on the first axis with a very large stride.
+
 **Full Solution:**
 
 The `image` array should be stored with **channels as the last dimension**, i.e., shape **h x w x c**.
@@ -431,6 +460,8 @@ def conv_channels_kernel(image, kernel, out, h, w, c):
 The kernel is called with thread blocks of size 32 x 32.
 
 **Given the above implementation, how should the `image` array be stored to maximize cache efficiency? Explain your answer.**
+
+**Mental Model:** This is a "GPU coalescing flips the optimal layout" question — the opposite answer from Q11. The key insight is that on GPU, performance is determined by *warp-level* simultaneous access, not sequential iteration of a single thread. Threads in the same warp execute the same instruction in lockstep; for coalesced access they must each access consecutive addresses. The thought process is: (1) threads in a warp differ in their `j` (column) index, (2) when they all execute `image[k, i, j]`, j varies across the warp — these are consecutive along the w-axis, which is contiguous in channels-first layout, (3) so channels-first is correct for GPU. The trap is applying Q11's CPU reasoning (channels-last is better for sequential k-loop) to the GPU case — a direct copy-paste of the previous answer would be wrong.
 
 **Full Solution:**
 
@@ -485,17 +516,19 @@ Total (MB)  Count  Avg (MB)  Med (MB)  Min (MB)  Max (MB) ...  Operation
 - B) Around 10 GB/s
 - C) Around 12.5 GB/s
 
+**Mental Model:** This is a "bandwidth = size / time" calculation from two separate tables in the profiler. The key insight is to use total size from the size table and total time from the time table — not to confuse the "average size per transfer" (12,500 MB) with the transfer speed. The thought process is: (1) find HtoD total size from the size table: 25,000 MB, (2) find HtoD total time from the time table: 2.5 s, (3) compute speed = 25,000 MB / 2.5 s = 10,000 MB/s ≈ 10 GB/s. The trap is picking option C (12.5 GB/s) by taking the average size per transfer (12,500 MB) and mistaking it for bandwidth.
+
 **Correct Answer: B) Around 10 GB/s**
 
 **Why B is correct:** The HtoD (Host to Device, i.e., CPU to GPU) transfer statistics are:
-- Total size transferred: 25,000 MB = 25 GB (but note: Count = 2, with one transfer being 0 MB — so the actual data transfer is ~25 GB total, or one meaningful transfer of ~25 GB)
-- Total time: 2.5 seconds
+- Total size transferred: 25,000 MB (from the size table, HtoD row)
+- Total time: 2.5 seconds (from the time table, HtoD row)
 
 Transfer speed = Total size / Total time = 25,000 MB / 2.5 s = 10,000 MB/s = approximately 10 GB/s.
 
 **Why the others are wrong:**
-- A) Around 2 GB/s — This would imply 25 GB transferred in ~12.5 seconds, but the profiler shows it took 2.5 seconds, not 12.5.
-- C) Around 12.5 GB/s — This is the average size per transfer (12,500 MB per transfer), not the transfer speed. Confusing data size with data rate.
+- A) Around 2 GB/s — This would imply 25 GB transferred in ~12.5 seconds. The profiler shows it took 2.5 seconds, not 12.5. A student who divides time by size (inverted formula) or misreads the time column lands here.
+- C) Around 12.5 GB/s — This is the *average size per individual transfer* (12,500 MB per transfer), not the transfer speed. A student who reads the "Avg (MB)" column from the size table and labels it as bandwidth makes this mistake — confusing data size per transaction with data rate.
 
 ---
 
@@ -504,6 +537,8 @@ Transfer speed = Total size / Total time = 25,000 MB / 2.5 s = 10,000 MB/s = app
 An engineer informs you that the current pipeline using the parallel CPU version `conv_channels` can compute the results for the same inputs in 7 seconds.
 
 **Keeping the rest of the pipeline the same, how much faster would it be to use the CUDA version `conv_channels_kernel` compared to the parallel CPU version `conv_channels`?**
+
+**Mental Model:** This is a "total GPU time includes transfers, not just kernel time" question. The key insight is that you must add HtoD transfer time + kernel time + DtoH transfer time to get the real GPU pipeline time before computing speedup. The thought process is: (1) read kernel time from the profiler: 0.5 s, (2) read HtoD time: 2.5 s, (3) read DtoH time: 0.5 s, (4) total GPU time = 3.5 s, (5) speedup = 7.0 / 3.5 = 2x. The trap is computing kernel-only speedup: 7.0 / 0.5 = 14x, ignoring that the 2.5 s transfer time completely dominates the pipeline and reduces real-world speedup to just 2x.
 
 **Full Solution:**
 
@@ -545,19 +580,21 @@ The business analytics department has a large DataFrame of factory productivity 
 
 **Briefly explain how and why/why not you would recode each column of the data frame in order to reduce the memory footprint.**
 
+**Mental Model:** This is a "choose the smallest correct dtype for each column" question. The key insight is to check three things for each column: (1) is it stored as `object` (which is a pointer to a heap-allocated Python object and is always wasteful)? If yes, recode. (2) For integers, does the value range fit in a smaller int type? (3) For strings with very few unique values, can it become categorical? The thought process column by column: dates as object are strings — use datetime64; location with 8 unique values is perfect for categorical; mach_id range -1 to 5730 fits in int16 (max 32767); units range 932 to 68837 does not fit in int16 but fits in int32. The trap for `location` is recoding to a general string type rather than categorical, missing the huge compression opportunity.
+
 **Full Solution:**
 
 **`date` column (object, 7.98 GB):**
 Recode it. It is currently stored as Python string objects (`object` dtype), which have very high memory overhead (each string is a separate heap-allocated Python object). It should be recoded to a `datetime64` data type, which stores dates as a compact 64-bit integer. This eliminates the string object overhead. Alternatively, encoding as an integer (e.g., number of days since the minimum date, using `int32`) would also be acceptable and very compact. The saving would be dramatic — from ~8 GB to roughly 0.5 GB or less.
 
 **`location` column (object, 7.64 GB):**
-Recode it. It is stored as string objects but has only **8 unique values**. This is an ideal candidate for a **categorical** dtype in pandas. A categorical column stores only 8 unique strings once, and then uses a small integer code per row to look up the string. With 8 categories, a `uint8` index (0–255) is sufficient — 1 byte per row instead of a large Python string object. This would reduce this column from ~7.64 GB to roughly 0.13 GB (the size of a `uint8` array of the same number of rows as `mach_id`'s ~1.07 GB / 8 bytes * 1 byte). Encoding directly as a `uint8` integer is also acceptable.
+Recode it. It is stored as string objects but has only **8 unique values**. This is an ideal candidate for a **categorical** dtype in pandas. A categorical column stores only 8 unique strings once, and then uses a small integer code per row to look up the string. With 8 categories, a `uint8` index (0–255) is sufficient — 1 byte per row instead of a large Python string object. This would reduce this column from ~7.64 GB to roughly 0.13 GB. Encoding directly as a `uint8` integer is also acceptable. A student who suggests "convert to string but smaller" without using categorical misses the key optimization here.
 
 **`mach_id` column (int64, 1.07 GB):**
-Recode it. The values range from -1 to 5730, which fits within an `int16` range (int16 can hold -32 768 to 32 767). Recoding from `int64` (8 bytes per value) to `int16` (2 bytes per value) reduces memory by 4x, from ~1.07 GB to ~0.27 GB.
+Recode it. The values range from -1 to 5730, which fits within an `int16` range (int16 can hold -32 768 to 32 767). Recoding from `int64` (8 bytes per value) to `int16` (2 bytes per value) reduces memory by 4x, from ~1.07 GB to ~0.27 GB. The trap is choosing `uint16` (0 to 65535) — but the minimum value is -1 (negative!), so an unsigned type would not work.
 
 **`units` column (int64, 1.07 GB):**
-Recode it. The values range from 932 to 68,837. This does not fit in `int16` (max 32,767) but fits in `int32` (max ~2.1 billion) or `uint32` (max ~4.3 billion). Recoding from `int64` (8 bytes) to `int32` (4 bytes) reduces memory by 2x, from ~1.07 GB to ~0.53 GB. Note: `uint32` would also work since the minimum value is 932 (positive).
+Recode it. The values range from 932 to 68,837. This does not fit in `int16` (max 32,767) but fits in `int32` (max ~2.1 billion) or `uint32` (max ~4.3 billion). Recoding from `int64` (8 bytes) to `int32` (4 bytes) reduces memory by 2x, from ~1.07 GB to ~0.53 GB. The trap is trying `int16` for this column without checking: 68,837 > 32,767, so int16 would overflow and corrupt the data.
 
 **Key concept tested:** Identifying wasteful data types (`object` for strings/dates, oversized integer types) and selecting the smallest appropriate dtype based on the range of values and cardinality of the data.
 
@@ -568,6 +605,8 @@ Recode it. The values range from 932 to 68,837. This does not fit in `int16` (ma
 The most common operation on the DataFrame is to extract the rows corresponding to a certain day and then compute some summary statistics. They typically conduct many such operations every time the DataFrame is used.
 
 **Briefly explain how they may speed up such operations.**
+
+**Mental Model:** This is a "Pandas indexing for repeated lookup" question. The key insight is that a sorted index enables binary search (O(log n)) instead of linear scan (O(n)) for every query, and the one-time cost of building/sorting the index is amortized over the many queries that follow. The thought process is: (1) the operation is "find all rows where date = X" — this is a lookup, (2) without an index, pandas scans every row each time: O(n), (3) with a sorted DatetimeIndex, pandas uses binary search: O(log n), (4) one-time index build cost is worth it because "many operations every time" the DataFrame is used. The trap is suggesting re-sorting the DataFrame or loading only the needed rows from disk — valid in some contexts, but the standard Pandas answer is: set and sort the index.
 
 **Full Solution:**
 
@@ -604,6 +643,8 @@ The hardware available for processing has only 200 MB of available memory for ho
 - B) Around 10 000 000
 - C) Around 10 000 000 000
 
+**Mental Model:** This is a "bytes-per-row calculation" question. The key insight is to sum the byte sizes of all dtypes per row, then divide the available memory by that per-row size. The thought process is: (1) uint32 = 4 bytes, uint64 = 8 bytes, float64 = 8 bytes, total = 20 bytes/row, (2) available = 200 MB = 200 × 10^6 bytes, (3) rows = 200×10^6 / 20 = 10×10^6 = 10 million. The trap is option A (10,000) — which implies 20 KB per row, absurd for three numeric fields — arrived at by misplacing a power of ten when converting MB to bytes.
+
 **Correct Answer: B) Around 10 000 000**
 
 **Why B is correct:** First calculate the bytes per row. Each row contains:
@@ -614,18 +655,16 @@ The hardware available for processing has only 200 MB of available memory for ho
 
 Maximum rows = Available memory / bytes per row:
 ```
-200 MB = 200 * 1024 * 1024 bytes = 209,715,200 bytes
+200 MB = 200 × 1024 × 1024 bytes ≈ 209,715,200 bytes
 
 Rows = 209,715,200 / 20 = 10,485,760 ≈ 10,000,000
 ```
 
 So approximately 10 million rows fit in 200 MB.
 
-We can verify by using the total DataFrame size. Total size = 1.91 + 3.83 + 3.83 = 9.57 GB. From the timestamp column (uint64, 3.83 GB), the number of rows = 3.83 GB / 8 bytes = 3.83 * 1024^3 / 8 ≈ 514 million rows. Chunk fraction = 200 MB / 9,570 MB ≈ 2%, so chunk size ≈ 514M * 0.02 ≈ 10M rows.
-
 **Why the others are wrong:**
-- A) Around 10 000 — This would imply each row uses 200 MB / 10,000 = 20 KB per row, which is absurd for three numeric fields totalling 20 bytes.
-- C) Around 10 000 000 000 (10 billion) — This would require 200 billion bytes (200 GB) of RAM, far exceeding the 200 MB limit.
+- A) Around 10 000 — This would imply each row uses 200 MB / 10,000 = 20 KB per row, which is absurd for three numeric fields totalling 20 bytes. A student who miscounts zeros when converting MB to bytes (using 200 bytes instead of 200 million bytes) arrives here.
+- C) Around 10 000 000 000 (10 billion) — This would require 200 billion bytes (200 GB) of RAM, far exceeding the 200 MB limit. A student who confuses the answer order of magnitude, or divides MB by bytes without unit conversion, lands here.
 
 ---
 
@@ -649,6 +688,8 @@ python poweranalysis.py $LSB_JOBINDEX data/power_measurements
 They have another job that needs to run once all jobs in the above job array have finished processing. It does not matter if each individual job finished successfully or not — as long as it finished.
 
 **What must they add to their job script in order to achieve this?**
+
+**Mental Model:** This is a "ended vs done job dependency" question. The key insight is that LSF has two relevant dependency conditions: `done()` which requires all jobs to exit *successfully*, and `ended()` which triggers when all jobs have *finished regardless of success or failure*. The thought process is: (1) the requirement is "finished regardless of outcome", (2) this maps exactly to `ended()`, not `done()`, (3) the syntax is `#BSUB -w "ended(power)"` referencing the job array by its name. The trap — which many students fall into — is writing `done(power)` because it seems like the natural "jobs are done" phrasing, but `done()` would block forever if any job fails.
 
 **Full Solution:**
 
@@ -694,6 +735,8 @@ def simulate(n, x0s, step):
 `simulate_single` performs `n` steps of simulation from a single initial value `x0`. `simulate` calls `simulate_single` with `m` different initial values.
 
 **How and where would you apply parallelization in the above code? To what extent? What is your expected speed-up? How does your advice depend on `m` and `n`? You may ignore overhead in your analysis.**
+
+**Mental Model:** This is a "identify parallelizable loop vs serial-dependency loop, then choose threading vs multiprocessing" question. The thought process has three parts: (1) can the inner loop be parallelized? No — x at step i depends on x at step i-1, strict serial chain. (2) Can the outer loop be parallelized? Yes — each simulate_single(x0s[j]) is completely independent. (3) Should we use threads or processes? Check for `nogil=True` — this Numba decorator releases the GIL during execution, so threads CAN run in parallel despite being Python threads. The trap is (a) trying to parallelize the inner loop and (b) defaulting to multiprocessing when threading with nogil=True is both sufficient and lower-overhead.
 
 **Full Solution:**
 

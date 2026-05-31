@@ -9,7 +9,8 @@
       "Bash(mkdir -p \"D:/Program Files/SEM2/python_hpc/project/data\")",
       "Bash(tar -xzf \"D:/Program Files/SEM2/python_hpc/project/swiss_data.tar.gz\" -C \"D:/Program Files/SEM2/python_hpc/project/data/\")",
       "Bash(mkdir -p \"/d/Program Files/SEM2/python_hpc/project/data\")",
-      "Bash(tar -xzf \"/d/Program Files/SEM2/python_hpc/project/swiss_data.tar.gz\" -C \"/d/Program Files/SEM2/python_hpc/project/data/\")"
+      "Bash(tar -xzf \"/d/Program Files/SEM2/python_hpc/project/swiss_data.tar.gz\" -C \"/d/Program Files/SEM2/python_hpc/project/data/\")",
+      "Bash(pip show *)"
     ]
   }
 }

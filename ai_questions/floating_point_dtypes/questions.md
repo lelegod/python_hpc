@@ -9,6 +9,8 @@
 
 > **Week reference:** Week 2
 
+**Mental Model:** float16 relative resolution ≈ 0.001, meaning the ULP (unit in last place) at value V is approximately V × 0.001. At V = 10000, ULP ≈ 10. Adding 1 (which is less than 10) rounds to zero change. Trap: treating 0.001 as an absolute threshold rather than a relative one.
+
 What does the following print?
 
 ```python
@@ -23,16 +25,18 @@ print(np.float16(10000) + np.float16(1))
 
 **Answer: B**
 
-- A) Incorrect — float16 cannot represent 10001; the increment needed is ~10 at this magnitude, so 1 is rounded to 0.
-- B) Correct — float16 relative resolution is ~0.001, so at value 10000 the smallest representable increment is ~10; adding 1 has no effect.
-- C) Incorrect — 10002 is also not representable; the result stays at 10000.
-- D) Incorrect — 10000 is well within float16's max of ~65504, so no overflow occurs.
+- A) Incorrect — float16 cannot represent 10001 because the smallest increment at magnitude 10000 is approximately 10000 × 0.001 = 10. Adding 1 is below this threshold and rounds to zero change.
+- B) Correct — float16 relative resolution is ~0.001 (machine epsilon), meaning at value 10000 the smallest representable increment is ~10. Since 1 < 10/2 = 5 (half ULP), it rounds down, leaving the result at 10000.0.
+- C) Incorrect — 10002 is also not a representable float16 value near 10000; the next representable value above 10000 is approximately 10010. Adding 1 does not reach even 10002.
+- D) Incorrect — 10000 is well within float16's maximum of ~65504, so no overflow occurs. Infinity only appears when the value exceeds ~65504.
 
 ---
 
 ## Q2 — float16 Addition Near 100
 
 > **Week reference:** Week 2
+
+**Mental Model:** At V = 100, ULP ≈ 100 × 0.001 = 0.0625 (the exact exponent-based ULP). Half ULP = 0.03125. Since 0.05 > 0.03125, it rounds UP to one full ULP = 0.0625. So 100 + 0.05 → 100.0625, printed as 100.06.
 
 What does the following print?
 
@@ -48,16 +52,18 @@ print(np.float16(100) + np.float16(0.05))
 
 **Answer: B**
 
-- A) Incorrect — the ULP (unit in last place) at value 100 in float16 is 0.0625; since 0.05 > 0.03125 (half ULP), it rounds UP, not to 0.
-- B) Correct — at value 100, float16 exponent gives ULP = 0.0625; 0.05 > 0.03125 (half ULP) so it rounds up to 0.0625, giving 100.0625, printed as 100.06.
-- C) Incorrect — 0.1 would be two ULPs above 100; 0.05 is less than one ULP (0.0625) so it cannot reach 100.1.
-- D) Incorrect — the base value 100.0 dominates; only the small addend gets rounded, not lost entirely.
+- A) Incorrect — the ULP at value 100 in float16 is 0.0625; 0.05 is larger than half-ULP (0.03125), so it rounds UP to one full ULP. The increment is not lost; it rounds to 0.0625.
+- B) Correct — at value 100, the float16 exponent gives ULP = 0.0625. Since 0.05 > 0.03125 (half ULP), round-to-nearest gives 0.0625. Result = 100.0625, which numpy prints as approximately 100.06.
+- C) Incorrect — reaching 100.1 would require adding approximately 0.0625 × 2 = 0.125 (two ULPs above 100). Since 0.05 < 0.0625, it rounds to at most one ULP, giving 100.0625, not 100.1.
+- D) Incorrect — 0.05 is not the output; the base value 100.0 completely dominates in a floating-point addition. The question is only whether the small addend rounds to 0 or to 0.0625 — not whether 100 disappears.
 
 ---
 
 ## Q3 — float16 vs int16 for Exact Integer Representation
 
 > **Week reference:** Week 2
+
+**Mental Model:** float16 has a 10-bit mantissa, giving ~3 decimal digits of precision. Large integers like 10001 require distinguishing consecutive integers — at this magnitude that needs more than 10 bits of mantissa. int16 stores integers exactly with no rounding. They are different tools: float16 for approximate real numbers, int16 for exact integers.
 
 You need to store the integer value 10001 exactly. Which dtype succeeds?
 
@@ -68,16 +74,18 @@ You need to store the integer value 10001 exactly. Which dtype succeeds?
 
 **Answer: B**
 
-- A) Incorrect — float16 has only ~10 bits of mantissa, so large integers like 10001 are rounded (stored as 10000).
-- B) Correct — int16 uses exact integer arithmetic; 10001 is within its range of −32768 to 32767 and is stored without rounding.
-- C) Incorrect — float16 rounds 10001 to 10000 due to limited mantissa precision.
-- D) Incorrect — int16 (a 16-bit signed integer) can hold 10001 exactly.
+- A) Incorrect — float16 can represent values up to ~65504, but NOT all integers in that range exactly. The 10-bit mantissa means consecutive integers near 10000 are spaced ~10 apart; 10001 rounds to 10000. "Max value" and "exact integer range" are different things.
+- B) Correct — int16 uses exact integer arithmetic (two's complement) with no rounding. Its range is −32768 to 32767; since 10001 < 32767, it fits and is stored without any rounding or precision loss.
+- C) Incorrect — float16 rounds 10001 to 10000 due to its limited 10-bit mantissa. The ULP at 10000 is ~10, so 10001 and 10000 are indistinguishable in float16.
+- D) Incorrect — int16 (a 16-bit signed integer) can hold 10001 exactly. 32-bit storage is only required if the value exceeds 32767 (for signed) or 65535 (for unsigned 16-bit).
 
 ---
 
 ## Q4 — int8 Overflow
 
 > **Week reference:** Week 2
+
+**Mental Model:** int8 range is −128 to 127. When you exceed 127, NumPy wraps using two's complement arithmetic: subtract 256 from the mathematical result. 120 + 10 = 130 → 130 − 256 = −126. No exception is raised; the wrap is silent.
 
 What does the following print?
 
@@ -93,16 +101,18 @@ print(np.int8(120) + np.int8(10))
 
 **Answer: C**
 
-- A) Incorrect — int8 max is 127; 130 is out of range and NumPy wraps on overflow.
-- B) Incorrect — NumPy does not saturate at the maximum; it wraps using two's complement.
-- C) Correct — 130 overflows int8 (max 127); two's complement wrap: 130 − 256 = −126.
-- D) Incorrect — overflow does not yield 0; it wraps to the two's complement value.
+- A) Incorrect — int8 max is 127; 130 is out of range. NumPy scalar arithmetic wraps on overflow rather than raising an exception or returning the clipped maximum.
+- B) Incorrect — NumPy does not saturate at the maximum value (127) like some embedded/DSP systems. It wraps using two's complement arithmetic, which is the standard C integer overflow behaviour.
+- C) Correct — 120 + 10 = 130 mathematically. Since 130 > 127 (int8 max), two's complement wrap gives 130 − 256 = −126. This is the bit pattern `0b10000010` interpreted as a signed 8-bit integer.
+- D) Incorrect — overflow does not yield 0; it wraps to the two's complement value. Zero would result from e.g. `np.int8(128)`, which is 0 (since 128 − 256 = −128, wait: 128 wraps to −128, not 0). 0 specifically comes from adding values that cancel, not overflow.
 
 ---
 
 ## Q5 — uint8 Negative Wrapping
 
 > **Week reference:** Week 2
+
+**Mental Model:** −1 in two's complement (any width) is "all bits set." In 8-bit: `11111111` = 255 unsigned. `.view(np.uint8)` reinterprets the same bits without conversion — so the bit pattern of int8(−1) (which is `0xFF`) becomes uint8(255).
 
 What does the following print?
 
@@ -118,16 +128,18 @@ print(np.int8(-1).view(np.uint8))
 
 **Answer: D**
 
-- A) Incorrect — uint8 is unsigned and cannot represent negative values; it wraps.
-- B) Incorrect — 0 would be the result of wrapping from uint8(256), not uint8(−1).
-- C) Incorrect — 127 is the max of int8, not uint8; there is no saturation here.
-- D) Correct — −1 in two's complement (mod 256) wraps to 255, the maximum uint8 value.
+- A) Incorrect — uint8 is unsigned and cannot represent negative values; the range is 0 to 255. `.view()` reinterprets the bit pattern without any sign extension or conversion.
+- B) Incorrect — 0 would be the uint8 view of int8(0), not int8(−1). The bit pattern of −1 is `0xFF` (255), not `0x00`.
+- C) Incorrect — 127 is the maximum value of int8 (bit pattern `0x7F`), not the view of −1. The bit pattern of int8(−1) is `0xFF`, which is 255 as uint8.
+- D) Correct — int8(−1) has the two's complement bit pattern `0xFF` = `11111111`. `.view(np.uint8)` reinterprets those same 8 bits as an unsigned integer: `11111111` = 255.
 
 ---
 
 ## Q6 — Downcasting Safety Check
 
 > **Week reference:** Week 2
+
+**Mental Model:** Check three things: (1) signed vs unsigned (negative values require signed), (2) max value fits in range, (3) min value fits in range. Here: −1 requires signed → eliminate uint types. Range 5730 < 32767 (int16 max) → int16 is safe.
 
 A DataFrame column contains integer values ranging from −1 to 5730. Which of the following dtypes is safe to downcast to?
 
@@ -138,16 +150,18 @@ A DataFrame column contains integer values ranging from −1 to 5730. Which of t
 
 **Answer: C**
 
-- A) Incorrect — int8 max is 127, which is far below 5730; overflow would occur.
-- B) Incorrect — uint16 cannot represent −1 (unsigned types reject negatives; wrapping gives 65535).
-- C) Correct — int16 is signed (handles −1) and has max 32767, which safely covers the range −1 to 5730.
-- D) Incorrect — uint8 max is 255, far below 5730, and it cannot hold −1.
+- A) Incorrect — int8 max is 127, which is far below 5730. Values from 128 to 5730 would silently wrap to incorrect negative values. The "small enough" logic is backwards: you need the dtype to be large enough, not small.
+- B) Incorrect — uint16 cannot represent −1. Unsigned types have no negative range. Casting −1 to uint16 wraps to 65535 (0xFFFF), corrupting the data silently. The maximum headroom is irrelevant if the minimum value is negative.
+- C) Correct — int16 is signed (handles −1 through −32768) and has a maximum of 32767, which comfortably covers 5730. Both the minimum (−1 > −32768) and maximum (5730 < 32767) fit within int16's range.
+- D) Incorrect — uint8 max is 255, far below 5730 — values above 255 would wrap. Additionally, uint8 cannot represent −1 at all. Both the range and the signedness requirements are violated.
 
 ---
 
 ## Q7 — float16 Overflow to Infinity
 
 > **Week reference:** Week 2
+
+**Mental Model:** float16 max finite value ≈ 65504. Exceeding this overflows to `inf` (not to the max value, not to NaN). Saturation would be safer but IEEE 754 mandates overflow → infinity. NaN only arises from undefined operations like 0/0 or inf−inf.
 
 What does the following print?
 
@@ -163,16 +177,18 @@ print(np.float16(70000))
 
 **Answer: D**
 
-- A) Incorrect — 70000 exceeds float16's maximum representable value of ~65504.
-- B) Incorrect — float16 does not saturate at its maximum; it overflows to infinity.
-- C) Incorrect — overflow produces inf, not nan; nan arises from undefined operations (e.g., 0/0).
-- D) Correct — float16 max is ~65504; values beyond this overflow to positive infinity.
+- A) Incorrect — 70000 exceeds float16's maximum finite representable value of approximately 65504. There is no way to encode 70000 in 16-bit IEEE 754 format.
+- B) Incorrect — float16 does not saturate (clamp) at its maximum value. IEEE 754 specifies that overflow produces infinity, not the maximum finite value. Saturation semantics exist in some special integer formats but not in standard IEEE floats.
+- C) Incorrect — overflow produces `inf`, not `nan`. NaN arises from undefined operations such as `0.0/0.0`, `inf - inf`, or `sqrt(-1)`. Overflow from a finite input always gives ±inf.
+- D) Correct — float16 max is ~65504; values beyond this overflow to positive infinity (`inf`) per IEEE 754 standard. `np.float16(70000)` evaluates to `inf` at construction time.
 
 ---
 
 ## Q8 — float32 Precision Limits
 
 > **Week reference:** Week 2
+
+**Mental Model:** float32 has a 23-bit mantissa ≈ 7 significant decimal digits. 1234567.89 has 9 significant digits, so the last two are lost to rounding. The fractional part `.89` is rounded away, leaving approximately 1234568.0.
 
 What is the most likely stored value when you compute `np.float32(1234567.89)`?
 
@@ -183,16 +199,18 @@ What is the most likely stored value when you compute `np.float32(1234567.89)`?
 
 **Answer: B**
 
-- A) Incorrect — float32 provides only ~7 significant decimal digits; 1234567.89 has 9 significant digits, so the last two are lost.
-- B) Correct — float32 can represent about 7 significant digits; 1234567.89 rounds to approximately 1234568.0.
-- C) Incorrect — float32 does not truncate to integers; it rounds to the nearest representable float.
-- D) Incorrect — the rounding granularity at this magnitude is roughly 1 unit, not 10.
+- A) Incorrect — float32 provides only ~7 significant decimal digits (23-bit mantissa × log₁₀(2) ≈ 6.92 digits). 1234567.89 has 9 significant digits, so the last ~2 digits cannot be represented and are rounded away.
+- B) Correct — float32 can represent approximately 7 significant digits. The value 1234567.89 rounds to the nearest representable float32, which is approximately 1234568.0. The `.89` fractional part is lost because the integer part already uses all 7 significant digits.
+- C) Incorrect — float32 does not truncate to integers; it rounds to the nearest representable floating-point value. Truncation would give 1234567.0, but round-to-nearest gives 1234568.0 (since .89 > .5).
+- D) Incorrect — the rounding granularity (ULP) at 1234567 in float32 is approximately 0.0625 to 1 unit, not 10. Rounding to the nearest ten would require float16, which has ULP ≈ 10 at this magnitude.
 
 ---
 
 ## Q9 — Relative vs Absolute Resolution of float16
 
 > **Week reference:** Week 2
+
+**Mental Model:** Machine epsilon is a RELATIVE quantity — it scales with the value being represented. At V = 10000, the absolute gap between consecutive floats is ~10. At V = 0.001, the absolute gap is ~0.000001. The 0.001 epsilon only equals 0.001 in absolute terms near V = 1.
 
 The machine epsilon for float16 is approximately 0.001. Which statement correctly describes what this means?
 
@@ -203,16 +221,18 @@ The machine epsilon for float16 is approximately 0.001. Which statement correctl
 
 **Answer: B**
 
-- A) Incorrect — 0.001 is the *relative* resolution, not absolute; at large values (e.g., 10000), the smallest increment is ~10, not 0.001.
-- B) Correct — machine epsilon defines *relative* precision; the gap between consecutive representable values scales linearly with the magnitude of the value.
-- C) Incorrect — float16 can represent values up to ~65504; the epsilon does not set an upper limit on representable values.
-- D) Incorrect — float32 epsilon is ~1.2×10⁻⁷ and float64 epsilon is ~2.2×10⁻¹⁶; they differ significantly from float16's ~0.001.
+- A) Incorrect — 0.001 is the *relative* resolution, not absolute. At value 10000, the absolute gap between consecutive float16 values is ~10, not 0.001. Two values differing by 5 (> 0.001 absolute) cannot be distinguished at that magnitude. This is the central trap of this question.
+- B) Correct — machine epsilon defines *relative* precision. The absolute gap between consecutive representable values (ULP) at value V is approximately V × epsilon. At V = 1 the gap is ~0.001; at V = 10000 the gap is ~10; at V = 0.01 the gap is ~0.00001.
+- C) Incorrect — float16 can represent values up to ~65504 (limited by the 5-bit exponent, not the mantissa). Machine epsilon does not set an upper representable limit; it only describes the *density* of representable values relative to their magnitude.
+- D) Incorrect — float16 epsilon ≈ 0.001, float32 epsilon ≈ 1.2×10⁻⁷, float64 epsilon ≈ 2.2×10⁻¹⁶. These differ by orders of magnitude. float16 has the worst (largest) relative precision among standard IEEE 754 types.
 
 ---
 
 ## Q10 — int16 Range Confusion with uint16
 
 > **Week reference:** Week 2
+
+**Mental Model:** int16 is signed: range −32768 to 32767. uint16 is unsigned: range 0 to 65535. The trap is confusing 65535 (uint16 max) with int16 max. When a colleague says "int16 max is 65535," they are wrong — that's uint16. Values above 32767 overflow int16 silently.
 
 A dataset column has non-negative integer values with a maximum of 40000. A colleague suggests casting it to `int16` to save memory. What is the problem?
 
@@ -223,9 +243,9 @@ A dataset column has non-negative integer values with a maximum of 40000. A coll
 
 **Answer: B**
 
-- A) Incorrect — 65535 is the max of *uint16*, not int16; int16 max is only 32767.
-- B) Correct — int16 is signed, with range −32768 to 32767; 40000 overflows and wraps to a negative two's complement value (~−25536).
-- C) Incorrect — int16 can hold non-negative values (0 to 32767); the issue is the maximum, not the sign.
-- D) Incorrect — int16 is an integer type; its precision is unrelated to float16's epsilon; the problem is purely the range limit.
+- A) Incorrect — 65535 is the maximum of *uint16* (unsigned 16-bit integer), not int16. int16 is a signed type using one bit for the sign, leaving 15 bits for magnitude: max = 2¹⁵ − 1 = 32767. This confusion between signed and unsigned ranges is the most common int16 mistake.
+- B) Correct — int16 is signed with range −32768 to 32767. The value 40000 exceeds 32767, so it overflows. Two's complement wrap: 40000 − 65536 = −25536. This negative value silently corrupts the data with no warning.
+- C) Incorrect — int16 can hold non-negative values (0 to 32767) perfectly well. The issue is not that it rejects non-negatives, but that its positive maximum (32767) is too small for 40000.
+- D) Incorrect — int16 is an integer type and its precision is entirely unrelated to float16's machine epsilon. Integer types represent their range exactly with no floating-point rounding; the problem here is purely the range limit, not floating-point precision.
 
 ---
