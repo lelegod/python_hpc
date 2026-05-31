@@ -457,3 +457,41 @@ The exercises benchmark write and read times for three array types at n = 256, 5
 7. **`os.sync()` is required for fair I/O benchmarks.** Without it, the OS page cache can make writes appear much faster than they are, giving misleading results.
 
 8. **Wall time is what users experience.** CPU time and FLOP/s are diagnostic tools — wall time is the number you ultimately want to minimize.
+
+---
+
+## Common Misconception: Stride-8 vs Sequential Access
+
+**Intuition that seems right but isn't:**
+> "stride-8 reads fewer elements → less work → must be faster"
+
+**Why it's wrong — the cache line trap:**
+
+A cache line is 64 bytes = 8 float64 values. The CPU always loads a full cache line — you cannot load just one float64.
+
+```
+Sequential x[::1] summing 10M elements:
+  Cache lines loaded = 10M / 8 = 1,250,000
+  Elements used per cache line = 8  → 100% utilisation
+
+Stride-8 x[::8] summing 1.25M elements:
+  Cache lines loaded = 1.25M / 1 = 1,250,000
+  Elements used per cache line = 1  → 12.5% utilisation
+```
+
+**Same number of cache line loads. Same memory traffic (80 MB). But stride-8 does 8× less arithmetic.**
+
+So why is sequential still faster? Two reasons:
+
+**1. SIMD vectorisation.** Sequential access lets the CPU process 4–8 float64s per instruction (AVX2). Stride-8 breaks vectorisation — each element is an isolated scalar load processed one at a time.
+
+**2. Hardware prefetcher.** The CPU detects sequential patterns and pre-loads the next cache line before you request it, hiding latency. Stride-8 is harder to prefetch effectively.
+
+**The full picture:**
+
+| Pattern | Memory traffic | Arithmetic | Vectorised | Faster? |
+|---|---|---|---|---|
+| `x[::1]` | 80 MB | 10M ops | ✅ SIMD | ✅ |
+| `x[::8]` | 80 MB | 1.25M ops | ❌ scalar | ❌ |
+
+**Bandwidth** = maximum bytes per second the memory bus can deliver (e.g. 50 GB/s). It's a fixed pipe. Both patterns saturate it equally — so bandwidth alone doesn't explain the difference. The advantage of sequential access comes from SIMD and prefetching on top of equal memory traffic.

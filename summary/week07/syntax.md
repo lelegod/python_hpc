@@ -32,18 +32,31 @@ df['col'] = df['col'].astype('uint8')
 df['col'] = df['col'].astype('float32')
 ```
 
-### dtype ranges
+### dtype reference table
 
-| dtype | Range |
-|---|---|
-| int8 | -128 to 127 |
-| uint8 | 0 to 255 |
-| int16 | -32,768 to 32,767 |
-| int32 | ±2,147,483,647 |
-| float32 | ~7 decimal digits |
-| float64 | ~15 decimal digits |
+| dtype | Bytes | Min | Max | Notes |
+|---|---|---|---|---|
+| `int8` | 1 | -128 | 127 | |
+| `uint8` | 1 | 0 | 255 | |
+| `int16` | 2 | -32,768 | 32,767 | |
+| `uint16` | 2 | 0 | 65,535 | |
+| `int32` | 4 | -2,147,483,648 | 2,147,483,647 | |
+| `uint32` | 4 | 0 | 4,294,967,295 | |
+| `int64` | 8 | -9.2×10¹⁸ | 9.2×10¹⁸ | Python default int |
+| `float16` | 2 | -65,504 | 65,504 | ~3 sig. digits; ULP at V ≈ V×0.001 |
+| `float32` | 4 | ~-3.4×10³⁸ | ~3.4×10³⁸ | ~7 sig. digits; exact integers up to 2²⁴ = 16,777,216 |
+| `float64` | 8 | ~-1.8×10³⁰⁸ | ~1.8×10³⁰⁸ | ~15 sig. digits; exact integers up to 2⁵³ |
 
-### dtype byte sizes: uint8=1, int16=2, int32=4, float32=4, int64=8, float64=8
+**float16 precision trap:**
+- Resolution ≈ 0.001 is **relative** (like machine epsilon), NOT absolute
+- At value V: smallest representable increment ≈ V × 0.001
+- `float16(10000) + 1 = 10000` — increment needed is ~10, so 1 is lost
+- `float16(100) + 0.05 = 100.06` — ULP at 100 is 0.0625, so 0.05 rounds up
+
+**float32 exact integer limit:**
+- Integers up to **2²⁴ = 16,777,216** are exact in float32
+- Above that: consecutive integers are no longer distinguishable
+- `float32(16_777_217) == float32(16_777_216)` → True
 
 ---
 

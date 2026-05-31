@@ -36,18 +36,24 @@ python -m cProfile -s cumulative script.py args
 | Column | Meaning |
 |---|---|
 | `ncalls` | number of calls (e.g. `5/1` = 5 total, 1 primitive/non-recursive) |
-| `tottime` | time in THIS function only (excludes sub-calls) |
-| `percall` | tottime / ncalls |
-| `cumtime` | total time including ALL sub-calls |
-| `percall` (2nd) | cumtime / ncalls |
+| `tottime` | time in THIS function's own code only — excludes all sub-calls |
+| `percall` (1st) | tottime / ncalls |
+| `cumtime` | total wall-clock cost of one call including ALL sub-calls |
+| `percall` (2nd) | cumtime / ncalls — **use this for production projections** |
 
 **Use `cumtime` to find the overall bottleneck.**
-**Use `tottime` to find slow code within a specific function.**
+**Use `tottime` to find slow code inside a specific function (ignores callees).**
 
-**Scaling to production:**
+**Scaling to production — always use cumtime percall (2nd percall column):**
 ```
-production_time ≈ percall × production_ncalls
+production_time = (cumtime / ncalls) × production_ncalls   ← scaling functions
+               + cumtime                                    ← fixed-cost functions (ncalls=1)
 ```
+
+Example: process_item cumtime=24.5s, ncalls=50, production=5000
+→ (24.5/50) × 5000 = 0.490 × 5000 = 2450s
+
+**Trap:** using tottime percall underestimates cost if the function calls expensive helpers.
 
 ---
 
@@ -73,8 +79,18 @@ kernprof -l -v script.py args
 **FLOP/s calculation:**
 ```python
 FLOP/s = (FLOPs_per_iteration * Hits) / (total_time_seconds)
-# total_time_seconds = Time column / 1_000_000
+# total_time_seconds = Time column / 1_000_000  (Time is in microseconds!)
 ```
+
+**What counts as a FLOP?** Count every arithmetic operation on floating-point values:
+```python
+result += a[i]*b[i] + c[i]
+#              ^       ^   ^
+#          multiply   add  add (the += is also an addition)
+# = 3 FLOPs per iteration
+```
+`+=` is always 1 FLOP — it is `result = result + (...)`, which is an addition.
+Memory loads/stores and index arithmetic do NOT count as FLOPs.
 
 ---
 

@@ -9,9 +9,9 @@
 
 > **Week reference:** Week 9
 
-**Mental Model:** A warp reads 32 consecutive elements in one transaction only if those elements are at consecutive memory addresses. With `cuda.grid(2)`, adjacent threads differ by 1 in `col` (the last index) — so you want ALL warp threads varying in `col`, not `row`.
+**Mental Model:** With `row, col = cuda.grid(2)`, row=x-dim and col=y-dim. Adjacent threads (Thread ID = threadIdx.x + threadIdx.y*blockDim.x) differ by 1 in threadIdx.x → **row varies, not col**. For coalesced access of `A[row, col]` (row-major), you need col to vary → need blockDim.x=1 so threadIdx.x is stuck at 0 and threadIdx.y (col) cycles instead. Block (1, N) achieves this. Trap: thinking col naturally varies in warps — it only does when blockDim.x=1.
 
-A CUDA kernel uses `row, col = cuda.grid(2)` to index a row-major 2D array `A[row, col]`. Adjacent threads within a warp differ by 1 in `col`. Which block shape gives the **best** memory coalescing?
+A CUDA kernel uses `row, col = cuda.grid(2)` to index a row-major 2D array `A[row, col]`. With `row = x-dim`, adjacent threads differ by 1 in `row`. Which block shape makes `col` vary across warp threads instead, achieving coalesced access?
 
 - A) (256, 1) — 256 rows, 1 column
 - B) (16, 16) — 16 rows, 16 columns
@@ -31,7 +31,7 @@ A CUDA kernel uses `row, col = cuda.grid(2)` to index a row-major 2D array `A[ro
 
 > **Week reference:** Week 9
 
-**Mental Model:** Coalescing is about whether a warp's 32 threads map to 32 consecutive addresses. In `cuda.grid(2)`, `col` is the fast-varying index — identical to the last array axis — so maximise the number of threads varying in `col` within a warp.
+**Mental Model:** Coalescing requires a warp's 32 threads to map to 32 consecutive addresses. With `row, col = cuda.grid(2)`, **row is the fast-varying index** (x-dim, threadIdx.x increments first). For `A[row, col]` in row-major memory, col (last axis) is what's adjacent. So you need to override the default: use block (1, 256) so blockDim.x=1 → row is locked → col varies via threadIdx.y → 32 consecutive col addresses → coalesced.
 
 For a row-major 2D array accessed as `A[row, col]`, why does a block shape of `(1, 256)` give better memory coalescing than `(16, 16)`?
 

@@ -375,7 +375,7 @@ Which of the following thread block configurations will have the **best** perfor
 - b) 256 × 1
 - c) 1 × 256
 
-**Mental Model:** This is a "CUDA warp coalescing — threads must vary in the column dimension" question. The key insight is: threads in a warp execute the same instruction simultaneously; for coalesced memory access they must touch *consecutive* memory addresses. In row-major storage, consecutive addresses are along the column (last) axis. Therefore, threads in a warp must differ in their `col` index — which means the block's second (column) dimension should span 256 threads. The thought process is: (1) identify which index varies fastest in a warp (the column index in a 2D grid), (2) choose the configuration where 256 threads are spread across columns (1 × 256). The trap is choosing b (256 × 1) by thinking "256 threads must mean 256 in the first dimension" without understanding which index changes within a warp.
+**Mental Model:** This is a "CUDA warp coalescing — pick the block shape that makes col vary in the warp" question. Key facts: with `row, col = cuda.grid(2)`, row=x-dim and col=y-dim. Adjacent threads (consecutive IDs) differ by 1 in threadIdx.x → row varies, NOT col. For coalesced access of `x[row, col]`, you need col to vary → col only varies when threadIdx.x is exhausted → need blockDim.x=1 → block (1, 256). The thought process: Thread ID = threadIdx.x + threadIdx.y * blockDim.x. For warp threads 0–31: with (1, 256): threadIdx.x=0 always, threadIdx.y=0..31 → col varies ✅. With (256, 1): threadIdx.x=0..31, threadIdx.y=0 → row varies ❌. The trap is choosing (256, 1) by thinking "more threads in first dimension = better" without tracing which index actually varies in the warp.
 
 **Correct Answer: c) 1 × 256**
 

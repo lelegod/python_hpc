@@ -129,12 +129,12 @@ Given an array's strides, determine the optimal loop order. The axis with the **
 ### 8. GPU kernel thread blocks and coalescing
 - Each thread handles one output element. Grid dimensions = ceil(output_dim / block_dim).
 - Threads in the same warp (consecutive thread IDs) should access consecutive memory addresses.
-- In `cuda.grid(2)` the convention is `(row, col)`. Adjacent threads differ by 1 in `col` (j). For coalesced access, array indexing should vary fastest along the j (column) dimension, meaning the last array axis is the column axis.
-- For a 1×256 block, threads vary along the column axis → best coalescing for row-major arrays.
-- For a 16×16 block, both dimensions vary → partial coalescing.
-- For a 256×1 block, threads vary along the row axis → worst coalescing.
+- In `cuda.grid(2)` the convention is `(row, col)` where **row = x-dim (first return)** and col = y-dim. Thread ID = threadIdx.x + threadIdx.y × blockDim.x, so adjacent threads differ by 1 in **row** (x-dim), *not* col. The DTU lecture writes `j, i = cuda.grid(2)` to name x as j (the column-direction), which varies across the warp. For coalesced `A[row, col]` access, col (last axis) must be the varying dimension → requires blockDim.x = 1.
+- For a 1×256 block (blockDim.x=1, blockDim.y=256): threadIdx.x=0 always → col varies via threadIdx.y → best coalescing for row-major arrays.
+- For a 16×16 block: row (x-dim) varies 0–15 per warp half → partial coalescing.
+- For a 256×1 block (blockDim.x=256, blockDim.y=1): row varies 0–31 across the warp, col never changes → worst coalescing.
 
-*Example (Re-exam Q11/Q12):* CUDA kernel with `row, col = cuda.grid(2)`, reads `x[row + i, col + j]`. Threads adjacent in warp differ by 1 in col. Best performance with 1×256 blocks (threads all share the same row, iterate along columns — sequential access).
+*Example (Re-exam Q11/Q12):* CUDA kernel with `row, col = cuda.grid(2)`, reads `x[row + i, col + j]`. Threads adjacent in warp differ by 1 in row (x-dim). Best performance with 1×256 blocks (blockDim.x=1 → row locked → col varies → all threads share the same row, iterate along columns — sequential access → coalesced).
 
 *Example (F25 Q13):* dmap is 200×200 output, block size 16×16. Blocks needed = ceil(200/16) × ceil(200/16) = 13×13.
 
@@ -167,7 +167,7 @@ These topics appear in **all three exams** or are tested multiple times within a
 
 **2. LSF/BSUB job scripts** — Every exam. Know all flags. Especially: memory is per core (total / n cores = value to put in rusage), GPU queues, job dependencies (`-w ended(name)` vs `-w done(name)`), job arrays, `$LSB_JOBINDEX`.
 
-**3. Cache efficiency and memory layout** — Every exam. Know: row-wise storage means last dimension has smallest stride. Inner loop should iterate over the last dimension. For CUDA, coalescing requires adjacent threads (varying j) to access adjacent memory (last dimension).
+**3. Cache efficiency and memory layout** — Every exam. Know: row-wise storage means last dimension has smallest stride. Inner loop should iterate over the last dimension. For CUDA, coalescing requires adjacent warp threads (varying in x-dim = row with `row,col=cuda.grid(2)`, or j with lecture's `j,i=cuda.grid(2)`) to access adjacent memory (last array dimension).
 
 **4. GPU memory transfers (CUDA/nsys)** — Every exam. Know: Numba automatically transfers NumPy arrays HtoD before a kernel call and DtoH after. Optimal code pre-allocates on GPU to avoid redundant transfers. Calculate transfer speed from nsys output (size / time). Distinguish kernel time from transfer time.
 
@@ -378,14 +378,14 @@ Same narrative framing (performance consultant). More condensed — 10 pages for
 **Q11 — Best CUDA thread block configuration (MC)**
 - Topic: CUDA thread blocks, warp coalescing
 - What's asked: `average3x3` kernel: `row, col = cuda.grid(2)`. Accesses `x[row+i, col+j]`. Best block: 16×16, 256×1, or 1×256?
-- Key insight: Threads in a warp differ by 1 in the second grid dimension (col). For coalesced access, adjacent threads should read adjacent memory. With 1×256, all threads in the block have the same row but different cols → they read adjacent elements along the last axis of x → coalesced.
+- Key insight: Threads in a warp differ by 1 in the first grid dimension (row, x-dim). For coalesced `x[row, col]` access, col (last axis) must vary — not row. Block (1, 256) achieves this: blockDim.x=1 → threadIdx.x=0 always → row is locked → col varies via threadIdx.y → all threads share the same row with different cols → adjacent elements along last axis → coalesced.
 - Answer: (c) 1×256
 
 **Q12 — Explain reasoning for Q11 (open-ended)**
 - Topic: CUDA warp coalescing explanation
 - What's asked: Explain why 1×256 is best.
-- Key insight: Threads in a warp (or thread block for 1×256 which is a single row of threads) all execute the same instruction. They access x at col+j where j varies from -1 to 1 for each iteration. Since all threads share the same row and differ in col, their accesses are to sequential memory locations → cache-efficient coalesced access.
-- Answer: Threads in a warp share same row, access sequential columns. Sequential memory = coalesced = efficient. For 16×16 or 256×1, threads have different rows → strided (non-sequential) memory access → worse.
+- Key insight: With 1×256 (blockDim.x=1), threadIdx.x=0 always → row is fixed per warp → col varies. All threads share the same row and differ in col, so their accesses to x[row+i, col+j] walk along a row (sequential in memory) → coalesced. For 16×16: row varies 0–15 in the warp (same col for first 16 threads) → different rows → stride = array width → non-coalesced. For 256×1: row varies 0–255, col=fixed → worst strided access.
+- Answer: With 1×256, warp threads share same row, access sequential columns → coalesced. For 16×16 or 256×1, threads have different rows → strided (non-sequential) memory access → worse.
 
 **Q13 — HtoD / DtoH transfer counts (open-ended)**
 - Topic: Numba GPU memory management
@@ -499,7 +499,7 @@ The F25 exam is entirely multiple choice with 4 options each. The answer key is 
 **Q12 — CUDA kernel: worst memory access pattern (MC)**
 - Topic: CUDA memory coalescing, ray marching
 - What's asked: `render_depthmap` kernel reads vol[vi,vj,vk] where steps change with ray_step. Which u_step/v_step/ray_step gives worst memory efficiency?
-- Key insight: vol is row-wise, last axis (vk) has smallest stride. Threads differ in j (col) by 1. For coalesced access, adjacent threads should read adjacent vk. This happens when v_step changes vk (i.e., v_step=[0,0,1]). Worst case: v_step and u_step don't vary vk → steps go along the first two (high-stride) axes.
+- Key insight: vol is row-wise, last axis (vk) has smallest stride. Adjacent warp threads differ in the x-dim (column direction of the output, j with lecture convention). For coalesced access, adjacent threads should read adjacent vk. This happens when v_step changes vk (i.e., v_step=[0,0,1]). Worst case: v_step and u_step don't vary vk → steps go along the first two (high-stride) axes.
 - Answer: A) u_step [1,0,0], v_step [0,1,0], ray_step [0,0,1]
 
 **Q13 — Number of thread blocks for output image (MC)**
@@ -657,7 +657,7 @@ Memorise every common flag. Build a mental "cheat sheet":
 **Priority 3: Cache / memory layout (all three exams)**
 Two rules to drill:
 - CPU: loop over last dimension (smallest stride) in innermost loop.
-- CUDA: threads in warp (consecutive j) should access consecutive memory → last array dimension should vary with j → array is indexed by (..., j, i) or (..., col, row) not (..., i, j) unless dimensions are deliberately reversed.
+- CUDA: threads in warp vary in x-dim (= j with lecture's `j,i=cuda.grid(2)`, = row with `row,col=cuda.grid(2)`). The varying index must be the **last** array dimension for coalesced access. Lecture convention: `j, i = cuda.grid(2)` → `A[i, j]` (j last) → coalesced. Exam convention: `row, col = cuda.grid(2)` → `A[col, row]` (row last) → coalesced. Do NOT use `A[row, col]` with the exam convention — row varies (first index) → strided.
 
 Practice: given strides, sort axes by stride and order loops accordingly.
 

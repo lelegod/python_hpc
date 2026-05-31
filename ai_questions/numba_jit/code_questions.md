@@ -32,7 +32,10 @@ print(f"Time: {perf_counter()-t:.4f}s")
 
 **Answer: B**
 
-> The first call to a `@jit`-decorated function triggers compilation. The measured time includes compilation overhead, not just execution time. To benchmark correctly, call `dot(a, b)` once as a warmup before starting the timer, then time the second (compiled) call.
+- A) Incorrect — `perf_counter` is a high-resolution wall-clock timer and is accurate enough for any Python function, including Numba-compiled ones; the issue has nothing to do with timer precision.
+- B) Correct — The first call to a `@jit`-decorated function triggers JIT compilation. The measured time therefore includes compilation overhead (which can be seconds), not just the actual execution time of the loop. Fix: call `dot(a, b)` once as a warmup before starting the timer, then time the second (already-compiled) call.
+- C) Incorrect — `nopython=True` only controls whether Numba falls back to object mode; it has no effect on timing instrumentation or `perf_counter`.
+- D) Incorrect — Including compilation time in the first-call measurement is a classic Numba benchmarking mistake; the result is not a valid measure of steady-state runtime.
 
 ---
 
@@ -62,7 +65,10 @@ with ThreadPool(4) as pool:
 
 **Answer: C**
 
-> Without `nogil=True`, Numba holds the Python GIL during the compiled function's execution. Even though the function runs in nopython mode, the GIL is still acquired before entry. All 4 threads will run, but only one at a time — no true parallelism.
+- A) Incorrect — `nopython=True` only means Numba compiles to native code without the Python interpreter; it does not automatically release the GIL. You must explicitly pass `nogil=True` to release it.
+- B) Incorrect — `ThreadPool` is a Python threading construct and is fully subject to the GIL. It does not bypass the GIL for any code, numerical or otherwise.
+- C) Correct — Without `nogil=True`, Numba acquires the GIL before entering the compiled function and holds it throughout. All 4 threads will execute, but only one at a time — they serialize on the GIL, giving no parallel speedup.
+- D) Incorrect — `ThreadPool` from `multiprocessing.pool` works fine with Numba functions; the issue is GIL serialization, not an incompatibility between `ThreadPool` and Numba.
 
 ---
 
@@ -92,7 +98,10 @@ with ThreadPool(4) as pool:
 
 **Answer: C**
 
-> `@jit(nopython=True, nogil=True)` compiles to native code and releases the GIL for the duration of the call. `ThreadPool` threads can then execute `simulate` concurrently on separate CPU cores, achieving true parallelism for CPU-bound work.
+- A) Incorrect — `nogil=True` is a CPU-side flag; it has nothing to do with GPU execution. It instructs Numba to release the Python GIL when the compiled CPU function runs.
+- B) Incorrect — The GIL applies to all Python threads by default; Numba's `nogil=True` is specifically designed to opt out of it for the duration of a compiled function call.
+- C) Correct — `@jit(nopython=True, nogil=True)` compiles to native code and releases the GIL for the duration of each call. `ThreadPool` threads can then execute `simulate` concurrently on separate CPU cores with no serialization, achieving true parallel speedup.
+- D) Incorrect — `nogil=True` works with any input type that Numba can type-infer, not only NumPy arrays. Plain Python integers like `10**6` are supported in nopython mode.
 
 ---
 
@@ -118,7 +127,10 @@ def process(arr):
 
 **Answer: C**
 
-> Standard Python `dict` objects are not supported in `nopython=True` mode. Numba cannot infer a static type for a generic Python dict and will raise a `numba.core.errors.TypingError` at compilation time. To use a dictionary-like structure, you would need `numba.typed.Dict` with explicit key/value types.
+- A) Incorrect — Numba does not silently convert plain Python dicts. It attempts to type-infer the dict and fails immediately; there is no automatic upgrade to `numba.typed.Dict`.
+- B) Incorrect — `nopython=True` mode supports a limited subset of Python: numeric types, NumPy arrays, tuples, and `numba.typed` containers. Generic Python dicts, lists, and arbitrary objects are not supported.
+- C) Correct — Numba cannot infer a static type for a plain Python `dict` in nopython mode and raises a `numba.core.errors.TypingError` at compilation time. The fix is to use `numba.typed.Dict` with explicit key (`int64`) and value (`float64`) type declarations.
+- D) Incorrect — The `**` power operator on array elements is fully supported in nopython mode; the error is caused entirely by the unsupported `dict`, not by the power operation.
 
 ---
 
@@ -163,7 +175,10 @@ print(f"Speedup: {t1/t2:.0f}x")
 
 **Answer: C**
 
-> A 100-200x speedup is entirely typical when comparing an interpreted pure Python loop to the same loop compiled to native machine code via `@njit`. The warmup on a smaller array is valid — it triggers compilation for the correct input type (`float64` NumPy array), and the compiled code is reused for the full-size benchmark.
+- A) Incorrect — 2-5x speedup is typical when comparing NumPy vectorized code against optimised alternatives; comparing a raw Python `for` loop to `@njit` eliminates interpreter overhead entirely, producing far larger gains.
+- B) Incorrect — Numba compiles based on argument *types*, not sizes. `small_arr` and `arr` are both `float64` 1D NumPy arrays, so the warmup call on `small_arr` compiles the correct specialization, which is then reused for `arr`. The benchmark is valid.
+- C) Correct — Eliminating Python interpreter overhead (object creation, type checking, bytecode dispatch) per loop iteration is the source of the large speedup. 100-200x is entirely normal for tight arithmetic loops, and the warmup strategy is correct.
+- D) Incorrect — While warmup data may reside in cache, the full array (8 MB for 10^6 float64 values) far exceeds typical L3 cache; the speedup is dominated by removing interpreter overhead, not cache effects from the warmup call.
 
 ---
 
@@ -187,7 +202,10 @@ def vectorized_sum(arr):
 
 **Answer: C**
 
-> `np.sum` is a highly optimized, pre-compiled C routine. Wrapping it in `@njit` adds JIT compilation overhead on the first call and provides no meaningful runtime benefit — the bottleneck is already eliminated. `@njit` delivers the largest gains when replacing interpreted Python loops, not already-vectorized NumPy calls.
+- A) Incorrect — `@njit` excels at replacing slow Python loops, but for code that is already compiled C (like `np.sum`), there is no interpreter overhead left to remove. Wrapping it in Numba adds compilation cost without a meaningful execution benefit.
+- B) Incorrect — NumPy already uses SIMD (SSE/AVX) internally in its C implementation of `np.sum`. Numba can also auto-vectorize, but it provides no advantage when the function is already a thin wrapper around a single pre-optimized C call.
+- C) Correct — `np.sum` is implemented in highly optimized compiled C/Fortran. Wrapping it with `@njit` incurs JIT compilation overhead on the first call and gives negligible speedup thereafter; the performance bottleneck (the Python interpreter) was never present. `@njit` delivers large gains specifically when eliminating Python-level loops.
+- D) Incorrect — Numba supports calling many NumPy functions (including `np.sum`) from nopython mode; this does not raise a TypingError. The NumPy API supported by Numba is documented and `np.sum` is included.
 
 ---
 
@@ -214,7 +232,10 @@ def heavy_compute(arr):
 
 **Answer: B**
 
-> `cache=True` instructs Numba to write the compiled native binary (`.nbi`/`.nbc` files) to a `__pycache__` directory. On subsequent runs of the same script, Numba detects the cached binary and loads it directly, skipping the JIT compilation step. This reduces startup time for scripts that call expensive-to-compile functions. It does NOT cache results (that would be memoization).
+- A) Incorrect — Caching intermediate array results in RAM between calls would be memoization (e.g., using `functools.lru_cache`). `cache=True` has nothing to do with storing computation results.
+- B) Correct — `cache=True` instructs Numba to serialize the compiled native binary (`.nbi`/`.nbc` files) into a `__pycache__` directory. On the next run of the same script, Numba detects the cached binary, validates it (checking source hash and Python version), and loads it directly — skipping JIT compilation entirely. This removes startup latency for expensive-to-compile functions.
+- C) Incorrect — Memoization returns a cached *result* when the same input is provided again. `cache=True` caches the compiled *code*, not the outputs. Calling `heavy_compute` with a different array still executes the full computation.
+- D) Incorrect — Python `.pyc` files store Python bytecode, not compiled native machine code. Numba's `cache=True` writes architecture-specific native binaries, not Python bytecode.
 
 ---
 
@@ -243,7 +264,10 @@ def cpu_caller(arr):
 
 **Answer: C**
 
-> CUDA kernel launches (`kernel[blocks, threads](args)`) are host-side operations that invoke the CUDA runtime API. They cannot be called from inside a Numba `nopython` JIT-compiled function. The `@cuda.jit` kernel must be launched directly from regular host Python code. To use both CPU JIT and GPU computation, the CPU function should call a Python wrapper that launches the GPU kernel.
+- A) Incorrect — Numba does not support mixed CPU/GPU kernel launches from within a compiled context. The CUDA runtime API is a host-side interface and cannot be invoked from inside a `nopython` JIT function.
+- B) Incorrect — Even if the array is already on the device (a `cuda.device_array`), the kernel launch syntax `gpu_kernel[32, 256](arr)` is a host-side Python operation. It calls into the CUDA runtime, which is inaccessible from within a compiled nopython function.
+- C) Correct — CUDA kernel launches invoke the CUDA runtime API, which is host-only. A `@jit(nopython=True)` function cannot call into the host runtime. The correct pattern is to keep `cpu_caller` as regular host Python (no `@jit`) or have it call a Python-level wrapper that performs the launch.
+- D) Incorrect — The grid configuration `[32, 256]` using square brackets is the correct Numba CUDA launch syntax (blocks=32, threads=256). Parentheses are not used for the grid spec; this syntax is not the source of the error.
 
 ---
 

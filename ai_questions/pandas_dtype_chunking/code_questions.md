@@ -24,9 +24,12 @@ Which single column would benefit most from conversion to `category` dtype?
 - C) `temperature`
 - D) `reading_code`
 
-**Answer: D) `reading_code`**
+**Answer: D**
 
-**Explanation:** `reading_code` has only 6 unique values across 500,000 rows — a perfect cardinality ratio for `category`. Pandas `category` dtype stores an integer code per row plus a lookup table of unique labels, giving massive memory savings when unique values are far fewer than total rows. `station_id` also has low cardinality (8 unique) but is already numeric; converting it to a smaller integer type (e.g. `uint8`) is more appropriate. `timestamp` should become `datetime64`. `temperature` is a continuous float — `category` would be counterproductive.
+- A) Incorrect — `timestamp` has 500,000 unique values (one per row); `category` needs low cardinality to save memory, and this column should become `datetime64[ns]` instead
+- B) Incorrect — `station_id` has low cardinality (8 unique) but is already numeric; the right optimisation is downcasting to a smaller integer type like `uint8`, not `category`
+- C) Incorrect — `temperature` is a continuous float with near-infinite unique values; `category` would be counterproductive and wasteful
+- D) Correct — `reading_code` has only 6 unique values across 500,000 rows; `category` stores an integer code per row plus a tiny lookup table, giving massive memory savings at low cardinality
 
 ---
 
@@ -49,9 +52,12 @@ Which column should be converted to `datetime64[ns]`?
 - C) `temperature` — it contains time-varying measurements
 - D) `reading_code` — it encodes temporal events
 
-**Answer: A) `timestamp`**
+**Answer: A**
 
-**Explanation:** `timestamp` is currently an `object` column containing date strings (e.g. `"2023-01-01"`). Converting it to `datetime64[ns]` with `pd.to_datetime()` enables efficient time-based operations (`.dt` accessor, `.resample()`, time-aware indexing) and reduces memory from ~50 bytes/element (Python string heap) to exactly 8 bytes/element (int64 nanoseconds under the hood). The 500,000 unique values confirm these are individual timestamps, not a categorical-style column.
+- A) Correct — `timestamp` is an `object` column of date strings; `pd.to_datetime()` converts it to `datetime64[ns]`, dropping memory from ~50 bytes/element to 8 bytes/element and enabling `.dt` accessor and `.resample()`
+- B) Incorrect — `station_id` contains integer station identifiers, not dates or times; it should be downcast to `uint8`
+- C) Incorrect — `temperature` is a continuous float measurement, not a timestamp; it belongs in `float32` or `float64`
+- D) Incorrect — `reading_code` is a low-cardinality string category with only 6 unique values; it should become `category`, not `datetime64`
 
 ---
 
@@ -79,9 +85,12 @@ How many bytes does `station_id` now consume?
 - C) 500,000 bytes (8× reduction)
 - D) 125,000 bytes (32× reduction)
 
-**Answer: C) 500,000 bytes (8× reduction)**
+**Answer: C**
 
-**Explanation:** `int64` uses 8 bytes per element → 500,000 × 8 = 4,000,000 bytes. `uint8` uses 1 byte per element → 500,000 × 1 = 500,000 bytes. The range 1–8 fits comfortably within `uint8` (0–255), so no data is lost. This is an 8× memory reduction. The original `memory_usage()` call returns 4,000,000 confirming 500,000 rows × 8 bytes.
+- A) Incorrect — `int64` uses 8 bytes/element; `uint8` uses 1 byte/element, so memory does change (8× reduction)
+- B) Incorrect — 2,000,000 bytes would imply a 4-byte type like `int32` or `float32`, not `uint8`
+- C) Correct — `uint8` is 1 byte/element; 500,000 × 1 = 500,000 bytes, an 8× reduction from 4,000,000; range 1–8 fits comfortably within `uint8` (0–255)
+- D) Incorrect — 125,000 bytes would require a sub-byte representation, which does not exist in numpy/pandas
 
 ---
 
@@ -107,9 +116,12 @@ What is `max_rows`?
 - C) 10,000,000
 - D) 14,000,000
 
-**Answer: C) 10,000,000**
+**Answer: C**
 
-**Explanation:** Each row consumes 4 + 8 + 2 = 14 bytes. Integer floor division: 140,000,000 ÷ 14 = 10,000,000 rows. This is the exact calculation used on the DTU 02613 exams to determine a safe `chunksize` or maximum in-memory DataFrame size given a RAM constraint. In practice you should leave a safety margin (e.g. use 80% of available RAM) to account for Python overhead and intermediate arrays.
+- A) Incorrect — 1,000,000 rows × 14 bytes = 14 MB, far below the 140 MB budget; this would come from dividing by 140 instead of 14
+- B) Incorrect — 5,000,000 × 14 = 70 MB; this uses only half the budget and would come from dividing 70,000,000 by 14
+- C) Correct — 140,000,000 ÷ 14 = 10,000,000 rows exactly; each row is uint32 (4) + float64 (8) + int16 (2) = 14 bytes
+- D) Incorrect — 14,000,000 × 14 = 196 MB, which exceeds the 140 MB budget; this incorrectly treats the budget as equal to the row count
 
 ---
 
@@ -129,9 +141,12 @@ What actually happens when this code runs?
 - C) Raises `TypeError` because `len()` is not supported on a `TextFileReader`
 - D) Reads the entire file into memory to compute the length
 
-**Answer: C) Raises `TypeError` because `len()` is not supported on a `TextFileReader`**
+**Answer: C**
 
-**Explanation:** `pd.read_csv(..., chunksize=N)` returns a `TextFileReader` object, which is a **lazy iterator** — it reads one chunk at a time only when iterated. It does not implement `__len__`, so calling `len()` on it raises `TypeError: object of type 'TextFileReader' has no len()`. To count chunks you must iterate: `sum(1 for _ in pd.read_csv('data.csv', chunksize=100_000))`. Note this exhausts the iterator — you must reopen the file to iterate again.
+- A) Incorrect — `TextFileReader` does not implement `__len__`; calling `len()` raises `TypeError`, it does not return a count
+- B) Incorrect — the error occurs before any reading happens, but the error is a `TypeError`, not a zero return value
+- C) Correct — `pd.read_csv(..., chunksize=N)` returns a lazy `TextFileReader` iterator without `__len__`; calling `len()` raises `TypeError: object of type 'TextFileReader' has no len()`
+- D) Incorrect — `TextFileReader` is explicitly lazy and never reads the full file into memory; it reads one chunk at a time only when iterated
 
 ---
 
@@ -157,9 +172,12 @@ Is this conversion safe?
 - C) No — integer columns cannot be cast to smaller integer types in pandas
 - D) Yes — but only if all values are non-negative (requires `uint8` otherwise)
 
-**Answer: B) Yes — `int8` holds -128 to 127, and the range 0–42 fits without loss**
+**Answer: B**
 
-**Explanation:** `int8` (signed 8-bit integer) stores values from -128 to 127. The column range 0–42 is fully contained within this interval, so the cast is lossless. Memory drops from 8 bytes/element (int64) to 1 byte/element (int8) — an 8× reduction, saving 7 MB for a 1M-row column. `uint8` (0–255) would also work here, but `int8` is valid and the question asks specifically about `int8`. Always verify `min()` and `max()` before downcasting.
+- A) Incorrect — this describes `uint8` (0–255) incorrectly; `int8` range is -128 to 127, so values up to 127 are safe and 42 is well within range
+- B) Correct — `int8` (signed 8-bit integer) stores -128 to 127; range 0–42 is fully contained, so the cast is lossless and saves 7 bytes per element (8→1 bytes)
+- C) Incorrect — pandas supports downcasting integers to smaller integer types with `.astype()`; this is a standard memory optimisation
+- D) Incorrect — `int8` is valid here regardless; negative values are not present in this column, but `int8` handles them fine; `uint8` would also work but is not required
 
 ---
 
@@ -179,9 +197,12 @@ What is the primary concern with this conversion?
 - C) Integers up to 16,777,216 are exactly representable in `float32`, so 0–100,000 is numerically safe, but converting integers to float introduces semantic ambiguity and prevents future use of integer-specific operations
 - D) `float32` rounds all values to the nearest even number, corrupting the data
 
-**Answer: C) Integers up to 16,777,216 are exactly representable in `float32`, so 0–100,000 is numerically safe, but converting integers to float introduces semantic ambiguity and prevents future use of integer-specific operations**
+**Answer: C**
 
-**Explanation:** `float32` has a 23-bit mantissa, giving it exact integer representation up to 2²⁴ = 16,777,216. Since 100,000 < 16,777,216, no rounding occurs. However, if you need to do integer arithmetic (counting, indexing, aggregations that assume whole numbers), floating-point semantics can introduce bugs. Better choices: `uint32` (0–4,294,967,295, 4 bytes) or `uint16` (0–65,535, 2 bytes) — but 100,000 exceeds `uint16` max (65,535), so `uint32` is the correct integer downcast here.
+- A) Incorrect — `float32` can represent integers exactly up to 2²⁴ = 16,777,216; no values become `NaN`
+- B) Incorrect — `float32` (4 bytes) vs `int64` (8 bytes) is a 2× memory reduction; there is a memory benefit, though better integer alternatives exist
+- C) Correct — `float32` exactly represents integers up to 16,777,216, so 0–100,000 is lossless, but using float for a count column introduces semantic ambiguity; `uint32` or `uint16` are more appropriate integer downcasts (100,000 exceeds `uint16` max of 65,535, so `uint32` is correct)
+- D) Incorrect — IEEE 754 round-to-nearest-even only applies when a value exceeds the representable integer range; for values ≤ 16,777,216 integers are stored exactly
 
 ---
 
@@ -206,9 +227,12 @@ What does the large discrepancy for `station` indicate?
 - C) `deep=True` double-counts memory by including both the column and its index
 - D) The DataFrame has a MultiIndex that `deep=True` includes in the `station` entry
 
-**Answer: B) `station` is an `object` (string) column; without `deep=True` only pointer sizes are counted, while `deep=True` measures actual heap memory of the Python string objects**
+**Answer: B**
 
-**Explanation:** For `object`-dtype columns, each element is a Python object pointer (8 bytes on 64-bit systems). `memory_usage()` without `deep=True` reports only these pointer sizes: 500,000 × 8 = 4,000,000 bytes. With `deep=True`, pandas traverses the heap and measures the actual size of each Python string object — here averaging ~45 bytes per string (fixed overhead ~49 bytes + string length). This is why `object` columns are memory-expensive and should be converted to `category` or `string[pyarrow]` when possible. Always use `deep=True` for accurate memory profiling.
+- A) Incorrect — `float64` stores values inline at exactly 8 bytes/element with no heap indirection; `deep=True` would show no discrepancy for a float column
+- B) Correct — `object` dtype stores 8-byte pointers to Python heap objects; without `deep=True` only the pointer array is measured (500,000 × 8 = 4,000,000 bytes); `deep=True` traverses the heap and measures actual string sizes (~45 bytes/string on average)
+- C) Incorrect — `deep=True` does not double-count; it simply includes the actual memory of referenced Python objects that shallow counting ignores
+- D) Incorrect — the `station` entry in `memory_usage()` reflects only the `station` column's own memory, not index structures
 
 ---
 
@@ -232,9 +256,12 @@ Both return the same numeric result. Why is Approach A faster for **repeated que
 - C) `loc` is implemented in C while boolean indexing is pure Python
 - D) Approach A reads only the filtered rows from disk; Approach B reads all rows
 
-**Answer: B) A sorted index enables binary search O(log n) for label-based lookup; Approach B requires a full O(n) boolean scan of the entire column each time**
+**Answer: B**
 
-**Explanation:** After `set_index('date').sort_index()`, pandas can use binary search on the sorted index to locate matching rows in O(log n) time — similar to a B-tree lookup in a database. For 10 million rows, that's ~23 comparisons vs 10,000,000. Approach B (`df['date'] == '2023-06-15'`) creates a boolean array by scanning every row — always O(n) regardless of the query. For a single query, the overhead of `set_index`/`sort_index` may not pay off; for many repeated queries on a stable DataFrame, the sorted index gives a large advantage.
+- A) Incorrect — `set_index` reorganises the DataFrame structure; it does not specifically load data into L1 cache
+- B) Correct — a sorted index allows O(log n) binary search (~23 comparisons for 10M rows); Approach B always scans all n rows to build a boolean mask regardless of query, giving O(n) per query
+- C) Incorrect — both `.loc` and boolean indexing are implemented at the C/Cython level in pandas; neither is pure Python
+- D) Incorrect — both approaches operate on an in-memory DataFrame; neither reads from disk at query time
 
 ---
 
@@ -264,9 +291,12 @@ What happens during the second `for` loop?
 - C) Prints no output — the `TextFileReader` is exhausted after the first pass and the second loop body never executes
 - D) Raises `FileNotFoundError` because the file handle was closed after the first pass
 
-**Answer: C) Prints no output — the `TextFileReader` is exhausted after the first pass and the second loop body never executes**
+**Answer: C**
 
-**Explanation:** A `TextFileReader` (returned by `pd.read_csv` with `chunksize`) is a **forward-only, single-use iterator**. After the first `for` loop advances it to the end of the file, the internal file pointer is at EOF. The second `for` loop calls `__next__()` immediately, which returns nothing (the iterator is "exhausted"), so the loop body never executes and no output is printed — no exception, just silence. To make a second pass you must reopen the reader: `dfc = pd.read_csv('big_data.csv', chunksize=50_000)`. This is a common exam trap and a real-world bug.
+- A) Incorrect — `StopIteration` is caught internally by the `for` loop machinery; it does not crash the program, the loop simply exits immediately with no iterations
+- B) Incorrect — `TextFileReader` is a forward-only, single-use iterator; it does not reset to the beginning after being exhausted
+- C) Correct — after the first `for` loop advances the `TextFileReader` to EOF, the internal file pointer stays at EOF; the second loop's first `__next__()` call finds nothing, so the loop body never executes and no output is printed
+- D) Incorrect — the file handle remains open; no `FileNotFoundError` is raised; the iterator is simply exhausted at EOF
 
 ---
 

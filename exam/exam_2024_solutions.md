@@ -461,7 +461,7 @@ The kernel is called with thread blocks of size 32 x 32.
 
 **Given the above implementation, how should the `image` array be stored to maximize cache efficiency? Explain your answer.**
 
-**Mental Model:** This is a "GPU coalescing flips the optimal layout" question — the opposite answer from Q11. The key insight is that on GPU, performance is determined by *warp-level* simultaneous access, not sequential iteration of a single thread. Threads in the same warp execute the same instruction in lockstep; for coalesced access they must each access consecutive addresses. The thought process is: (1) threads in a warp differ in their `j` (column) index, (2) when they all execute `image[k, i, j]`, j varies across the warp — these are consecutive along the w-axis, which is contiguous in channels-first layout, (3) so channels-first is correct for GPU. The trap is applying Q11's CPU reasoning (channels-last is better for sequential k-loop) to the GPU case — a direct copy-paste of the previous answer would be wrong.
+**Mental Model:** This is a "GPU coalescing flips the optimal layout" question — the opposite answer from Q11. The key insight is that on GPU, performance is determined by *warp-level* simultaneous access. Adjacent threads in a warp differ by 1 in threadIdx.x (x-dim, the FIRST return value of `cuda.grid(2)`). For coalesced access of `image[k, i, j]`, the warp-varying index must map to the **last axis** (stride-1). The DTU lecture shows the fix is to use `j, i = cuda.grid(2)` (swapped) so that j=x-dim varies in the warp, then j indexes W (last axis) → coalesced. The answer (channels-first, c×h×w) is correct because with the swapped convention j indexes W. The trap is applying Q11's CPU reasoning (channels-last) to the GPU case.
 
 **Full Solution:**
 
@@ -480,6 +480,8 @@ The GPU memory access pattern is fundamentally different from the CPU case (Q11)
 **Summary:** On GPU (unlike CPU), the spatial axes (h, w) must be the innermost (last) dimensions so that adjacent threads in a warp access adjacent memory addresses. This means channels must be the first dimension.
 
 **Key concept tested:** CUDA memory coalescing; understanding that warp-level parallel access patterns (not sequential loop iteration) determine GPU cache efficiency; contrast with CPU cache-line logic.
+
+> **⚠️ Accuracy note:** The DTU lecture (Week 9 slides 51–52) explicitly shows that `i, j = cuda.grid(2)` with tpb=(32,32) gives a **"Column-wise layout"** (i varies in warp → row varies → bad). The lecture's FIX is to use `j, i = cuda.grid(2)` with the grid also swapped: `bpg = (x.shape[1]//tpb[0], x.shape[0]//tpb[1])`. The solution above assumes the swapped (j,i) convention without stating it, which is inconsistent with the kernel as written. The correct interpretation: the exam Q12 solution is only valid if you also swap the grid setup. The principle is correct — for `image[k, i, j]` with shape (c,h,w) to be coalesced, j (the last/W index) must be the warp-varying dimension, which requires `j, i = cuda.grid(2)` not `i, j = cuda.grid(2)`. **For the exam: answer channels-first (c, h, w) and explain "the column index j indexes the W dimension (last axis, stride 1)".**
 
 ---
 

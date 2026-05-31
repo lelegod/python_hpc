@@ -235,3 +235,63 @@ tid |  .x  |  .y  |  row   | col
 ## One-Sentence Rule for the Exam
 
 > **NumPy is right-most fastest. CUDA warps are left-most fastest. To coalesce, force them to agree: use block (1, N) so the left-most dimension is locked at 1, making the right-most (col) vary across the warp.**
+
+---
+
+## How to Find a Thread's Global (row, col) — Visual
+
+**Example:** block size (16,16), blockIdx=(1,2), threadIdx=(3,5)
+
+**Step 1 — The block grid** (each square = one 16×16 block):
+
+```
+           blockIdx.y →
+        0        1        2        3
+      +--------+--------+--------+--------+
+   0  | (0,0)  | (0,1)  | (0,2)  | (0,3)  |
+      +--------+--------+--------+--------+
+↑  1  | (1,0)  | (1,1)  |■(1,2)■ | (1,3)  |   ← you are in this block
+bIdx.x+--------+--------+--------+--------+
+   2  | (2,0)  | (2,1)  | (2,2)  | (2,3)  |
+      +--------+--------+--------+--------+
+```
+
+**Step 2 — Zoom into block (1,2)** — showing global (row, col) inside each cell:
+
+```
+              threadIdx.y →          (= col offset within block)
+         0        1        2        3        4        5        6   ...
+      +--------+--------+--------+--------+--------+--------+--------+
+   0  | (16,32)|(16,33) |(16,34) |(16,35) |(16,36) |(16,37) |(16,38) |
+↑     +--------+--------+--------+--------+--------+--------+--------+
+tid.x 1  | (17,32)|(17,33) |(17,34) |(17,35) |(17,36) |(17,37) |(17,38) |
+      +--------+--------+--------+--------+--------+--------+--------+
+   2  | (18,32)|(18,33) |(18,34) |(18,35) |(18,36) |(18,37) |(18,38) |
+      +--------+--------+--------+--------+--------+--------+--------+
+   3  | (19,32)|(19,33) |(19,34) |(19,35) |(19,36) |  ★    |(19,38) |
+      +--------+--------+--------+--------+--------+--------+--------+
+   4  | (20,32)|(20,33) |(20,34) |(20,35) |(20,36) |(20,37) |(20,38) |
+      +--------+--------+--------+--------+--------+--------+--------+
+
+★ = threadIdx=(3,5) → global (row=19, col=37)
+```
+
+**Step 3 — Compute global position:**
+
+```
+Block (1,2) starts at:
+  row_start = blockIdx.x × blockDim.x = 1 × 16 = 16
+  col_start = blockIdx.y × blockDim.y = 2 × 16 = 32
+
+Thread ★ at offset (3,5) within the block:
+  row = 16 + 3 = 19
+  col = 32 + 5 = 37
+```
+
+Thread ★ computes `C[19, 37]`.
+
+**General formula:**
+```
+row = blockIdx.x * blockDim.x + threadIdx.x
+col = blockIdx.y * blockDim.y + threadIdx.y
+```

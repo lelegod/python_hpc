@@ -26,9 +26,10 @@ The kernel is launched with block dimensions `(16, 16)`. A thread has `blockIdx 
 
 **Answer: C**
 
-**Explanation:** `cuda.grid(2)` computes `(blockIdx.x * blockDim.x + threadIdx.x, blockIdx.y * blockDim.y + threadIdx.y)`. With block dims `(16, 16)`:
-- `row = 1 * 16 + 3 = 19`
-- `col = 2 * 16 + 5 = 37`
+- A) Incorrect — these are just `threadIdx` values; the block offset (`blockIdx * blockDim`) must be added
+- B) Incorrect — these are the block-start offsets (`blockIdx * blockDim`) without adding `threadIdx`
+- C) Correct — `cuda.grid(2)` computes `(blockIdx.x * blockDim.x + threadIdx.x, blockIdx.y * blockDim.y + threadIdx.y)`: row = 1×16 + 3 = 19, col = 2×16 + 5 = 37
+- D) Incorrect — `row` and `col` are swapped here; `cuda.grid(2)` returns (x-dim, y-dim) = (row, col), not (col, row)
 
 ---
 
@@ -58,7 +59,10 @@ What is the bug, and how many elements are left unprocessed?
 
 **Answer: B**
 
-**Explanation:** `500 // 32 = 15`, which launches 15 × 32 = 480 threads. Elements at indices 480–499 are never processed. The correct formula is `bpg = (N + tpb - 1) // tpb = (500 + 31) // 32 = 16`, which covers all 500 elements with 512 threads (the bounds check handles the extra 12).
+- A) Incorrect — integer division truncates, so when N is not a multiple of tpb some elements at the end are never covered by any thread
+- B) Correct — `500 // 32 = 15`, launching 15 × 32 = 480 threads; indices 480–499 are never processed; fix with `(N + tpb - 1) // tpb = 16`
+- C) Incorrect — `bpg` is 15, not 16; 16 would be the correct ceiling-division result, not what the code produces
+- D) Incorrect — CUDA does not crash for non-divisible sizes; the bounds check `if i < arr.shape[0]` handles extra threads safely
 
 ---
 
@@ -87,7 +91,10 @@ How many output elements are left unprocessed?
 
 **Answer: C**
 
-**Explanation:** `200 // 16 = 12` in each dimension. The grid covers 12 × 16 = 192 elements per dimension, so 192 × 192 = 36864 elements are processed. The total output has 200 × 200 = 40000 elements. The shortfall is 40000 − 36864 = **3136 elements** (the rightmost 8 columns, bottom 8 rows, and their intersection are all missed). The fix is `bpg = (math.ceil(200/16), math.ceil(200/16))` or equivalently `((200 + 15) // 16, (200 + 15) // 16) = (13, 13)`.
+- A) Incorrect — `200 // 16 = 12`, not 13; ceiling division is required to cover all elements
+- B) Incorrect — `200 - 192 = 8` rows and 8 columns are missed, not just 1 row and column; 8×200 + 8×200 − 64 = 3136 elements
+- C) Correct — `200 // 16 = 12` blocks per dim; 12 × 16 = 192 elements covered per dim; missed = 40000 − 36864 = 3136
+- D) Incorrect — the missed region is an L-shaped band (rightmost 8 cols + bottom 8 rows), not a single corner block
 
 ---
 
@@ -124,7 +131,10 @@ Which kernel gives better memory coalescing?
 
 **Answer: B**
 
-**Explanation:** In row-major order, the last index `k` varies fastest in memory. When threads in a warp all differ by 1 in `k` (Kernel B), they access consecutive memory addresses — this is the definition of coalesced access. In Kernel A, adjacent threads differ in `i`, which strides `J*K` elements apart in memory, causing highly strided (uncoalesced) access. Always ensure warp threads vary in the **last** (fastest-changing) index for row-major arrays.
+- A) Incorrect — in row-major order, varying `i` strides `J*K` elements between adjacent threads, which is far from consecutive and highly uncoalesced
+- B) Correct — `k` is the fastest-changing (last) index; adjacent warp threads differ by 1 in `k`, giving consecutive memory addresses and fully coalesced access
+- C) Incorrect — row-major layout directly determines which index varies fastest; it absolutely affects coalescing
+- D) Incorrect — a 1D block varying in the last index achieves full coalescing; a 2D block is not required
 
 ---
 
@@ -149,7 +159,10 @@ The arrays `x`, `y`, and `out` each have length 900. What happens for threads wh
 
 **Answer: C**
 
-**Explanation:** Numba CUDA kernels do not perform automatic bounds checking. Threads with `i >= 900` will attempt to read `x[i]` and `y[i]` and write `out[i]` beyond the allocated array bounds, leading to undefined behaviour (corrupted data or a CUDA error). The fix is to add `if i < out.shape[0]:` before the computation.
+- A) Incorrect — CUDA provides no automatic bounds checking; it is the programmer's responsibility to add the guard
+- B) Incorrect — CUDA does not write zeros; it accesses whatever memory lies beyond the array, producing undefined behaviour
+- C) Correct — without `if i < out.shape[0]:`, threads 900–1023 read and write beyond the allocated buffer, causing undefined behaviour or a CUDA error
+- D) Incorrect — kernel launches are asynchronous; Python raises no error at launch time; the problem occurs silently at runtime on the GPU
 
 ---
 
@@ -179,7 +192,10 @@ How many thread blocks are launched?
 
 **Answer: B**
 
-**Explanation:** `bpg = (1000 + 256 - 1) // 256 = 1255 // 256 = 4`. Four blocks of 256 threads = 1024 threads total; threads 1000–1023 are harmlessly skipped by the bounds check. Using 3 blocks would only cover 768 elements — not enough. 5 blocks would work but 4 is the minimum needed.
+- A) Incorrect — 3 blocks × 256 = 768 threads, covering only indices 0–767 and leaving 232 elements unprocessed
+- B) Correct — `(1000 + 255) // 256 = 1255 // 256 = 4`; 4 blocks × 256 = 1024 threads; the bounds check skips threads 1000–1023
+- C) Incorrect — 5 blocks would work but wastes a full block; 4 is the minimum required to cover all 1000 elements
+- D) Incorrect — 16 comes from `1000 // 64` with a different tpb; with tpb=256 the answer is 4
 
 ---
 
@@ -196,16 +212,50 @@ def process(img):   # img shape: (C, H, W)
             img[c, row, col] *= 2.0
 ```
 
-The kernel is launched with block dims `(16, 16)` where the first dimension maps to `row` and the second to `col`. Adjacent threads in the second dimension differ by 1 in `col`. Does this kernel achieve coalesced memory access?
+The kernel is launched with block dims `(16, 16)`. With `row, col = cuda.grid(2)` and blockDim.x=16: Thread ID = threadIdx.x + threadIdx.y*16. Warp threads 0–15 have threadIdx.x=0..15 (row varies), warp threads 16–31 have threadIdx.x=0..15, threadIdx.y=1 (row varies, col changes once). Does this kernel achieve coalesced memory access for `img[c, row, col]`?
 
 - A) No — iterating over channels in a loop always prevents coalescing
-- B) No — CHW layout means channels are contiguous, not columns
-- C) Yes — adjacent threads differ by 1 in `col` (the last/W dimension), so accesses to `img[c, row, col]` are consecutive in memory
-- D) Yes — but only for C=1; for multi-channel images coalescing breaks
+- B) No — with (16,16) block and `row,col=cuda.grid(2)`, row varies in warp → strided access regardless of layout
+- C) No — with (16,16) block and `row,col=cuda.grid(2)`, row (x-dim) varies in warp, not col; accesses go down rows → non-coalesced
+- D) Yes — but only if you use block (1, 256) so col varies in the warp
 
-**Answer: C**
+**Answer: B**
 
-**Explanation:** In CHW row-major layout, the memory stride for `col` is 1 (the W dimension is the fastest axis). Adjacent threads with `col, col+1, col+2, ...` access `img[c, row, col]`, `img[c, row, col+1]`, `img[c, row, col+2]`, which are consecutive in memory — this is coalesced. The channel loop processes each channel sequentially but does not break the coalescing pattern within each iteration.
+- A) Incorrect — the channel loop is not the issue. The problem is that with (16,16) block and `row,col=cuda.grid(2)`, threadIdx.x=0..15 varies in the warp → row varies. Accessing `img[c, row, col]` with row varying hits different rows (stride=W elements) — non-coalesced.
+- B) Correct — With (16,16): Thread ID = threadIdx.x + threadIdx.y*16. Warp threads 0–15: threadIdx.x=0..15 (row varies), col=C+0 (same). Warp threads 16–31: row varies again, col=C+1. Row accesses are N elements apart in memory → non-coalesced. The DTU lecture calls this "Column-wise layout."
+- C) Incorrect — col does NOT vary across warp threads with a (16,16) block; only row does (threadIdx.x cycles first). Col changes only between the two half-warps (C and C+1), giving partial at best.
+- D) Incorrect — "only for C=1" is not the limiting factor. The coalescing problem is entirely about block shape, not channel count. Fix: use block (1, 256) so blockDim.x=1 → threadIdx.x=0 always → col varies via threadIdx.y → coalesced.
+
+---
+
+## Question 7b — Coalescing in a CHW Kernel (Standard Block Rules)
+
+Same kernel as Q7, but now apply standard Numba block behaviour with no special rules given:
+
+```python
+@cuda.jit
+def process(img):   # img shape: (C, H, W)
+    row, col = cuda.grid(2)
+    if row < img.shape[1] and col < img.shape[2]:
+        for c in range(img.shape[0]):
+            img[c, row, col] *= 2.0
+```
+
+The kernel is launched with block `(16, 16)`. Using `row, col = cuda.grid(2)`, and the standard formula `Thread ID = threadIdx.x + threadIdx.y * blockDim.x`, what do warp threads access?
+
+- A) Coalesced — col varies across warp threads, so img[c, row, col] accesses consecutive memory
+- B) Not coalesced — row varies across warp threads, so img[c, row, col] accesses different rows (large stride)
+- C) Coalesced — CHW layout always gives coalescing regardless of block shape
+- D) Not coalesced — the channel loop breaks coalescing for any block shape
+
+**Answer: B**
+
+- A) Incorrect — with block (16,16) and `row = blockIdx.x*16 + threadIdx.x`, threadIdx.x varies across warp threads (tid 0–15 have threadIdx.x=0..15, same threadIdx.y=0). So row varies, col stays the same. Warp threads access `img[c, R+0, col]`, `img[c, R+1, col]`... — different rows, stride = W elements apart.
+- B) Correct — Thread ID = threadIdx.x + threadIdx.y*16. For warp threads 0–31: threadIdx.x cycles 0..15 twice while threadIdx.y is 0 then 1. Row = blockIdx.x*16 + threadIdx.x varies; col = blockIdx.y*16 + threadIdx.y stays the same within the first 16 threads. Warp threads access the same column in different rows — strided access, not coalesced.
+- C) Incorrect — CHW layout makes W (last axis) contiguous in memory, but coalescing requires threads to vary in col (W), not row. Block shape determines which varies in the warp.
+- D) Incorrect — the channel loop is not the issue; each loop iteration is still a full warp instruction. The problem is row varying instead of col.
+
+**Fix:** use block `(1, 256)` so threadIdx.x=0 always, col varies via threadIdx.y — coalesced ✅
 
 ---
 
@@ -236,7 +286,10 @@ Can `clamp` be called directly from host Python code, for example as `result = c
 
 **Answer: C**
 
-**Explanation:** The `@cuda.jit(device=True)` decorator marks a function as a **device function**: it compiles to PTX and runs on the GPU, callable only from other `@cuda.jit` kernels or device functions. Calling it from host Python raises a `TypingError` or similar error. To use the same logic on the host, define a separate plain Python function. Compare with a regular `@cuda.jit` kernel, which is callable from the host as a kernel launch (but returns nothing).
+- A) Incorrect — `@cuda.jit(device=True)` compiles the function to PTX for GPU execution only; calling it from the host raises a `TypingError`
+- B) Incorrect — neither numpy scalars nor plain floats can invoke a device function from the host; the function lives exclusively on the GPU
+- C) Correct — device functions are GPU-only helpers callable only from `@cuda.jit` kernels or other device functions; the host cannot invoke them directly
+- D) Incorrect — device functions do accept scalar arguments (as shown by `lo` and `hi`); the restriction is about call site (GPU only), not argument type
 
 ---
 
@@ -268,7 +321,10 @@ What memory access pattern do threads in the same warp have for `img[row, col]`?
 
 **Answer: B**
 
-**Explanation:** With `tpb = (256, 1)`, threads in a warp all have the **same** `col` but consecutive `row` values. In row-major layout, `img[row, col]` and `img[row+1, col]` are `W` elements apart (stride = `W * sizeof(dtype)` bytes). For W=512 with float32, that is a stride of 2048 bytes — far from coalesced. The fix is to swap the block dimensions: `tpb = (1, 256)` so threads vary in `col`, accessing `img[row, col]`, `img[row, col+1]`, ... which are consecutive in memory.
+- A) Incorrect — consecutive rows are not contiguous; `img[row, col]` and `img[row+1, col]` are W elements apart (stride = W × sizeof(dtype) bytes)
+- B) Correct — with `tpb = (256, 1)`, warp threads share the same `col` and differ in `row`; in row-major layout each step in `row` jumps W elements, giving highly strided uncoalesced access
+- C) Incorrect — "row-major" means columns within a row are contiguous, not rows themselves; varying `row` at fixed `col` is the strided direction
+- D) Incorrect — the access pattern is determined by the index mapping and memory layout, both of which are known statically; fix is `tpb = (1, 256)` so threads vary in `col`
 
 ---
 
@@ -301,13 +357,16 @@ Is `TPB = 64` a good choice for threads per block? Choose the best answer.
 
 **Answer: C**
 
-**Explanation:** CUDA hardware schedules threads in units of 32 called **warps**. If `TPB` is not a multiple of 32, the last warp of each block is only partially filled (padding threads still consume scheduler resources but do no useful work). `TPB = 64 = 2 × 32` creates exactly 2 full warps per block — zero waste. Any multiple of 32 in the range [32, 1024] is a valid and efficient choice. Common values are 128, 256, and 512, but 64 is perfectly valid.
+- A) Incorrect — 256 and 512 are common but not mandatory; any multiple of 32 in the range [32, 1024] is valid and efficient
+- B) Incorrect — 64 is greater than the warp size of 32 (64 = 2 × 32); this option confuses "less than" with "not a multiple of"
+- C) Correct — 64 = 2 × 32 creates exactly 2 full warps per block with zero padding; all threads do useful work and the scheduler incurs no partial-warp overhead
+- D) Incorrect — instruction-level parallelism is not gated on a minimum block size of 128; smaller multiples of 32 such as 64 are perfectly valid
 
 ---
 
 ## Key Facts
 
-- `cuda.grid(2)` returns `(row, col)`. Adjacent threads in the same warp differ by 1 in the **last** dimension (`col`).
+- `cuda.grid(2)` returns `(row, col)` where row=x-dim, col=y-dim. Adjacent threads differ by 1 in **row** (x-dim, threadIdx.x). For coalesced access of `x[row, col]`, you need **col** to vary → requires blockDim.x=1 (block shape (1, N)). DTU lecture: `i, j = cuda.grid(2)` with (32,32) = "Column-wise layout" (bad). Fix: `j, i = cuda.grid(2)` with swapped grid (good).
 - Grid dims: always use `(N + tpb - 1) // tpb` (ceiling division) to avoid missing elements.
 - Always bounds check: `if i < arr.shape[0]:` — CUDA will not do it for you.
 - **Warp size = 32**; use multiples of 32 for `tpb` to avoid partial-warp waste.

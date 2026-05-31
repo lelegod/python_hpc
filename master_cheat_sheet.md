@@ -837,20 +837,25 @@ with cuda.pinned(x, y, out):
 
 ### CUDA Warp Coalescing (Memory Access Patterns)
 
-**Adjacent threads in a warp (differing by 1 in j/col) should access adjacent memory addresses.**
+**Adjacent threads in a warp differ by 1 in threadIdx.x (x-dim = FIRST return value of `cuda.grid(2)`).**
 
-For `cuda.grid(2)` → threads differ by 1 in j (column dimension):
+With `row, col = cuda.grid(2)`: row=x-dim, col=y-dim.
+→ Adjacent threads differ by 1 in **row** (not col).
+→ For coalesced access of `x[row, col]`, you need **col to vary** → requires blockDim.x=1.
+
+**Block shape determines which index varies in the warp** (Thread ID = threadIdx.x + threadIdx.y * blockDim.x):
 
 ```
-Array shape (rows, cols), row-major: last axis has smallest stride
-→ Good: threads access along col axis → adjacent memory → COALESCED
-→ Bad: threads access along row axis → strided memory → NON-COALESCED
+Array shape (rows, cols), row-major: last axis (col) has smallest stride
+→ Want col to vary across warp → need blockDim.x = 1
 
-Thread block shape comparison:
-  (1, 256): all threads same row, differ in col → coalesced   [FASTEST]
-  (16, 16): partial coalescing                                 [MEDIUM]
-  (256, 1): all threads differ in row, same col → non-coalesced [SLOWEST]
+Block shape comparison for row, col = cuda.grid(2):
+  (1, 256): blockDim.x=1 → threadIdx.x=0 always → col varies  → COALESCED   [FASTEST]
+  (16, 16): blockDim.x=16 → row varies 0..15 twice → col changes once  [PARTIAL]
+  (256, 1): blockDim.x=256 → row varies 0..31 → col never changes   → NON-COALESCED [SLOWEST]
 ```
+
+**DTU lecture convention:** Use `j, i = cuda.grid(2)` (swap names) so j=x-dim varies in warp, then j indexes col (last axis) → coalesced without needing blockDim.x=1. Grid must also be swapped: `bpg = (cols//tpb[0], rows//tpb[1])`.
 
 **CPU vs CUDA layout — opposite rules:**
 - **CPU:** inner loop (sequential) should be last dimension → channels last = HWC
