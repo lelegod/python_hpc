@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html><head>
+<style>
+    .autolablink {
+        color: #A31919;
+        font-weight: bold;
+    }
+
+    .answer-block {
+        border-top: 0.3em solid #ffe0e0;
+        border-bottom: 0.3em solid #ffe0e0;
+        padding: 5px;
+    }
+
+    code {
+        background-color: #f5f5f5;
+    }
+    pre code {
+        display: block;
+        overflow-x: auto;
+        padding: 0.5em;
+    }
+</style>
+</head><body style="color: rgb(32, 33, 34); font-family: Verdana;"><h1 id="exercises-for-week-10">Exercises for Week 10</h1>
+<hr>
+<h2 id="1-gpu-reductions">1. GPU Reductions</h2>
+<p>This exercise is based on the excellent presentation of <a href="https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf">parallel reductions in CUDA</a> by Mark Harris. While it's a bit dated by now, it still contains many pearls of wisdom regarding high performance CUDA code.</p>
+<p>Consider the following implementation of a parallel reduction on a GPU:</p>
+<pre><code>from numba import cuda
+
+TPB = 128  # Threads per block
+
+@cuda.jit
+def reduce_kernel(data, out, n):
+    # Get the 1D grid and block indices
+    tid = cuda.threadIdx.x
+    i = cuda.grid(1)
+
+    # Do reduction for threadblock
+    s = 1
+    while s &lt; cuda.blockDim.x:
+        if tid % (2 * s) == 0 and i + s &lt; n:
+            data[i] += data[i + s]
+        s *= 2
+        cuda.syncthreads()  # Ensure block is synchronized
+
+    # Write result for this block to global memory
+    if tid == 0:
+        out[cuda.blockIdx.x] = data[i]
+
+def get_grid(n, tpb):
+    return (n + (tpb - 1)) // tpb  # Blocks per grid
+
+def reduce(x):
+    n = len(x)
+    bpg = get_grid(n, TPB)
+    out = cuda.device_array(bpg, dtype=x.dtype)
+    while bpg &gt; 1:
+        reduce_kernel[bpg, TPB](x, out, n)
+        n = bpg
+        bpg = get_grid(n, TPB)
+        x[:n] = out[:n]
+    reduce_kernel[bpg, TPB](x, out, n)
+    return out
+</code></pre>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Reduce" class="autolablink" target="_self">Autolab</a> Make a Python program that takes a number <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math> as a command line argument. The program must then generate <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi></mrow></math> random float32 numbers and use the above code to compute their sum. Use <code>np.random.rand</code> to generate the random numbers and convert them to float32 with <code>np.astype</code>. Finally, print the sum (and only the sum).</p>
+</li>
+<li>
+<p>For now, do <em>not</em> manually transfer the data to the GPU - let Numba do it when the kernel is called. Run your program for <math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><mrow><mi>n</mi><mo>=</mo><mn>4000000</mn></mrow></math> under the nsys profiler and view the statistics. Where is time spent?<br>Hint: run <code>nsys profile -o &lt;prof_data_file&gt; python program.py &lt;args&gt;</code>.<br>To view statistics: <code>nsys stats &lt;prof_data_file&gt;.nsys-rep</code>.</p>
+</li>
+<li>
+<p>Modify your program such that your manually transfer the data to the GPU to avoid wasted transfers. Re-run your program under the nsys profiler. What has changed?</p>
+</li>
+<li>
+<p>Modify the kernel such that each thread block loads its part of the data into a shared memory array. Then, do the reduction in the shared array instead of in the global <code>data</code> array. Note: this will not have a large effect on speed now, but will make the next optimization simpler (less book keeping) and faster.</p>
+</li>
+<li>
+<p>A major reason the current kernel is slow is the <code>if tid % (s * 2) == 0</code> condition. This causes a lot of warp divergence which slows the kernel down. Instead of "masking out" threads, change the kernel to use a strided index as shown on <a href="https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf#page=11">slide 11 in the linked presentation by Mark Harris</a>.</p>
+</li>
+<li>
+<p>Profile the optimized kernel. What has changed?</p>
+</li>
+<li>
+<p>(Optional) These exercises were only the first few optimizations presented in the above reference. There is still plenty of performance to be squeezed out! Implement some (or all) of the remaining optimizations. The code in the presentation is in C++, but everything translates neatly to Numba functions.</p>
+<p>Note also, that modern CUDA versions have introduced helper functions that can now make reductions even faster. For more info on this, see <a href="https://developer.nvidia.com/blog/faster-parallel-reductions-kepler/">this technical blog from NVIDIA</a>.</p>
+<p>Hint: you may need to apply the reduction to a larger set of numbers to really see speed benefits.</p>
+</li>
+</ol>
+<h2 id="2-cupy">2. CuPy</h2>
+<p>In this exercise, we will use CuPy to speed up existing NumPy code - specifically, the haversine distance code we worked with in week 4. The single loop and no loop distance matrix implementations were:</p>
+<pre><code>def distance_matrix_oneloop(p1, p2):
+    p1 = np.radians(p1)
+    p2 = np.radians(p2)
+
+    D = np.empty((len(p1), len(p2)))
+    for i in range(len(p1)):
+        dsin2 = np.sin(0.5 * (p1[i] - p2)) ** 2
+        cosprod = np.cos(p1[i, 0]) * np.cos(p2[:, 0])
+        a = dsin2[:, 0] + cosprod * dsin2[:, 1]
+        row = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+        D[i, :] = row
+
+    D *= 6371  # Earth radius in km
+    return D
+
+def distance_matrix_noloop(p1, p2):
+    p1 = np.radians(p1)
+    p2 = np.radians(p2)
+    dsin2 = np.sin(0.5 * (p1[:, None, :] - p2[None, :, :])) ** 2
+    cosprod = np.cos(p1[:, None, 0]) * np.cos(p2[None, :, 0])
+    D = 2 * np.arcsin(np.sqrt(dsin2[:, :, 0] + cosprod * dsin2[:, :, 1]))
+    D *= 6371  # Earth radius in km
+    return D
+</code></pre>
+<p>For reference, the location data was stored at:<br><code>/dtu/projects/02613_2025/data/locations/</code></p>
+<ol>
+<li>
+<p><a href="https://autolab.compute.dtu.dk/courses/02613-F26/assessments/Distance-Matrix" class="autolablink" target="_self">Autolab</a> Convert both implementations such that they use CuPy operations instead of NumPy. Also modify your Python program from week 4 that used the distance matrix functions to use CuPy.</p>
+</li>
+<li>
+<p>Measure the run time for your CuPy program using the single loop version. Use the subset with 5000 rows <code>locations_5000.csv</code> file. How does the run time compare to the CPU version from week 4? You may need to run the programs a few times to get stable times. For simplicity, you may simply measure the run time with the <code>time</code> command: <code>time python points.py &lt;path to data&gt;</code></p>
+</li>
+<li>
+<p>Re-run the program under the nsys profiler. Where does the program spend its time? Be sure to check all sections (except the OS Runtime Summary) to get a full overview.</p>
+</li>
+<li>
+<p>Measure the run time for your CuPy program using the no loop version. What is the new run time?</p>
+</li>
+<li>
+<p>Re-run the program under the nsys profiler. Where does the program now spend its time? What has changed compared to the single loop version? Be sure to check all sections to get a full overview.</p>
+</li>
+</ol></body></html>

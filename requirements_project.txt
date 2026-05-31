@@ -1,1 +1,4 @@
 blosc
+zarr
+numba
+cupy
