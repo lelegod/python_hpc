@@ -4,29 +4,29 @@
 
 ## Contents
 
-- [Q1](#q1)
-- [Q2](#q2)
-- [Q3](#q3)
-- [Q4](#q4)
-- [Q5](#q5)
-- [Q6](#q6)
-- [Q7](#q7)
-- [Q8](#q8)
-- [Q9](#q9)
-- [Q10](#q10)
+- [Q1 — Shape (4,1,3) + (1,5,3)](#q1--shape-413--153)
+- [Q2 — Shape (100,1,6,3) + (100,1,3)](#q2--shape-100163--10013)
+- [Q3 — Image Batch Mean Subtraction (N,H,W,C) - (3,)](#q3--image-batch-mean-subtraction-nhwc---3)
+- [Q4 — Per-Image Mean Shape Error (32,3)](#q4--per-image-mean-shape-error-323)
+- [Q5 — Outer Product via [:, None]](#q5--outer-product-via--none)
+- [Q6 — Feature Normalization Shape](#q6--feature-normalization-shape)
+- [Q7 — Row Vector vs Matrix Error (3,4) + (3,)](#q7--row-vector-vs-matrix-error-34--3)
+- [Q8 — Pairwise Difference Shape](#q8--pairwise-difference-shape)
+- [Q9 — Spatial Mask Broadcasting](#q9--spatial-mask-broadcasting)
+- [Q10 — Per-Sample Mean Subtraction Error](#q10--per-sample-mean-subtraction-error)
 - [Broadcasting Rules — Quick Reference](#broadcasting-rules-quick-reference)
   - [Common Pitfalls](#common-pitfalls)
 - [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
-- [Q11](#q11)
-- [Q12](#q12)
-- [Q13](#q13)
-- [Q14](#q14)
-- [Q15](#q15)
-- [Q16](#q16)
-- [Q17](#q17)
-- [Q18](#q18)
-- [Q19](#q19)
-- [Q20](#q20)
+- [Q11 — Shape (5,3,4) + (3,) Right-Alignment Trap](#q11--shape-534--3-right-alignment-trap)
+- [Q12 — Outer Subtraction via [:, None]](#q12--outer-subtraction-via--none)
+- [Q13 — Pairwise Lat/Lon Difference Shape](#q13--pairwise-latlon-difference-shape)
+- [Q14 — Canonical Outer-Product Shape (3,1) + (1,4)](#q14--canonical-outer-product-shape-31--14)
+- [Q15 — ImageNet Normalize Broadcasting](#q15--imagenet-normalize-broadcasting)
+- [Q16 — Row Vector Times Matrix](#q16--row-vector-times-matrix)
+- [Q17 — Shape (2,3,4,5) + (4,1)](#q17--shape-2345--41)
+- [Q18 — Pairwise Distance Matrix Shape](#q18--pairwise-distance-matrix-shape)
+- [Q19 — Row-Wise Normalization Shape](#q19--row-wise-normalization-shape)
+- [Q20 — Fix (3,4) + (3,) with [:, None]](#q20--fix-34--3-with--none)
 
 ---
 
@@ -37,7 +37,7 @@
 
 ---
 
-## Q1
+## Q1 — Shape (4,1,3) + (1,5,3)
 
 ```python
 import numpy as np
@@ -62,7 +62,7 @@ print((a + b).shape)
 
 ---
 
-## Q2
+## Q2 — Shape (100,1,6,3) + (100,1,3)
 
 ```python
 import numpy as np
@@ -87,7 +87,7 @@ print((a + b).shape)
 
 ---
 
-## Q3
+## Q3 — Image Batch Mean Subtraction (N,H,W,C) - (3,)
 
 ```python
 import numpy as np
@@ -113,7 +113,7 @@ print(result.shape)
 
 ---
 
-## Q4
+## Q4 — Per-Image Mean Shape Error (32,3)
 
 ```python
 import numpy as np
@@ -138,7 +138,7 @@ result = images - mean    # Will this work?
 
 ---
 
-## Q5
+## Q5 — Outer Product via [:, None]
 
 ```python
 import numpy as np
@@ -164,7 +164,7 @@ print(outer.shape)
 
 ---
 
-## Q6
+## Q6 — Feature Normalization Shape
 
 ```python
 import numpy as np
@@ -191,7 +191,7 @@ print(normalized.shape)
 
 ---
 
-## Q7
+## Q7 — Row Vector vs Matrix Error (3,4) + (3,)
 
 ```python
 import numpy as np
@@ -216,7 +216,7 @@ c = a + b   # Will this work?
 
 ---
 
-## Q8
+## Q8 — Pairwise Difference Shape
 
 ```python
 import numpy as np
@@ -242,7 +242,7 @@ print(diff.shape)
 
 ---
 
-## Q9
+## Q9 — Spatial Mask Broadcasting
 
 ```python
 import numpy as np
@@ -268,7 +268,7 @@ print(result.shape)
 
 ---
 
-## Q10
+## Q10 — Per-Sample Mean Subtraction Error
 
 ```python
 import numpy as np
@@ -318,7 +318,7 @@ X_centered = X - mu           # Will this work?
 
 ---
 
-## Q11
+## Q11 — Shape (5,3,4) + (3,) Right-Alignment Trap
 
 ```python
 import numpy as np
@@ -343,7 +343,7 @@ print((a + b).shape)
 
 ---
 
-## Q12
+## Q12 — Outer Subtraction via [:, None]
 
 ```python
 import numpy as np
@@ -369,7 +369,7 @@ print(outer.shape)
 
 ---
 
-## Q13
+## Q13 — Pairwise Lat/Lon Difference Shape
 
 ```python
 import numpy as np
@@ -396,7 +396,7 @@ print(dlat.shape, dlon.shape)
 
 ---
 
-## Q14
+## Q14 — Canonical Outer-Product Shape (3,1) + (1,4)
 
 ```python
 import numpy as np
@@ -422,7 +422,7 @@ print(c.shape)
 
 ---
 
-## Q15
+## Q15 — ImageNet Normalize Broadcasting
 
 ```python
 import numpy as np
@@ -449,7 +449,7 @@ print(normalized.shape)
 
 ---
 
-## Q16
+## Q16 — Row Vector Times Matrix
 
 ```python
 import numpy as np
@@ -475,7 +475,7 @@ print(result.shape)
 
 ---
 
-## Q17
+## Q17 — Shape (2,3,4,5) + (4,1)
 
 ```python
 import numpy as np
@@ -500,7 +500,7 @@ print((a + b).shape)
 
 ---
 
-## Q18
+## Q18 — Pairwise Distance Matrix Shape
 
 ```python
 import numpy as np
@@ -527,7 +527,7 @@ print(dist.shape)
 
 ---
 
-## Q19
+## Q19 — Row-Wise Normalization Shape
 
 ```python
 import numpy as np
@@ -553,7 +553,7 @@ print(result.shape)
 
 ---
 
-## Q20
+## Q20 — Fix (3,4) + (3,) with [:, None]
 
 ```python
 import numpy as np

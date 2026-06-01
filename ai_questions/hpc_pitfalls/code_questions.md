@@ -4,25 +4,25 @@
 
 ## Contents
 
-- [Question 1 — Missing export on Thread Env Vars](#question-1)
-- [Question 2 — Shell Redirection vs LSF -o](#question-2)
-- [Question 3 — ThreadPool + Multi-Threaded NumPy Oversubscription](#question-3)
-- [Question 4 — Requesting Cores Without span[hosts=1]](#question-4)
-- [Question 5 — Diagnosing No Speedup: Cores vs Threads](#question-5)
-- [Question 6 — Buffered vs Unbuffered Python Output](#question-6)
-- [Question 7 — Memory Request Calculation](#question-7)
-- [Question 8 — Subshell Export Trap](#question-8)
-- [Question 9 — Fixing Oversubscription by Setting OMP to 1](#question-9)
+- [Q1 — Missing export on Thread Env Vars](#q1--missing-export-on-thread-env-vars)
+- [Q2 — Shell Redirection vs LSF -o](#q2--shell-redirection-vs-lsf--o)
+- [Q3 — ThreadPool + Multi-Threaded NumPy Oversubscription](#q3--threadpool--multi-threaded-numpy-oversubscription)
+- [Q4 — Requesting Cores Without span[hosts=1]](#q4--requesting-cores-without-spanhosts1)
+- [Q5 — Diagnosing No Speedup: Cores vs Threads](#q5--diagnosing-no-speedup-cores-vs-threads)
+- [Q6 — Buffered vs Unbuffered Python Output](#q6--buffered-vs-unbuffered-python-output)
+- [Q7 — Memory Request Calculation](#q7--memory-request-calculation)
+- [Q8 — Subshell Export Trap](#q8--subshell-export-trap)
+- [Q9 — Fixing Oversubscription by Setting OMP to 1](#q9--fixing-oversubscription-by-setting-omp-to-1)
 - [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2--generated-practice-questions-exam-day-focus)
-- [Question 10 — Login Node Computation](#question-10)
-- [Question 11 — Multiple Pitfalls in One Script](#question-11)
-- [Question 12 — Correct ThreadPool + NumPy Setup](#question-12)
-- [Question 13 — Identifying the Fastest I/O Approach](#question-13)
-- [Question 14 — ProcessPool vs ThreadPool for NumPy](#question-14)
-- [Question 15 — MKL_NUM_THREADS Alone Is Not Enough](#question-15)
-- [Question 16 — Output File Location Pitfall](#question-16)
-- [Question 17 — Predicting Run Time from Thread Count](#question-17)
-- [Question 18 — Fixing All Pitfalls in a Combined Script](#question-18)
+- [Q10 — Login Node Computation](#q10--login-node-computation)
+- [Q11 — Multiple Pitfalls in One Script](#q11--multiple-pitfalls-in-one-script)
+- [Q12 — Correct ThreadPool + NumPy Setup](#q12--correct-threadpool--numpy-setup)
+- [Q13 — Identifying the Fastest I/O Approach](#q13--identifying-the-fastest-io-approach)
+- [Q14 — ProcessPool vs ThreadPool for NumPy](#q14--processpool-vs-threadpool-for-numpy)
+- [Q15 — MKL_NUM_THREADS Alone Is Not Enough](#q15--mkl_num_threads-alone-is-not-enough)
+- [Q16 — Output File Location Pitfall](#q16--output-file-location-pitfall)
+- [Q17 — Predicting Run Time from Thread Count](#q17--predicting-run-time-from-thread-count)
+- [Q18 — Fixing All Pitfalls in a Combined Script](#q18--fixing-all-pitfalls-in-a-combined-script)
 
 ---
 
@@ -33,7 +33,7 @@
 
 ---
 
-## Question 1
+## Q1 — Missing export on Thread Env Vars
 
 ```bash
 #!/bin/bash
@@ -77,7 +77,7 @@ This script requests 8 cores and sets thread count variables. Yet NumPy still ru
 
 ---
 
-## Question 2
+## Q2 — Shell Redirection vs LSF -o
 
 ```bash
 #!/bin/bash
@@ -114,7 +114,7 @@ The program `printlots.py` prints 100,000 verbose lines. This script takes ~80 s
 
 ---
 
-## Question 3
+## Q3 — ThreadPool + Multi-Threaded NumPy Oversubscription
 
 ```python
 from time import perf_counter as time
@@ -154,7 +154,7 @@ The job script exports `OMP_NUM_THREADS=8`, `MKL_NUM_THREADS=8`, and `OPENBLAS_N
 
 ---
 
-## Question 4
+## Q4 — Requesting Cores Without span[hosts=1]
 
 ```bash
 #!/bin/bash
@@ -196,7 +196,7 @@ python matmul_shared.py
 
 ---
 
-## Question 5
+## Q5 — Diagnosing No Speedup: Cores vs Threads
 
 ```bash
 #!/bin/bash
@@ -235,7 +235,7 @@ python matmul.py
 
 ---
 
-## Question 6
+## Q6 — Buffered vs Unbuffered Python Output
 
 ```bash
 python printlots.py > /work3/02613/dump/out_${LSB_JOBID}.txt
@@ -266,7 +266,7 @@ python -u printlots.py > /work3/02613/dump/out_${LSB_JOBID}.txt
 
 ---
 
-## Question 7
+## Q7 — Memory Request Calculation
 
 A job creates the following NumPy arrays:
 
@@ -295,7 +295,7 @@ Which `#BSUB` memory request is the smallest that safely covers these arrays plu
 
 ---
 
-## Question 8
+## Q8 — Subshell Export Trap
 
 ```bash
 #!/bin/bash
@@ -339,7 +339,7 @@ The thread variables are exported inside parentheses but NumPy still uses 1 thre
 
 ---
 
-## Question 9
+## Q9 — Fixing Oversubscription by Setting OMP to 1
 
 ```python
 from multiprocessing.pool import ThreadPool
@@ -375,7 +375,7 @@ The job script currently exports `OMP_NUM_THREADS=8`. Run time is ~1.87 s. A col
 
 ---
 
-## Question 10
+## Q10 — Login Node Computation
 
 ```bash
 # On the login node, user types:
@@ -402,7 +402,7 @@ $ python matmul.py
 
 ---
 
-## Question 11
+## Q11 — Multiple Pitfalls in One Script
 
 ```bash
 #!/bin/bash
@@ -442,7 +442,7 @@ python -u heavy_print.py
 
 ---
 
-## Question 12
+## Q12 — Correct ThreadPool + NumPy Setup
 
 ```bash
 #!/bin/bash
@@ -486,7 +486,7 @@ python matmul.py
 
 ---
 
-## Question 13
+## Q13 — Identifying the Fastest I/O Approach
 
 Three job scripts submit the same print-heavy Python program:
 
@@ -513,7 +513,7 @@ Rank these from fastest to slowest for a program printing 100,000 lines.
 
 ---
 
-## Question 14
+## Q14 — ProcessPool vs ThreadPool for NumPy
 
 ```python
 from multiprocessing.pool import ProcessPool
@@ -549,7 +549,7 @@ A colleague proposes this `ProcessPool`-based version instead of `ThreadPool`. W
 
 ---
 
-## Question 15
+## Q15 — MKL_NUM_THREADS Alone Is Not Enough
 
 ```bash
 export MKL_NUM_THREADS=8
@@ -575,7 +575,7 @@ The system running this script uses NumPy compiled against OpenBLAS (not Intel M
 
 ---
 
-## Question 16
+## Q16 — Output File Location Pitfall
 
 ```bash
 #!/bin/bash
@@ -614,7 +614,7 @@ The script writes output to the user's home directory `/home/s252786/`. What is 
 
 ---
 
-## Question 17
+## Q17 — Predicting Run Time from Thread Count
 
 Based on the Week 13 exercise, match each configuration to its approximate run time for 100 × `np.matmul` on 1000×1000 matrices using 8 cores:
 
@@ -645,7 +645,7 @@ Which answer correctly matches all five configurations?
 
 ---
 
-## Question 18
+## Q18 — Fixing All Pitfalls in a Combined Script
 
 The following script has multiple pitfalls. Rewrite it mentally and identify the corrected version:
 

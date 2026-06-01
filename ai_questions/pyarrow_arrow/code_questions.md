@@ -4,24 +4,24 @@
 
 ## Contents
 
-- [Question 1 — Return type of pyarrow.csv.read_csv()](#question-1)
-- [Question 2 — Column access on a pyarrow.Table](#question-2)
-- [Question 3 — Converting Arrow to Pandas](#question-3)
-- [Question 4 — ConvertOptions for type override](#question-4)
-- [Question 5 — Memory size comparison: Arrow vs Pandas](#question-5)
-- [Question 6 — Parquet column projection](#question-6)
-- [Question 7 — ChunkedArray vs Array](#question-7)
-- [Question 8 — from_pandas() and zero-copy](#question-8)
-- [Question 9 — Writing and reading Parquet](#question-9)
-- [Question 10 — Dictionary encoding at load time](#question-10)
-- [Question 11 — Arrow compute function vs Pandas](#question-11)
-- [Question 12 — Schema inspection](#question-12)
-- [Question 13 — Parquet column projection with pyarrow.parquet](#question-13)
-- [Question 14 — Arrow slice semantics](#question-14)
-- [Question 15 — ConvertOptions column_types vs dtype](#question-15)
-- [Question 16 — to_pandas() string memory inflation](#question-16)
-- [Question 17 — Parquet row group count](#question-17)
-- [Question 18 — Total pipeline: fastest load for single aggregation](#question-18)
+- [Q1 — Return Type of pyarrow.csv.read_csv()](#q1--return-type-of-pyarrowcsvread_csv)
+- [Q2 — Column Access on a pyarrow.Table](#q2--column-access-on-a-pyarrowtable)
+- [Q3 — Converting Arrow to Pandas](#q3--converting-arrow-to-pandas)
+- [Q4 — ConvertOptions for Type Override](#q4--convertoptions-for-type-override)
+- [Q5 — Memory Size Comparison: Arrow vs Pandas](#q5--memory-size-comparison-arrow-vs-pandas)
+- [Q6 — Parquet Column Projection](#q6--parquet-column-projection)
+- [Q7 — ChunkedArray vs Array](#q7--chunkedarray-vs-array)
+- [Q8 — from_pandas() and Zero-Copy](#q8--from_pandas-and-zero-copy)
+- [Q9 — Writing and Reading Parquet](#q9--writing-and-reading-parquet)
+- [Q10 — Dictionary Encoding at Load Time](#q10--dictionary-encoding-at-load-time)
+- [Q11 — Arrow compute Function vs Pandas](#q11--arrow-compute-function-vs-pandas)
+- [Q12 — Schema Inspection](#q12--schema-inspection)
+- [Q13 — Parquet Column Projection with pyarrow.parquet](#q13--parquet-column-projection-with-pyarrowparquet)
+- [Q14 — Arrow Slice Semantics](#q14--arrow-slice-semantics)
+- [Q15 — ConvertOptions column_types vs dtype](#q15--convertoptions-column_types-vs-dtype)
+- [Q16 — to_pandas() String Memory Inflation](#q16--to_pandas-string-memory-inflation)
+- [Q17 — Parquet Row Group Count](#q17--parquet-row-group-count)
+- [Q18 — Total Pipeline: Fastest Load for Single Aggregation](#q18--total-pipeline-fastest-load-for-single-aggregation)
 
 ---
 
@@ -32,7 +32,7 @@
 
 ---
 
-## Question 1
+## Q1 — Return Type of pyarrow.csv.read_csv()
 
 ```python
 import pyarrow.csv as pa_csv
@@ -57,7 +57,7 @@ What does this print?
 
 ---
 
-## Question 2
+## Q2 — Column Access on a pyarrow.Table
 
 ```python
 import pyarrow.csv as pa_csv
@@ -83,7 +83,7 @@ What is the type of `col`?
 
 ---
 
-## Question 3
+## Q3 — Converting Arrow to Pandas
 
 ```python
 import pyarrow.csv as pa_csv
@@ -109,7 +109,7 @@ What does this code produce, and which statement about the conversion is accurat
 
 ---
 
-## Question 4
+## Q4 — ConvertOptions for Type Override
 
 ```python
 import pyarrow as pa
@@ -141,7 +141,7 @@ Which of the following will appear in the printed schema for `value` and `parame
 
 ---
 
-## Question 5
+## Q5 — Memory Size Comparison: Arrow vs Pandas
 
 ```python
 import pandas as pd
@@ -172,7 +172,7 @@ What does this print, and why?
 
 ---
 
-## Question 6
+## Q6 — Parquet Column Projection
 
 ```python
 import pandas as pd
@@ -197,7 +197,7 @@ What does `df.columns.tolist()` print, and what is the key benefit of using `col
 
 ---
 
-## Question 7
+## Q7 — ChunkedArray vs Array
 
 ```python
 import pyarrow.csv as pa_csv
@@ -225,7 +225,7 @@ Which of the following is a correct interpretation of this code?
 
 ---
 
-## Question 8
+## Q8 — from_pandas() and Zero-Copy
 
 ```python
 import pandas as pd
@@ -257,7 +257,7 @@ What does `table['x'][0].as_py()` print?
 
 ---
 
-## Question 9
+## Q9 — Writing and Reading Parquet
 
 ```python
 import pandas as pd
@@ -290,7 +290,7 @@ What does this print?
 
 ---
 
-## Question 10
+## Q10 — Dictionary Encoding at Load Time
 
 ```python
 import pyarrow as pa
@@ -321,7 +321,7 @@ The original CSV has `parameterId` with 47 unique values and `coordsx` with 224 
 
 ---
 
-## Question 11
+## Q11 — Arrow compute Function vs Pandas
 
 ```python
 import pyarrow as pa
@@ -351,7 +351,7 @@ How does this compare to the equivalent Pandas vectorised approach `df[df['param
 
 ---
 
-## Question 12
+## Q12 — Schema Inspection
 
 ```python
 import pyarrow.csv as pa_csv
@@ -376,7 +376,7 @@ What does `table.schema` represent, and which of the following is true?
 
 ---
 
-## Question 13
+## Q13 — Parquet Column Projection with pyarrow.parquet
 
 ```python
 import pyarrow.parquet as pq
@@ -401,7 +401,7 @@ Compared to `pq.read_table('2023_01.parquet')`, what is the key difference in I/
 
 ---
 
-## Question 14
+## Q14 — Arrow Slice Semantics
 
 ```python
 import pyarrow.csv as pa_csv
@@ -433,7 +433,7 @@ What does this code demonstrate about Arrow slice semantics?
 
 ---
 
-## Question 15
+## Q15 — ConvertOptions column_types vs dtype
 
 ```python
 import pyarrow.csv as pa_csv
@@ -465,7 +465,7 @@ Which attempt succeeds, and which raises a `TypeError`?
 
 ---
 
-## Question 16
+## Q16 — to_pandas() String Memory Inflation
 
 ```python
 import pyarrow.csv as pa_csv
@@ -496,7 +496,7 @@ Based on the Week 7 DMI dataset results, which output is most accurate?
 
 ---
 
-## Question 17
+## Q17 — Parquet Row Group Count
 
 ```python
 import pyarrow.parquet as pq
@@ -522,7 +522,7 @@ What does `num_row_groups` tell you, and why does it matter for performance?
 
 ---
 
-## Question 18
+## Q18 — Total Pipeline: Fastest Load for Single Aggregation
 
 ```python
 import pyarrow.csv as pa_csv

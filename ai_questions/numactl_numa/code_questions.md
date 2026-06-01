@@ -4,25 +4,25 @@
 
 ## Contents
 
-- [Question 1 — What Command Runs Python Under Interleaved Memory](#question-1)
-- [Question 2 — Identifying the NUMA Plateau from Timing Data](#question-2)
-- [Question 3 — Reading numactl --hardware for Node Count](#question-3)
-- [Question 4 — Which Flag Restricts Cores to Socket 0](#question-4)
-- [Question 5 — Where RawArray Pages Land Without numactl](#question-5)
-- [Question 6 — LSF Script: Does span[hosts=1] Apply NUMA Policy?](#question-6)
-- [Question 7 — Predict the Speedup Curve Shape from Code](#question-7)
-- [Question 8 — What Does init() Do in the Pool Pattern?](#question-8)
-- [Question 9 — Bug: Wrong numactl Flag for Full Local Binding](#question-9)
+- [Q1 — What Command Runs Python Under Interleaved Memory](#q1--what-command-runs-python-under-interleaved-memory)
+- [Q2 — Identifying the NUMA Plateau from Timing Data](#q2--identifying-the-numa-plateau-from-timing-data)
+- [Q3 — Reading numactl --hardware for Node Count](#q3--reading-numactl---hardware-for-node-count)
+- [Q4 — Which Flag Restricts Cores to Socket 0](#q4--which-flag-restricts-cores-to-socket-0)
+- [Q5 — Where RawArray Pages Land Without numactl](#q5--where-rawarray-pages-land-without-numactl)
+- [Q6 — Does span[hosts=1] Apply NUMA Policy?](#q6--does-spanhosts1-apply-numa-policy)
+- [Q7 — Predict the Speedup Curve Shape from Code](#q7--predict-the-speedup-curve-shape-from-code)
+- [Q8 — What Does init() Do in the Pool Pattern?](#q8--what-does-init-do-in-the-pool-pattern)
+- [Q9 — Bug: Wrong numactl Flag for Full Local Binding](#q9--bug-wrong-numactl-flag-for-full-local-binding)
 - [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2--generated-practice-questions-exam-day-focus)
-- [Question 10 — Interleave vs Membind: Choosing for 48-Core Job](#question-10)
-- [Question 11 — Does numactl --interleave=all Affect CPU Pinning?](#question-11)
-- [Question 12 — Reading NUMA Distance from Hardware Output](#question-12)
-- [Question 13 — Spotting the NUMA Bottleneck in a Speedup Table](#question-13)
-- [Question 14 — Effect of numactl on a Single-Process NumPy Sum](#question-14)
-- [Question 15 — pool.map Reduction: How Many rounds of pool.map?](#question-15)
-- [Question 16 — Which LSF Flag Keeps Job on One Server?](#question-16)
-- [Question 17 — Identifying Correct Memory Policy for Dataset Larger Than One Node](#question-17)
-- [Question 18 — Full numactl + Pool Pattern: What Is Printed?](#question-18)
+- [Q10 — Interleave vs Membind: Choosing for 48-Core Job](#q10--interleave-vs-membind-choosing-for-48-core-job)
+- [Q11 — Does numactl --interleave=all Affect CPU Pinning?](#q11--does-numactl---interleaveall-affect-cpu-pinning)
+- [Q12 — Reading NUMA Distance from Hardware Output](#q12--reading-numa-distance-from-hardware-output)
+- [Q13 — Spotting the NUMA Bottleneck in a Speedup Table](#q13--spotting-the-numa-bottleneck-in-a-speedup-table)
+- [Q14 — Effect of numactl on a Single-Process NumPy Sum](#q14--effect-of-numactl-on-a-single-process-numpy-sum)
+- [Q15 — Pool.map Reduction: How Many Rounds?](#q15--poolmap-reduction-how-many-rounds)
+- [Q16 — Which LSF Flag Keeps Job on One Server?](#q16--which-lsf-flag-keeps-job-on-one-server)
+- [Q17 — Memory Policy for Dataset Larger Than One Node](#q17--memory-policy-for-dataset-larger-than-one-node)
+- [Q18 — Full numactl + Pool Pattern: What Is Printed?](#q18--full-numactl--pool-pattern-what-is-printed)
 
 ---
 
@@ -33,7 +33,7 @@
 
 ---
 
-## Question 1
+## Q1 — What Command Runs Python Under Interleaved Memory
 
 ```bash
 # Option A
@@ -65,7 +65,7 @@ A student wants to run the CelebA parallel reduction with memory spread evenly a
 
 ---
 
-## Question 2
+## Q2 — Identifying the NUMA Plateau from Timing Data
 
 A student benchmarks the CelebA reduction and records these wall-clock times (in seconds) for varying process counts, without numactl:
 
@@ -99,7 +99,7 @@ Which statement correctly identifies and explains the NUMA plateau?
 
 ---
 
-## Question 3
+## Q3 — Reading numactl --hardware for Node Count
 
 ```bash
 $ numactl --hardware
@@ -132,7 +132,7 @@ How many physical CPU sockets does this machine have, and what is the relative l
 
 ---
 
-## Question 4
+## Q4 — Which Flag Restricts Cores to Socket 0
 
 ```bash
 # Which of these commands restricts the process to run only on
@@ -167,7 +167,7 @@ Which command correctly restricts execution to all cores of NUMA node 0 (socket 
 
 ---
 
-## Question 5
+## Q5 — Where RawArray Pages Land Without numactl
 
 ```python
 import ctypes
@@ -206,7 +206,7 @@ On a dual-socket NUMA machine with no numactl, on which NUMA node do the shared 
 
 ---
 
-## Question 6
+## Q6 — Does span[hosts=1] Apply NUMA Policy?
 
 ```bash
 #!/bin/bash
@@ -236,7 +236,7 @@ A student submits this LSF job. Does `span[hosts=1]` apply a numactl interleave 
 
 ---
 
-## Question 7
+## Q7 — Predict the Speedup Curve Shape from Code
 
 ```python
 import multiprocessing as mp
@@ -278,7 +278,7 @@ On a 32-core dual-socket NUMA node (16 cores per socket) without numactl, which 
 
 ---
 
-## Question 8
+## Q8 — What Does init() Do in the Pool Pattern?
 
 ```python
 def init(shared_arr_):
@@ -304,7 +304,7 @@ What is the purpose of the `init` function and the `initializer` argument in thi
 
 ---
 
-## Question 9
+## Q9 — Bug: Wrong numactl Flag for Full Local Binding
 
 ```bash
 # Student wants: all computation on socket 0, all memory on socket 0
@@ -343,7 +343,7 @@ The student wants both all computation and all memory allocation confined to NUM
 
 ---
 
-## Question 10
+## Q10 — Interleave vs Membind: Choosing for 48-Core Job
 
 ```bash
 # A student has a 48-core dual-socket node (24 cores per socket).
@@ -379,7 +379,7 @@ The student wants to use all 48 cores efficiently with a 50 GB dataset that must
 
 ---
 
-## Question 11
+## Q11 — Does numactl --interleave=all Affect CPU Pinning?
 
 ```bash
 numactl --interleave=all python -c "
@@ -404,7 +404,7 @@ On a 32-core dual-socket machine (cores 0–15 on socket 0, cores 16–31 on soc
 
 ---
 
-## Question 12
+## Q12 — Reading NUMA Distance from Hardware Output
 
 ```
 $ numactl --hardware
@@ -437,7 +437,7 @@ A process running on core 20 (node 1) reads an array allocated entirely on node 
 
 ---
 
-## Question 13
+## Q13 — Spotting the NUMA Bottleneck in a Speedup Table
 
 A student runs the reduction with numactl and without, and records:
 
@@ -473,7 +473,7 @@ Which statement correctly interprets the difference between the two datasets?
 
 ---
 
-## Question 14
+## Q14 — Effect of numactl on a Single-Process NumPy Sum
 
 ```python
 import numpy as np
@@ -513,7 +513,7 @@ Which run is expected to be faster, and why?
 
 ---
 
-## Question 15
+## Q15 — Pool.map Reduction: How Many Rounds?
 
 ```python
 import numpy as np
@@ -542,7 +542,7 @@ What does this code print, and what does each round of `pool.map` correspond to 
 
 ---
 
-## Question 16
+## Q16 — Which LSF Flag Keeps Job on One Server?
 
 ```bash
 #!/bin/bash
@@ -572,7 +572,7 @@ A student notices that `shared_arr = mp.RawArray(...)` sometimes raises an error
 
 ---
 
-## Question 17
+## Q17 — Memory Policy for Dataset Larger Than One Node
 
 ```bash
 # Dataset size: 200 GB
@@ -608,7 +608,7 @@ Which option is correct for a 200 GB dataset on a machine with 128 GB per NUMA n
 
 ---
 
-## Question 18
+## Q18 — Full numactl + Pool Pattern: What Is Printed?
 
 ```python
 import ctypes

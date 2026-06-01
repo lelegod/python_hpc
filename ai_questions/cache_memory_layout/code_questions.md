@@ -4,16 +4,16 @@
 
 ## Contents
 
-- [Question 1](#question-1)
-- [Question 2](#question-2)
-- [Question 3](#question-3)
-- [Question 4](#question-4)
-- [Question 5](#question-5)
-- [Question 6](#question-6)
-- [Question 7](#question-7)
-- [Question 8](#question-8)
-- [Question 9](#question-9)
-- [Question 10](#question-10)
+- [Q1 — Loop Order from Strides (4D Array)](#q1--loop-order-from-strides-4d-array)
+- [Q2 — Row vs Column Traversal](#q2--row-vs-column-traversal)
+- [Q3 — Strides of (3,4) float64 Array](#q3--strides-of-34-float64-array)
+- [Q4 — Smallest Stride in (N,H,W,C) Array](#q4--smallest-stride-in-nhwc-array)
+- [Q5 — ijk vs ikj Matrix Multiply Loop Order](#q5--ijk-vs-ikj-matrix-multiply-loop-order)
+- [Q6 — Transpose Shares Memory, Reverses Strides](#q6--transpose-shares-memory-reverses-strides)
+- [Q7 — Row vs Column Processing in Pool](#q7--row-vs-column-processing-in-pool)
+- [Q8 — Sequential vs Stride-8 Access](#q8--sequential-vs-stride-8-access)
+- [Q9 — CHW Channels-First Cache Inefficiency](#q9--chw-channels-first-cache-inefficiency)
+- [Q10 — reshape(-1) and C-Order Flattening](#q10--reshape-1-and-c-order-flattening)
 - [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
 - [Q11 — Strides After np.asfortranarray](#q11-strides-after-npasfortranarray)
 - [Q12 — Loop Order for F-Order Array](#q12-loop-order-for-f-order-array)
@@ -35,7 +35,7 @@
 
 ---
 
-## Question 1
+## Q1 — Loop Order from Strides (4D Array)
 
 Given the following 4D array and loop:
 
@@ -86,7 +86,7 @@ So the optimal ordering is: innermost `k` (stride 8) → `j` (stride 40) → `l`
 
 ---
 
-## Question 2
+## Q2 — Row vs Column Traversal
 
 ```python
 import numpy as np
@@ -123,7 +123,7 @@ NumPy stores arrays in **C (row-major) order** by default: elements in the same 
 
 ---
 
-## Question 3
+## Q3 — Strides of (3,4) float64 Array
 
 ```python
 import numpy as np
@@ -160,7 +160,7 @@ So `a.strides == (32, 8)`.
 
 ---
 
-## Question 4
+## Q4 — Smallest Stride in (N,H,W,C) Array
 
 ```python
 import numpy as np
@@ -201,7 +201,7 @@ The full output is `(98304, 1536, 24, 8)`. Axis 3 (channels) has the smallest st
 
 ---
 
-## Question 5
+## Q5 — ijk vs ikj Matrix Multiply Loop Order
 
 ```python
 import numpy as np
@@ -254,7 +254,7 @@ Version B keeps `k` fixed in the middle loop and strides over `j` in the innermo
 
 ---
 
-## Question 6
+## Q6 — Transpose Shares Memory, Reverses Strides
 
 ```python
 import numpy as np
@@ -307,7 +307,7 @@ No data is copied; NumPy reinterprets the same bytes with swapped stride values,
 
 ---
 
-## Question 7
+## Q7 — Row vs Column Processing in Pool
 
 ```python
 import numpy as np
@@ -357,7 +357,7 @@ Multiprocessing uses separate address spaces, but each worker process still expe
 
 ---
 
-## Question 8
+## Q8 — Sequential vs Stride-8 Access
 
 ```python
 import numpy as np
@@ -398,7 +398,7 @@ A typical CPU cache line is **64 bytes**. For `float64` (8 bytes each), one cach
 
 ---
 
-## Question 9
+## Q9 — CHW Channels-First Cache Inefficiency
 
 ```python
 import numpy as np
@@ -447,7 +447,7 @@ The innermost loop varies `k` (the channel axis), so consecutive accesses `image
 
 ---
 
-## Question 10
+## Q10 — reshape(-1) and C-Order Flattening
 
 ```python
 import numpy as np

@@ -4,25 +4,25 @@
 
 ## Contents
 
-- [Question 1](#question-1)
-- [Question 2](#question-2)
-- [Question 3](#question-3)
-- [Question 4](#question-4)
-- [Question 5](#question-5)
-- [Question 6](#question-6)
-- [Question 7](#question-7)
-- [Question 8](#question-8)
-- [Question 9](#question-9)
+- [Q1 — Lossless Round-Trip (Zeros Array)](#q1--lossless-round-trip-zeros-array)
+- [Q2 — Compression Ratio for Random Data](#q2--compression-ratio-for-random-data)
+- [Q3 — SHUFFLE vs NOSHUFFLE for All-Zeros](#q3--shuffle-vs-noshuffle-for-all-zeros)
+- [Q4 — pack_array Preserves dtype and Shape](#q4--pack_array-preserves-dtype-and-shape)
+- [Q5 — Codec Comparison for Tiled Data](#q5--codec-comparison-for-tiled-data)
+- [Q6 — Timing compress vs decompress for Random float64](#q6--timing-compress-vs-decompress-for-random-float64)
+- [Q7 — Thread Count Does Not Affect Compressed Content](#q7--thread-count-does-not-affect-compressed-content)
+- [Q8 — SHUFFLE vs BITSHUFFLE for Linearly Spaced Floats](#q8--shuffle-vs-bitshuffle-for-linearly-spaced-floats)
+- [Q9 — zstd Produces Smaller File Than lz4 for Zeros](#q9--zstd-produces-smaller-file-than-lz4-for-zeros)
 - [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2--generated-practice-questions-exam-day-focus)
-- [Question 10](#question-10)
-- [Question 11](#question-11)
-- [Question 12](#question-12)
-- [Question 13](#question-13)
-- [Question 14](#question-14)
-- [Question 15](#question-15)
-- [Question 16](#question-16)
-- [Question 17](#question-17)
-- [Question 18](#question-18)
+- [Q10 — pack_array/unpack_array Round-Trip Correctness](#q10--pack_arrayunpack_array-round-trip-correctness)
+- [Q11 — bytes Input to compress()](#q11--bytes-input-to-compress)
+- [Q12 — Parallel Compression Speedup](#q12--parallel-compression-speedup)
+- [Q13 — float64 vs float32 Compressed Size](#q13--float64-vs-float32-compressed-size)
+- [Q14 — Random Data: Blosc vs NumPy File Size](#q14--random-data-blosc-vs-numpy-file-size)
+- [Q15 — decompress vs unpack_array Return Type](#q15--decompress-vs-unpack_array-return-type)
+- [Q16 — clevel Comparison: lz4 vs zstd](#q16--clevel-comparison-lz4-vs-zstd)
+- [Q17 — Thread Count at Compress vs Decompress](#q17--thread-count-at-compress-vs-decompress)
+- [Q18 — Zeros vs Random Compression Ratio Thresholds](#q18--zeros-vs-random-compression-ratio-thresholds)
 
 ---
 
@@ -33,7 +33,7 @@
 
 ---
 
-## Question 1
+## Q1 — Lossless Round-Trip (Zeros Array)
 
 ```python
 import blosc
@@ -64,7 +64,7 @@ What does this code print?
 
 ---
 
-## Question 2
+## Q2 — Compression Ratio for Random Data
 
 ```python
 import blosc
@@ -95,7 +95,7 @@ Which output is most likely for a large uniform-random uint8 array?
 
 ---
 
-## Question 3
+## Q3 — SHUFFLE vs NOSHUFFLE for All-Zeros
 
 ```python
 import blosc
@@ -127,7 +127,7 @@ What does this code print for an all-zeros float64 array?
 
 ---
 
-## Question 4
+## Q4 — pack_array Preserves dtype and Shape
 
 ```python
 import blosc
@@ -171,7 +171,7 @@ What does this code print?
 
 ---
 
-## Question 5
+## Q5 — Codec Comparison for Tiled Data
 
 ```python
 import blosc
@@ -207,7 +207,7 @@ For a highly repetitive tiled array, which output is most likely?
 
 ---
 
-## Question 6
+## Q6 — Timing compress vs decompress for Random float64
 
 ```python
 import blosc
@@ -248,7 +248,7 @@ For random float64 data with `clevel=9`, which outcome is most accurate?
 
 ---
 
-## Question 7
+## Q7 — Thread Count Does Not Affect Compressed Content
 
 ```python
 import blosc
@@ -284,7 +284,7 @@ What does this code print?
 
 ---
 
-## Question 8
+## Q8 — SHUFFLE vs BITSHUFFLE for Linearly Spaced Floats
 
 ```python
 import blosc
@@ -318,7 +318,7 @@ For a linearly spaced float32 array, which output is most likely?
 
 ---
 
-## Question 9
+## Q9 — zstd Produces Smaller File Than lz4 for Zeros
 
 ```python
 import blosc
@@ -365,7 +365,7 @@ After the second call (`cname='zstd'`), what is `data.bl`'s expected size relati
 
 ---
 
-## Question 10
+## Q10 — pack_array/unpack_array Round-Trip Correctness
 
 ```python
 import blosc
@@ -401,7 +401,7 @@ What are the three printed values?
 
 ---
 
-## Question 11
+## Q11 — bytes Input to compress()
 
 ```python
 import blosc
@@ -434,7 +434,7 @@ What does this code print?
 
 ---
 
-## Question 12
+## Q12 — Parallel Compression Speedup
 
 ```python
 import blosc
@@ -476,7 +476,7 @@ What does this code most likely print on a machine with 8 physical cores?
 
 ---
 
-## Question 13
+## Q13 — float64 vs float32 Compressed Size
 
 ```python
 import blosc
@@ -513,7 +513,7 @@ What does this code most likely print?
 
 ---
 
-## Question 14
+## Q14 — Random Data: Blosc vs NumPy File Size
 
 ```python
 import blosc
@@ -562,7 +562,7 @@ What does this code most likely print?
 
 ---
 
-## Question 15
+## Q15 — decompress vs unpack_array Return Type
 
 ```python
 import blosc
@@ -601,7 +601,7 @@ What does `type(recovered)` print, and is this the intended way to recover the a
 
 ---
 
-## Question 16
+## Q16 — clevel Comparison: lz4 vs zstd
 
 ```python
 import blosc
@@ -637,7 +637,7 @@ For a tiled (repetitive) uint8 array, which output is most likely?
 
 ---
 
-## Question 17
+## Q17 — Thread Count at Compress vs Decompress
 
 ```python
 import blosc
@@ -674,7 +674,7 @@ What does this code print?
 
 ---
 
-## Question 18
+## Q18 — Zeros vs Random Compression Ratio Thresholds
 
 ```python
 import blosc

@@ -4,14 +4,14 @@
 
 ## Contents
 
-- [Question 1](#question-1)
-- [Question 2](#question-2)
-- [Question 3](#question-3)
-- [Question 4](#question-4)
-- [Question 5](#question-5)
-- [Question 6](#question-6)
-- [Question 7](#question-7)
-- [Question 8](#question-8)
+- [Q1 — 1-Based LSB_JOBINDEX Off-by-One](#q1--1-based-lsb_jobindex-off-by-one)
+- [Q2 — %J vs %I in Output File Names](#q2--j-vs-i-in-output-file-names)
+- [Q3 — Background Process Orphan Problem](#q3--background-process-orphan-problem)
+- [Q4 — wait After kill for Clean Termination](#q4--wait-after-kill-for-clean-termination)
+- [Q5 — Email Notification Count with -N](#q5--email-notification-count-with--n)
+- [Q6 — Pool() Uses os.cpu_count() Not LSF Cores](#q6--pool-uses-oscpu_count-not-lsf-cores)
+- [Q7 — Step Syntax [1-20:3] Index Values](#q7--step-syntax-1-203-index-values)
+- [Q8 — done() Requires All DONE, any EXIT Blocks](#q8--done-requires-all-done-any-exit-blocks)
 - [Key Facts Summary](#key-facts-summary)
 - [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
 - [Q9 — Spotting the done() Blocker](#q9-spotting-the-done-blocker)
@@ -34,7 +34,7 @@
 
 ---
 
-## Question 1
+## Q1 — 1-Based LSB_JOBINDEX Off-by-One
 
 A Python job array script processes files in a directory:
 
@@ -70,7 +70,7 @@ When `$LSB_JOBINDEX=1`, what file does this script access, and what happens when
 
 ---
 
-## Question 2
+## Q2 — %J vs %I in Output File Names
 
 A job array is submitted with this BSUB header:
 
@@ -100,7 +100,7 @@ All 5 array elements run simultaneously. What happens to the output files?
 
 ---
 
-## Question 3
+## Q3 — Background Process Orphan Problem
 
 A job script launches a background monitor and then runs the main computation:
 
@@ -131,9 +131,9 @@ What is the problem with this script?
 
 ---
 
-## Question 4
+## Q4 — wait After kill for Clean Termination
 
-The script from Question 3 is fixed as follows:
+The script from Q3 is fixed as follows:
 
 ```bash
 #!/bin/bash
@@ -164,7 +164,7 @@ What is the purpose of `wait $MONITOR_PID`?
 
 ---
 
-## Question 5
+## Q5 — Email Notification Count with -N
 
 A job array is submitted with email notification:
 
@@ -195,7 +195,7 @@ How many emails will `user@dtu.dk` receive when all jobs complete?
 
 ---
 
-## Question 6
+## Q6 — Pool() Uses os.cpu_count() Not LSF Cores
 
 A job requests 4 cores and sets an environment variable, then launches a Python multiprocessing pool:
 
@@ -234,7 +234,7 @@ The job runs on a 32-core node. How many worker processes does `Pool()` create, 
 
 ---
 
-## Question 7
+## Q7 — Step Syntax [1-20:3] Index Values
 
 A job array uses step syntax:
 
@@ -262,7 +262,7 @@ Which values of `$LSB_JOBINDEX` will be scheduled?
 
 ---
 
-## Question 8
+## Q8 — done() Requires All DONE, any EXIT Blocks
 
 A map-reduce HPC workflow uses job dependencies:
 

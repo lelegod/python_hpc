@@ -1109,14 +1109,31 @@ for j in range(cols):
         use(arr[i, j])
 ```
 
-**GPU rule — warp coalescing → adjacent threads access adjacent memory:**
-- Threads in a warp have consecutive `threadIdx.x` → consecutive `j` index
-- So the column index (j) should map to the last (contiguous) dimension
-- Same conclusion as CPU: last axis should be the one that varies across adjacent threads
+**GPU rule — Warp Coalescing (Row-Major):**
+- Threads in a warp always have consecutive `threadIdx.x`
+- To coalesce, the array's **last axis (columns)** must be the one varying across adjacent threads
+- **Same conclusion as CPU:** both want last-axis-varying — CPU achieves it through *time* (innermost for-loop), GPU achieves it through *space* (adjacent threads stretch across the last axis)
+
+**The critical trap — standard Numba boilerplate breaks this:**
+```python
+i, j = cuda.grid(2)   # ← threadIdx.x maps to i (ROW), not j (column) → ruins coalescing
+```
+`cuda.grid(2)` returns `(x-dim, y-dim)`. The x-dimension (`threadIdx.x`) varies fastest within a warp. Unpacking as `i, j` silently assigns the fast-varying x to `i` (row index), so adjacent threads step through rows — strided access, cache-unfriendly.
+
+**The fix — explicitly map threadIdx.x to the column:**
+```python
+# Option 1: swap the unpack
+j, i = cuda.grid(2)   # threadIdx.x → j (column) → adjacent threads hit adjacent memory ✓
+
+# Option 2: flat block shape — blockDim.x=1 so threadIdx.x=0 for all threads,
+# warp varies through threadIdx.y (0..31) → j = blockIdx.y*32 + threadIdx.y varies → coalesced ✓
+tpb = (1, 32)
+```
 
 **MCQ distractor pattern:**
 - **Trap: "column access is faster because columns are contiguous in Fortran order"** — arrays in this course are C order (row-major) unless stated otherwise
-- **Trap: GPU and CPU have the same access pattern for the same reason** — both want last-index-varying, but the reasoning is different (cache lines vs warp coalescing)
+- **Trap: GPU and CPU want coalescing for the same reason** — they don't; CPU uses cache lines (temporal/spatial locality), GPU uses warp-level simultaneous access (coalescing). Same physical outcome (last-axis-varying), different mechanisms
+- **Trap: assuming `i, j = cuda.grid(2)` gives coalesced access** — it does the opposite; you must swap to `j, i = cuda.grid(2)` or redesign the block shape
 
 ---
 

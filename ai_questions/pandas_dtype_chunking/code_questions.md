@@ -4,39 +4,39 @@
 
 ## Contents
 
-- [Question 1](#question-1)
-- [Question 2](#question-2)
-- [Question 3](#question-3)
-- [Question 4](#question-4)
-- [Question 5](#question-5)
-- [Question 6](#question-6)
-- [Question 7](#question-7)
-- [Question 8](#question-8)
-- [Question 9](#question-9)
-- [Question 10](#question-10)
+- [Q1 — Choosing category Column from Info Summary](#q1--choosing-category-column-from-info-summary)
+- [Q2 — Choosing datetime64 Column from Info Summary](#q2--choosing-datetime64-column-from-info-summary)
+- [Q3 — Memory After uint8 Downcast](#q3--memory-after-uint8-downcast)
+- [Q4 — Max Rows for RAM Budget](#q4--max-rows-for-ram-budget)
+- [Q5 — len() on TextFileReader Raises TypeError](#q5--len-on-textfilereader-raises-typeerror)
+- [Q6 — Safe int8 Downcast for Range 0-42](#q6--safe-int8-downcast-for-range-0-42)
+- [Q7 — float32 for Integer Count Column](#q7--float32-for-integer-count-column)
+- [Q8 — memory_usage deep=True for Object Column](#q8--memory_usage-deeptrue-for-object-column)
+- [Q9 — Sorted Index vs Boolean Mask Lookup](#q9--sorted-index-vs-boolean-mask-lookup)
+- [Q10 — TextFileReader Exhausted After One Pass](#q10--textfilereader-exhausted-after-one-pass)
 - [Key Facts Reference](#key-facts-reference)
 - [Set 2 — Generated Practice Questions (Exam-Day Focus)](#set-2-generated-practice-questions-exam-day-focus)
-- [Question 11](#question-11)
-- [Question 12](#question-12)
-- [Question 13](#question-13)
-- [Question 14](#question-14)
-- [Question 15](#question-15)
-- [Question 16](#question-16)
-- [Question 17](#question-17)
-- [Question 18](#question-18)
-- [Question 19](#question-19)
-- [Question 20](#question-20)
+- [Q11 — float32 Column Memory Calculation](#q11--float32-column-memory-calculation)
+- [Q12 — Why Second groupby().sum() Is Needed](#q12--why-second-groupbysum-is-needed)
+- [Q13 — Memory After dtype Optimization](#q13--memory-after-dtype-optimization)
+- [Q14 — first_chunk.shape After next(reader)](#q14--first_chunkshape-after-nextreader)
+- [Q15 — cat.codes.dtype for 3-Value Category](#q15--catcodesdtype-for-3-value-category)
+- [Q16 — Shallow vs Deep Object Column Memory](#q16--shallow-vs-deep-object-column-memory)
+- [Q17 — Chunked Per-Day Aggregation Pattern](#q17--chunked-per-day-aggregation-pattern)
+- [Q18 — memory_usage().sum() Calculation](#q18--memory_usagesum-calculation)
+- [Q19 — category vs Manual uint8 Mapping](#q19--category-vs-manual-uint8-mapping)
+- [Q20 — PyArrow dictionary_encode() Type and Memory](#q20--pyarrow-dictionary_encode-type-and-memory)
 
 ---
 
 > Format: Each question shows a DataFrame summary, code snippet, or memory_usage output to interpret.
 > Exam frequency: **2024 exam + F25**.
 
-**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#question-1)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--choosing-category-column-from-info-summary)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
 
 ---
 
-## Question 1
+## Q1 — Choosing category Column from Info Summary
 
 You run `df.info()` and get the following summary for a DataFrame with 500,000 rows:
 
@@ -64,9 +64,9 @@ Which single column would benefit most from conversion to `category` dtype?
 
 ---
 
-## Question 2
+## Q2 — Choosing datetime64 Column from Info Summary
 
-Using the same DataFrame summary from Question 1:
+Using the same DataFrame summary from Q1:
 
 ```
 Column        Dtype   Non-Null   Unique   Min        Max
@@ -92,7 +92,7 @@ Which column should be converted to `datetime64[ns]`?
 
 ---
 
-## Question 3
+## Q3 — Memory After uint8 Downcast
 
 You inspect a column in a DataFrame with 500,000 rows:
 
@@ -125,7 +125,7 @@ How many bytes does `station_id` now consume?
 
 ---
 
-## Question 4
+## Q4 — Max Rows for RAM Budget
 
 A DataFrame has the following dtype layout, and you want to compute the maximum number of rows you can load given a 140 MB RAM budget:
 
@@ -156,7 +156,7 @@ What is `max_rows`?
 
 ---
 
-## Question 5
+## Q5 — len() on TextFileReader Raises TypeError
 
 A student writes the following code to count chunks in a CSV file:
 
@@ -181,7 +181,7 @@ What actually happens when this code runs?
 
 ---
 
-## Question 6
+## Q6 — Safe int8 Downcast for Range 0-42
 
 A column `version` in a 1,000,000-row DataFrame is currently stored as `int64`. You observe:
 
@@ -212,7 +212,7 @@ Is this conversion safe?
 
 ---
 
-## Question 7
+## Q7 — float32 for Integer Count Column
 
 A student downcasts an integer column to `float32`:
 
@@ -237,7 +237,7 @@ What is the primary concern with this conversion?
 
 ---
 
-## Question 8
+## Q8 — memory_usage deep=True for Object Column
 
 You call `df.memory_usage()` twice on the same DataFrame:
 
@@ -267,7 +267,7 @@ What does the large discrepancy for `station` indicate?
 
 ---
 
-## Question 9
+## Q9 — Sorted Index vs Boolean Mask Lookup
 
 Consider two approaches to filter a large time-indexed DataFrame for a specific date:
 
@@ -296,7 +296,7 @@ Both return the same numeric result. Why is Approach A faster for **repeated que
 
 ---
 
-## Question 10
+## Q10 — TextFileReader Exhausted After One Pass
 
 A student writes a two-pass aggregation over a chunked CSV file:
 
@@ -355,7 +355,7 @@ What happens during the second `for` loop?
 
 ---
 
-## Question 11
+## Q11 — float32 Column Memory Calculation
 
 You run the following code on a DataFrame with 800,000 rows:
 
@@ -379,7 +379,7 @@ The `score` column has no index-related overhead here. What value does `df['scor
 
 ---
 
-## Question 12
+## Q12 — Why Second groupby().sum() Is Needed
 
 Consider this chunk-based groupby pattern:
 
@@ -404,7 +404,7 @@ Each chunk is an independent DataFrame slice of the file. If `event_type = "clic
 
 ---
 
-## Question 13
+## Q13 — Memory After dtype Optimization
 
 A student runs:
 
@@ -439,7 +439,7 @@ Per row for the three columns: int16 (2) + float32 (4) + bool (1) = 7 bytes. Tot
 
 ---
 
-## Question 14
+## Q14 — first_chunk.shape After next(reader)
 
 You have this code:
 
@@ -462,7 +462,7 @@ The file has 750,000 rows and 4 columns. What does `first_chunk.shape` print?
 
 ---
 
-## Question 15
+## Q15 — cat.codes.dtype for 3-Value Category
 
 A DataFrame column `sensor_type` is converted to category dtype. You then inspect it:
 
@@ -485,7 +485,7 @@ Pandas assigns category codes as signed integers, choosing the smallest signed i
 
 ---
 
-## Question 16
+## Q16 — Shallow vs Deep Object Column Memory
 
 Consider this memory audit snippet:
 
@@ -515,7 +515,7 @@ Column `b` has dtype `object`. Shallow (`deep=False`): 300,000 rows × 8 bytes/p
 
 ---
 
-## Question 17
+## Q17 — Chunked Per-Day Aggregation Pattern
 
 A student wants to process a 5 GB CSV and collect per-day totals. They write:
 
@@ -541,7 +541,7 @@ This is a valid chunked accumulation pattern. Each chunk is read with `parse_dat
 
 ---
 
-## Question 18
+## Q18 — memory_usage().sum() Calculation
 
 You call `df.memory_usage()` on a five-column DataFrame with 1,000,000 rows and receive:
 
@@ -568,7 +568,7 @@ Sum all entries: Index (8,000,000) + col_a (8,000,000) + col_b (4,000,000) + col
 
 ---
 
-## Question 19
+## Q19 — category vs Manual uint8 Mapping
 
 A colleague proposes this optimisation for a column with 12 unique string values across 2,000,000 rows:
 
@@ -594,7 +594,7 @@ Both `category` and the manual `uint8` mapping achieve the same per-row memory (
 
 ---
 
-## Question 20
+## Q20 — PyArrow dictionary_encode() Type and Memory
 
 Examine this PyArrow snippet:
 
