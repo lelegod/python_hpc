@@ -321,15 +321,13 @@ The strides are:
 - Axis 2 (k, W-axis): stride 8
 - Axis 3 (l, channel-axis): stride 200
 
-Ranking from shortest to longest stride:
+Ranking from shortest to longest stride (ascending):
 1. Axis 2 (k): stride 8 — shortest, should be the **innermost** loop
 2. Axis 1 (j): stride 40
-3. Axis 0 (i): stride 600
-4. Axis 3 (l): stride 200
+3. Axis 3 (l): stride 200
+4. Axis 0 (i): stride 600 — longest, should be the **outermost** loop
 
-Ordering from innermost to outermost by ascending stride: **k (8) → j (40) → i (600) → l (200)**
-
-Wait — sorting all four by stride ascending: 8, 40, 200, 600 → axes k, j, l, i. So from outermost to innermost: **i → l → j → k**.
+Sorting all four by stride ascending: 8, 40, 200, 600 → axes k, j, l, i. From innermost to outermost: **k → j → l → i**.
 
 The re-ordered function:
 

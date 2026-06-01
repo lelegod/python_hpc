@@ -223,12 +223,12 @@ print(f"RAM used by small: {small.nbytes} bytes")
 **C)** 0 bytes — `small` is a view; no data is copied into RAM
 **D)** 1 000 000 bytes (1 MB) — only the selected elements are stored
 
-**Answer: C**
+**Answer: B**
 
-- A) Incorrect — creating a view never triggers a full load; the memmap is backed by OS virtual memory and pages are only brought in when accessed.
-- B) Incorrect — `small.nbytes` reports the logical size (1000 × 1000 × 4 = 4 MB), but that is not the RAM actually allocated; no copy is made.
-- C) Correct — `big[::4, ::4]` is a strided view into the memory-mapped file; creating it copies nothing into RAM.
-- D) Incorrect — there is no separate 1 MB allocation; the view shares the underlying file mapping with no independent buffer.
+- A) Incorrect — creating a view never triggers a full load; the memmap is backed by OS virtual memory and pages are only brought in when accessed. 64 MB is the full logical size of `big`, not `small`.
+- B) Correct — `big[::4, ::4]` selects 1000 × 1000 elements from the 4000 × 4000 array. The result is a strided view (no data copied) but `small.nbytes` reports the **logical** byte count of the view: 1000 × 1000 × 4 = 4 000 000 bytes (4 MB). No new physical RAM is allocated — `small` shares pages with the underlying memmap — but `nbytes` always returns the logical element count × itemsize, not the physically committed RAM.
+- C) Incorrect — the code prints `small.nbytes`, which is `4 000 000`, not `0`. `nbytes` is a logical property of the array's shape and dtype, not a measure of physically allocated pages. Physically, no extra RAM is committed until the pages are accessed, but `nbytes` does not reflect that.
+- D) Incorrect — `small` is a view, not a copy; no 1 MB buffer is created. `small.nbytes` = 1000 × 1000 × 4 = 4 000 000 bytes, not 1 000 000.
 
 ---
 

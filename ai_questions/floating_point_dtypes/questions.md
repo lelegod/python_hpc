@@ -39,7 +39,7 @@
 
 > **Week reference:** Week 2
 
-**Mental Model:** float16 relative resolution ≈ 0.001, meaning the ULP (unit in last place) at value V is approximately V × 0.001. At V = 10000, ULP ≈ 10. Adding 1 (which is less than 10) rounds to zero change. Trap: treating 0.001 as an absolute threshold rather than a relative one.
+**Mental Model:** float16 values in [8192, 16384) are spaced 8 apart (ULP = 8 at that exponent range). 10000 falls in this range, so ULP = 8 at 10000. Adding 1, which is less than half-ULP (4), rounds to zero change. Trap: treating the ~0.1% relative spacing as an absolute threshold.
 
 What does the following print?
 
@@ -55,9 +55,9 @@ print(np.float16(10000) + np.float16(1))
 
 **Answer: B**
 
-- A) Incorrect — float16 cannot represent 10001 because the smallest increment at magnitude 10000 is approximately 10000 × 0.001 = 10. Adding 1 is below this threshold and rounds to zero change.
-- B) Correct — float16 relative resolution is ~0.001 (machine epsilon), meaning at value 10000 the smallest representable increment is ~10. Since 1 < 10/2 = 5 (half ULP), it rounds down, leaving the result at 10000.0.
-- C) Incorrect — 10002 is also not a representable float16 value near 10000; the next representable value above 10000 is approximately 10010. Adding 1 does not reach even 10002.
+- A) Incorrect — float16 cannot represent 10001. Float16 values near 10000 are spaced 8 apart (ULP = 8). Adding 1, which is less than half-ULP (4), rounds to zero change, leaving the result at 10000.
+- B) Correct — 10000 is exactly representable in float16 (it falls in the [8192, 16384) exponent range where adjacent values are 8 apart). Since 1 < half-ULP (4), it rounds down to 0 increment, leaving the result at 10000.0.
+- C) Incorrect — 10002 is not a representable float16 value near 10000. The next representable value above 10000 is 10008. Adding 1 does not reach 10008 either.
 - D) Incorrect — 10000 is well within float16's maximum of ~65504, so no overflow occurs. Infinity only appears when the value exceeds ~65504.
 
 ---
@@ -66,7 +66,7 @@ print(np.float16(10000) + np.float16(1))
 
 > **Week reference:** Week 2
 
-**Mental Model:** At V = 100, ULP ≈ 100 × 0.001 = 0.0625 (the exact exponent-based ULP). Half ULP = 0.03125. Since 0.05 > 0.03125, it rounds UP to one full ULP = 0.0625. So 100 + 0.05 → 100.0625, printed as 100.06.
+**Mental Model:** 100 falls in the float16 range [64, 128) = [2^6, 2^7). ULP = 2^(6−10) = 2^(−4) = 0.0625. Half-ULP = 0.03125. Since 0.05 > 0.03125, it rounds UP to one full ULP = 0.0625. So 100 + 0.05 → 100.0625, printed as 100.06.
 
 What does the following print?
 
@@ -134,7 +134,7 @@ print(np.int8(120) + np.int8(10))
 - A) Incorrect — int8 max is 127; 130 is out of range. NumPy scalar arithmetic wraps on overflow rather than raising an exception or returning the clipped maximum.
 - B) Incorrect — NumPy does not saturate at the maximum value (127) like some embedded/DSP systems. It wraps using two's complement arithmetic, which is the standard C integer overflow behaviour.
 - C) Correct — 120 + 10 = 130 mathematically. Since 130 > 127 (int8 max), two's complement wrap gives 130 − 256 = −126. This is the bit pattern `0b10000010` interpreted as a signed 8-bit integer.
-- D) Incorrect — overflow does not yield 0; it wraps to the two's complement value. Zero would result from e.g. `np.int8(128)`, which is 0 (since 128 − 256 = −128, wait: 128 wraps to −128, not 0). 0 specifically comes from adding values that cancel, not overflow.
+- D) Incorrect — overflow does not yield 0; it wraps to the two's complement value. For example, `np.int8(128)` wraps to −128 (since 128 − 256 = −128), not 0. The value 0 would arise from adding values that cancel (e.g., 1 + (−1)), not from overflow.
 
 ---
 
@@ -240,7 +240,7 @@ What is the most likely stored value when you compute `np.float32(1234567.89)`?
 
 > **Week reference:** Week 2
 
-**Mental Model:** Machine epsilon is a RELATIVE quantity — it scales with the value being represented. At V = 10000, the absolute gap between consecutive floats is ~10. At V = 0.001, the absolute gap is ~0.000001. The 0.001 epsilon only equals 0.001 in absolute terms near V = 1.
+**Mental Model:** Machine epsilon is a RELATIVE quantity — it scales with the value being represented. At V = 10000, the absolute gap between consecutive floats is 8 (exact: 2^3, since 10000 is in [8192, 16384)). At V = 0.001, the absolute gap is ~0.000001. The ~0.001 epsilon only equals ~0.001 in absolute terms near V = 1.
 
 The machine epsilon for float16 is approximately 0.001. Which statement correctly describes what this means?
 
@@ -252,7 +252,7 @@ The machine epsilon for float16 is approximately 0.001. Which statement correctl
 **Answer: B**
 
 - A) Incorrect — 0.001 is the *relative* resolution, not absolute. At value 10000, the absolute gap between consecutive float16 values is ~10, not 0.001. Two values differing by 5 (> 0.001 absolute) cannot be distinguished at that magnitude. This is the central trap of this question.
-- B) Correct — machine epsilon defines *relative* precision. The absolute gap between consecutive representable values (ULP) at value V is approximately V × epsilon. At V = 1 the gap is ~0.001; at V = 10000 the gap is ~10; at V = 0.01 the gap is ~0.00001.
+- B) Correct — machine epsilon defines *relative* precision. The absolute gap between consecutive representable values (ULP) at value V scales with V. At V = 1 the gap is ~0.001; at V = 10000 the gap is 8 (exact, since 10000 is in the [8192,16384) exponent range); at V = 0.01 the gap is ~0.000001.
 - C) Incorrect — float16 can represent values up to ~65504 (limited by the 5-bit exponent, not the mantissa). Machine epsilon does not set an upper representable limit; it only describes the *density* of representable values relative to their magnitude.
 - D) Incorrect — float16 epsilon ≈ 0.001, float32 epsilon ≈ 1.2×10⁻⁷, float64 epsilon ≈ 2.2×10⁻¹⁶. These differ by orders of magnitude. float16 has the worst (largest) relative precision among standard IEEE 754 types.
 

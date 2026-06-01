@@ -90,7 +90,7 @@ Students must complete the following 12 tasks (task 11 is optional):
    - b) Estimate total runtime.
    - c) Note any surprising performance characteristics.
 10. **GPU profiling** — Profile the CuPy solution with `nsys`; identify the main bottleneck (hint: relates to week 10 material) and attempt to fix it.
-11. **(Optional) Further optimization** — E.g., parallelize the CPU JIT solution, use SLURM job arrays for multi-job parallelism; report fastest achieved runtime.
+11. **(Optional) Further optimization** — E.g., parallelize the CPU JIT solution, use LSF job arrays for multi-job parallelism; report fastest achieved runtime.
 12. **Full dataset analysis** — Run one fast implementation over all 4571 floor plans; use Pandas to analyze the CSV output:
     - a) Histogram of mean temperature distribution.
     - b) Average mean temperature across all buildings.
@@ -112,7 +112,7 @@ Students must complete the following 12 tasks (task 11 is optional):
 | Week 8 | CUDA kernels with Numba | Task 8: custom GPU kernel for single Jacobi iteration |
 | Week 9 | CuPy (GPU NumPy) | Task 9: GPU port using CuPy drop-in replacement |
 | Week 10 | GPU profiling with `nsys`, data transfer bottlenecks | Task 10: profiling and fixing the CuPy solution |
-| Week 11 | Batch job submission (SLURM), job arrays | All timing tasks require batch jobs; optional task 11 uses job arrays |
+| Week 11 | Batch job submission (LSF/BSUB), job arrays | All timing tasks require batch jobs; optional task 11 uses job arrays |
 
 ---
 
@@ -124,7 +124,7 @@ Students must complete the following 12 tasks (task 11 is optional):
 - **CuPy:** replacing `numpy` with `cupy` for GPU execution, understanding host-device transfer costs
 - **Profiling:** `kernprof -lv simulate.py`, `nsys profile` for GPU timeline analysis
 - **Parallel Python:** `multiprocessing.Pool`, `map` (static) vs. `imap_unordered` or `starmap` with chunksize=1 (dynamic)
-- **SLURM batch jobs:** writing `.sh` job scripts, timing with `time` or Python `time` module, job arrays (`#SBATCH --array`)
+- **LSF batch jobs:** writing `.sh` job scripts with `#BSUB` directives, timing with `time` or Python `time` module, job arrays (`#BSUB -J name[1-N]`)
 - **Pandas:** reading CSV output, computing aggregates, plotting histograms with Matplotlib
 - **Amdahl's law:** computing parallel fraction `p` from measured speed-ups, deriving theoretical maximum `S_max = 1 / (1 - p)`
 
@@ -138,7 +138,7 @@ Students must complete the following 12 tasks (task 11 is optional):
 
 3. **Layer optimizations progressively.** Work through tasks 5 → 6 → 7 → 8 → 9 in order. Each one introduces a new technique. Compare each new version against the reference to verify numerical correctness before claiming a speed-up.
 
-4. **Always time with batch jobs.** Interactive node timing is noisy. Every timing result should come from a properly submitted SLURM job to get reproducible numbers.
+4. **Always time with batch jobs.** Interactive node timing is noisy. Every timing result should come from a properly submitted LSF batch job (`bsub < script.sh`) to get reproducible numbers.
 
 5. **For the Numba CPU kernel (task 7),** write explicit nested loops and traverse in row-major order (i outer, j inner) to maximize cache hits on the C-contiguous NumPy array. Avoid fancy indexing inside the JIT function.
 
@@ -159,7 +159,7 @@ The project is assessed on an overall judgment of the complete report. Specific 
 - **Correctness:** All optimized solutions must produce results that match the reference `simulate.py` output.
 - **Coverage:** All 12 mandatory tasks must be addressed; task 11 is optional for extra credit.
 - **Analysis quality:** Speed-up plots, Amdahl's law calculations, and runtime estimates should be properly explained, not just numbers.
-- **Code quality:** Submitted zip must contain all Python scripts and SLURM job scripts used to produce the results.
+- **Code quality:** Submitted zip must contain all Python scripts and LSF job scripts used to produce the results.
 - **Report format:** Short PDF report. Code snippets may be included where relevant. Group submission on DTU Learn.
 
 The project must be passed to be eligible for the final exam. Passing is a binary requirement — the project grade does not factor into the final course grade.

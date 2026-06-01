@@ -106,7 +106,7 @@ The VS Code Run/Debug button executes on the login node, not on a compute node. 
 #!/bin/bash
 #BSUB -J sleeper          # Job name
 #BSUB -q hpc              # Queue name
-#BSUB -W 2                # Wall-clock time (hours)
+#BSUB -W 2                # Wall-clock time limit in minutes (2 = 2 minutes)
 #BSUB -R "rusage[mem=512MB]"  # Memory request
 #BSUB -n 4                # Number of cores
 #BSUB -R "span[hosts=1]"  # Keep cores on one host

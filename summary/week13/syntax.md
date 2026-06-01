@@ -24,10 +24,10 @@
 #BSUB -n 8
 
 NUM_THREADS=8
-OMP_NUM_THREADS=$NUM_THREADS
-MKL_NUM_THREADS=$NUM_THREADS
-OPENBLAS_NUM_THREADS=$NUM_THREADS
-MPI_NUM_THREADS=$NUM_THREADS
+export OMP_NUM_THREADS=$NUM_THREADS
+export MKL_NUM_THREADS=$NUM_THREADS
+export OPENBLAS_NUM_THREADS=$NUM_THREADS
+export MPI_NUM_THREADS=$NUM_THREADS
 
 python script.py
 ```
@@ -36,9 +36,9 @@ python script.py
 
 **Fix:** disable NumPy threading when using your own pool:
 ```bash
-OMP_NUM_THREADS=1
-MKL_NUM_THREADS=1
-OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
 python script.py   # now Pool(8) workers each run single-threaded NumPy
 ```
 
@@ -152,9 +152,10 @@ source /dtu/projects/02613_2025/conda/conda_init.sh
 conda activate 02613
 
 NUM_THREADS=8
-OMP_NUM_THREADS=$NUM_THREADS
-MKL_NUM_THREADS=$NUM_THREADS
-OPENBLAS_NUM_THREADS=$NUM_THREADS
+export OMP_NUM_THREADS=$NUM_THREADS
+export MKL_NUM_THREADS=$NUM_THREADS
+export OPENBLAS_NUM_THREADS=$NUM_THREADS
+export MPI_NUM_THREADS=$NUM_THREADS
 
 python -u script.py \
     1> /work3/02613/dump/output_${LSB_JOBID}.txt \

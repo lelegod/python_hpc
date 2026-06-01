@@ -486,14 +486,14 @@ A user has 8 cores and wants to parallelize 100 independent `np.matmul` calls. W
 - A) `ThreadPool(8)` with `OMP_NUM_THREADS=8`, and `ThreadPool(1)` with `OMP_NUM_THREADS=1`
 - B) `ThreadPool(8)` with `OMP_NUM_THREADS=1`, and `ThreadPool(1)` with `OMP_NUM_THREADS=8`
 - C) `ThreadPool(8)` with `OMP_NUM_THREADS=8`, and `ThreadPool(64)` with `OMP_NUM_THREADS=1`
-- D) `ProcessPool(8)` with `OMP_NUM_THREADS=8`, and `ThreadPool(8)` with `OMP_NUM_THREADS=8`
+- D) `Pool(8)` (process pool) with `OMP_NUM_THREADS=8`, and `ThreadPool(8)` with `OMP_NUM_THREADS=8`
 
 **Answer: B**
 
 - A) Incorrect — The first combination creates 64 threads on 8 cores (oversubscribed); the second is just 1 thread — both are poor choices.
 - B) Correct — `ThreadPool(8)` with single-threaded NumPy uses exactly 8 threads. `ThreadPool(1)` (effectively no pool) with 8-thread NumPy also uses exactly 8 threads. Both measured ~1.28–1.33 s in the Week 13 exercise. Neither oversubscribes.
 - C) Incorrect — `ThreadPool(64)` with `OMP_NUM_THREADS=1` creates 64 threads on 8 cores — massively oversubscribed.
-- D) Incorrect — Both combinations in D use `ThreadPool/ProcessPool(8)` with `OMP_NUM_THREADS=8`, creating 64 active threads — the oversubscription scenario measured at ~1.87 s.
+- D) Incorrect — Both combinations in D use Pool(8)/ThreadPool(8) with `OMP_NUM_THREADS=8`, creating 64 active threads — the oversubscription scenario measured at ~1.87 s.
 
 ---
 

@@ -413,19 +413,22 @@ Which pair of shapes raises a `ValueError` when added?
 
 - A) `(5, 3, 4)` and `(5, 1, 1)`
 - B) `(5, 3, 4)` and `(1, 3, 1)`
-- C) `(5, 3, 4)` and `(5,)`
+- C) `(5, 3, 4)` and `(4,)`
 - D) `(5, 3, 4)` and `(3,)`
 
 **Answer: D**
 
-For option D: `(3,)` pads left to `(1, 1, 3)`. Dim 2: 4 vs 3 — neither is 1, not equal → ValueError. For the others: A gives `(5,3,4)` (1s stretch), B gives `(5,3,4)` (1s stretch), C pads `(5,)` to `(1,1,5)` — dim 2: 4 vs 5, also incompatible. Wait — let me verify C: `(5,)` → `(1,1,5)`, last dim 4 vs 5 → error too.
+Right-align and check each dim pair:
 
-**Corrected reasoning:** Both C and D raise errors. D is the intended answer since the question specifically targets the right-alignment trap. For option C: `(5,)` pads to `(1,1,5)`, last dims 4 vs 5 → error. For option A: `(5,1,1)` → dims (5,5),(3,1)→3,(4,1)→4 = `(5,3,4)` valid. For option B: `(1,3,1)` → dims (5,1)→5,(3,3)→3,(4,1)→4 = `(5,3,4)` valid. Options C and D both fail; D is the classic exam trap (right-alignment mismatch).
+- A) `(5,1,1)` vs `(5,3,4)`: dims (5,5)→5, (1,3)→3, (1,4)→4 → valid, result `(5,3,4)`.
+- B) `(1,3,1)` vs `(5,3,4)`: dims (1,5)→5, (3,3)→3, (1,4)→4 → valid, result `(5,3,4)`.
+- C) `(4,)` pads to `(1,1,4)`. Dims (1,5)→5, (1,3)→3, (4,4)→4 → valid, result `(5,3,4)`.
+- D) `(3,)` pads to `(1,1,3)`. Dim 2: 4 vs 3, neither is 1 → ValueError.
 
 - A) Incorrect (valid) — `(5,1,1)` vs `(5,3,4)`: dims (5,5)→5, (1,3)→3, (1,4)→4. Result `(5,3,4)`. Both 1s stretch.
 - B) Incorrect (valid) — `(1,3,1)` vs `(5,3,4)`: dims (1,5)→5, (3,3)→3, (1,4)→4. Result `(5,3,4)`. The two 1s stretch.
-- C) Incorrect but also raises error — `(5,)` pads to `(1,1,5)`. Dim 2: 4 vs 5, neither is 1 → also a ValueError.
-- D) Correct — `(3,)` pads to `(1,1,3)`. Dim 2: 4 vs 3, neither is 1 → ValueError. This is the primary exam trap: the 3 in `(3,)` looks like it should match the 3 in `(5,3,4)`, but right-alignment places it against the 4.
+- C) Incorrect (valid) — `(4,)` pads to `(1,1,4)`. Dim 2: 4 vs 4 (equal). All dims compatible. Result `(5,3,4)`.
+- D) Correct — `(3,)` pads to `(1,1,3)`. Dim 2: 4 vs 3, neither is 1 → ValueError. The classic exam trap: the 3 in `(3,)` looks like it should match the 3 in `(5,3,4)`, but right-alignment places it against the 4.
 
 ---
 

@@ -58,7 +58,7 @@ Example from quiz:
 ```python
 a = pd.Series([1,2,3], index=[1,2,3])
 b = pd.Series([1,2,3], index=[1,3,2])
-a + b  # => index 1: 1+1=2, index 2: 1+3=5 (b[2]=3), index 3: 2+2=...
+a + b  # => index 1: 1+1=2, index 2: 2+3=5 (b[2]=3), index 3: 3+2=5 (b[3]=2)
 # Result: [2, 5, 5]  (aligns by label, not position)
 
 a = pd.Series([1,2,3])          # default index 0,1,2
@@ -81,7 +81,7 @@ Three main strategies, in order of impact on the DMI dataset:
 3. **Smaller numeric types**: Default Pandas reads integers as `int64` (8 bytes) and floats as `float64` (8 bytes). Downcast when range allows:
    - `int64` → `int16` or `int32` using `pd.to_numeric(col, downcast='integer')`
    - `float64` → `float32` using `pd.to_numeric(col, downcast='float')` (check for overflow first)
-   - `stationId` has 247 unique values but min=4203, max=34339, so must use `int16` (not `int8`)
+   - `stationId` has 247 unique values but min=4203, max=34339, so must use `uint16` (not `int16` — max 34339 exceeds int16's max of 32,767)
    - `float16` overflows for `value` column; `float32` works (error < 6e-5)
 
 Inspecting memory use:

@@ -199,11 +199,11 @@ Hint: see the slides.
 > source /dtu/projects/02613_2025/conda/conda_init.sh
 > conda activate 02613
 >
-> # Enable NumPy multi-threading — set to match the number of allocated cores
+> # Enable NumPy multi-threading — export so Python subprocesses inherit them
 > NUM_THREADS=8
-> OMP_NUM_THREADS=$NUM_THREADS
-> MKL_NUM_THREADS=$NUM_THREADS
-> OPENBLAS_NUM_THREADS=$NUM_THREADS
+> export OMP_NUM_THREADS=$NUM_THREADS
+> export MKL_NUM_THREADS=$NUM_THREADS
+> export OPENBLAS_NUM_THREADS=$NUM_THREADS
 >
 > python matmul.py
 > ```

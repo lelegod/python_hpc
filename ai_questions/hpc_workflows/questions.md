@@ -192,7 +192,7 @@ Which job script pattern correctly ensures `mymonitor` is killed when the main s
 **Answer: D**
 
 - A) Incorrect — no PID is captured and no `kill` is issued. `mymonitor` runs as a background process with no cleanup mechanism, leaving a guaranteed orphan when the script exits.
-- B) Incorrect — `MONITOR_PID=$!` must be captured immediately after the `&` on the same logical line. In this version `$!` is assigned *after* the semicolon, but the shell expands `$!` before running `mymonitor &`, so it captures the PID of a previous background job (or nothing). No `wait` means the kill may not complete before the script exits.
+- B) Incorrect — `$!` correctly captures `mymonitor`'s PID (it is evaluated after the `&` runs), but there is no `wait $MONITOR_PID` after the `kill`. Without `wait`, `kill` sends SIGTERM and returns immediately; the script then exits before `mymonitor` has actually terminated, which can leave it briefly as an orphan or produce a race condition.
 - C) Incorrect — `$!` is captured *before* `mymonitor &` is executed, so it refers to the PID of whatever previously ran in the background (possibly none), not to `mymonitor`. The kill targets the wrong process.
 - D) Correct — `mymonitor &` runs first; `$!` is immediately captured into `MONITOR_PID`; Python runs; then `kill $MONITOR_PID` sends SIGTERM; `wait $MONITOR_PID` blocks until the process actually exits. This is the complete and correct pattern.
 
@@ -267,7 +267,7 @@ How many worker processes does `Pool()` create?
 
 - A) Incorrect — `Pool()` with no arguments calls `os.cpu_count()`, which is completely unaware of LSF allocations or cgroups. Python has no built-in mechanism to read the LSF `-n` allocation.
 - B) Incorrect — there is no half-core default in Python's multiprocessing. `os.cpu_count()` returns the full logical CPU count without any reduction factor.
-- C) Correct — `os.cpu_count()` queries the OS for total logical CPUs (32 on a typical HPC node), so `Pool()` spawns 32 workers. The fix is to use `Pool(processes=int(os.environ.get("LSB_MAX_NUM_PROCESSORS", os.cpu_count())))` or hard-code the allocated count.
+- C) Correct — `os.cpu_count()` queries the OS for total logical CPUs (32 on a typical HPC node), so `Pool()` spawns 32 workers. The fix is to use `Pool(processes=int(os.environ.get("LSB_DJOB_NUMPROC", os.cpu_count())))` or hard-code the allocated count.
 - D) Incorrect — `Pool()` with no arguments does NOT default to serial execution. It spawns `os.cpu_count()` worker processes, which is the oversubscription problem being tested.
 
 ---

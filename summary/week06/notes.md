@@ -47,7 +47,7 @@ A reduction operator must satisfy two algebraic properties:
 1. **Associative**: `(a O b) O c = a O (b O c)` — required to split into subproblems
 2. **Commutative**: `a O b = b O a` — required in practice because parallel implementations may reorder inputs during processing
 
-The lecture explicitly shows XOR (`^`) as a counterexample: sequential `1^4^8^3^2^4` gives a different result when the grouping is changed, demonstrating that non-associative operators cannot be parallelized this way.
+The lecture shows `abssum(x, y) = abs(x + y)` as a counterexample of a non-associative operator: `abssum(abssum(1, 2), -3) = 0` but `abssum(1, abssum(2, -3)) = 2`, demonstrating that non-associative operators cannot be parallelized this way. Note: XOR (`^`) IS associative and commutative and is a valid reduction operator.
 
 ---
 

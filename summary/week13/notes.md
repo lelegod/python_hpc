@@ -220,10 +220,10 @@ MPI_NUM_THREADS=1
 Or, if you want to use the package's threading with N cores:
 ```bash
 NUM_THREADS=4
-OMP_NUM_THREADS=$NUM_THREADS
-MKL_NUM_THREADS=$NUM_THREADS
-MKL_NUM_THREADS=$NUM_THREADS
-OPENBLAS_NUM_THREADS=$NUM_THREADS
+export OMP_NUM_THREADS=$NUM_THREADS
+export MKL_NUM_THREADS=$NUM_THREADS
+export OPENBLAS_NUM_THREADS=$NUM_THREADS
+export MPI_NUM_THREADS=$NUM_THREADS
 ```
 
 **Wrong way:**
@@ -236,8 +236,10 @@ python -u script.py
 **Right way (disable package threading, use your own pool):**
 ```bash
 #BSUB -n 8
-OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
-    python -u script.py
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+python -u script.py
 ```
 
 **Wrong way (double parallelism):**
@@ -263,10 +265,10 @@ Set the thread-count environment variables to the number of allocated cores.
 ```bash
 #BSUB -n 8
 NUM_THREADS=8
-OMP_NUM_THREADS=$NUM_THREADS
-MPI_NUM_THREADS=$NUM_THREADS
-MKL_NUM_THREADS=$NUM_THREADS
-OPENBLAS_NUM_THREADS=$NUM_THREADS
+export OMP_NUM_THREADS=$NUM_THREADS
+export MKL_NUM_THREADS=$NUM_THREADS
+export OPENBLAS_NUM_THREADS=$NUM_THREADS
+export MPI_NUM_THREADS=$NUM_THREADS
 python mm.py
 ```
 Result from lecture: 1.72 seconds (1 thread) → 0.23 seconds (8 threads) = **7.4x speed-up**.
@@ -440,10 +442,10 @@ source /dtu/projects/02613_2024/conda/conda_init.sh
 conda activate 02613
 
 NUM_THREADS=8
-OMP_NUM_THREADS=$NUM_THREADS
-MPI_NUM_THREADS=$NUM_THREADS
-MKL_NUM_THREADS=$NUM_THREADS
-OPENBLAS_NUM_THREADS=$NUM_THREADS
+export OMP_NUM_THREADS=$NUM_THREADS
+export MKL_NUM_THREADS=$NUM_THREADS
+export OPENBLAS_NUM_THREADS=$NUM_THREADS
+export MPI_NUM_THREADS=$NUM_THREADS
 
 python -u matmuls.py \
     1> /work3/02613/dump/output_${LSB_JOBID}.txt \

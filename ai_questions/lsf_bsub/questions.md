@@ -159,7 +159,7 @@ A cleanup job must remove temporary files regardless of whether the preceding co
 - A) Incorrect — done() only triggers when compute jobs exit successfully (DONE state). If any compute job fails (EXIT state), done() stays false and the cleanup job never runs, leaving temporary files on disk.
 - B) Incorrect — exit() only triggers when jobs fail (EXIT state). This is the opposite extreme: cleanup would only run after failures, not after successful runs that also leave temp files.
 - C) Correct — ended() triggers when jobs reach any terminal state (DONE or EXIT). This ensures cleanup runs after compute finishes, regardless of success or failure — exactly the semantics needed for unconditional teardown.
-- D) Incorrect — started() is not a standard LSF dependency condition; it is not recognized by the BSUB parser and would cause a script error.
+- D) Incorrect — started() triggers when the named jobs begin running, not when they finish. A cleanup job triggered at start would run while compute is still in progress, which is the opposite of what is needed for post-processing teardown.
 
 ---
 

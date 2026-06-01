@@ -521,7 +521,7 @@ python -u script.py > /work3/out_$LSB_JOBID.txt  # 3s (direct file redirect)
 np.float16(10000) + np.float16(1) == np.float16(10000)  # True! 1 lost
 np.float16(100) + np.float16(0.1) ≈ 100.06              # rounding
 ```
-float16 spacing near 10000 is 8 — any addition smaller than 4 is lost.
+float16 spacing near 10000 is approximately 8–10 (resolution ≈ 0.001 relative → gap ≈ 10000 × 0.001 = 10) — any addition smaller than half the gap is lost.
 
 **int8 overflow — wraps silently:**
 ```python

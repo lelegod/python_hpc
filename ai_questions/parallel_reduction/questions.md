@@ -142,7 +142,7 @@ Consider `abssum(x, y) = abs(x + y)`. Evaluate `abssum(abssum(1, 2), -3)` and `a
 - A) Incorrect — abssum IS commutative: `abs(x+y) == abs(y+x)` always. Selecting this answer is the classic trap; commutativity is not the problem.
 - B) Correct — abssum is NOT associative, as proven by `|(1+2)+(−3)| = 0 ≠ |1+(2+(−3))| = 2`. In a parallel reduction, different thread groupings produce different final answers, making the result non-deterministic and incorrect.
 - C) Incorrect — abssum is commutative; only non-associativity causes the failure. Claiming both properties fail is factually wrong and would mislead any debugging effort.
-- D) Incorrect — while 0 serves as an identity element for abssum (since `abs(x+0) = abs(x)` when x ≥ 0, though this breaks for negative x), the primary and decisive failure is non-associativity.
+- D) Incorrect — 0 does not serve as a true identity element for abssum: while `abs(x+0) = abs(x)` is always true, `abs(0+x) = abs(x)` is also always true. However, this is irrelevant — the primary and decisive failure is non-associativity, not the absence of an identity element.
 
 ---
 

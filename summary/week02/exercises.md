@@ -360,7 +360,7 @@ and for p=2, we expect the output to contain the matrix A^(2+1):
 >     save_mean()
 > ```
 >
-> **Note:** There is a sign bug in the solution — `start - end` should be `end - start`. The corrected version is in `numpy6.py` which fixes this.
+> **Note:** There is a sign bug in this student file (`numpy5.py`) — `start - end` should be `end - start` to get a positive elapsed time. The Exercise 14 batch script (`numpy6.py`) uses the correct `end - start`.
 
 ---
 

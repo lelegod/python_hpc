@@ -254,14 +254,14 @@ What is the estimated wall-clock time for **5000 samples** (round to nearest sec
 
 - A) ~245s
 - B) ~2450s
-- C) ~2454s
+- C) ~2459s
 - D) ~4900s
 
 **Answer: C**
 
 - A) Incorrect — 245s only accounts for process_item scaled by 500× instead of 100×, missing the correct 100× scale-up from 50 to 5000 samples
 - B) Incorrect — 2450s is process_item alone (0.490 × 5000); it ignores the fixed initialize cost of 3.6s and load_item cost
-- C) Correct — initialize (fixed) = 3.6s + load_item (0.001 × 5000 = 5s) + process_item (0.490 × 5000 = 2450s) ≈ 2459s, closest to 2454s
+- C) Correct — initialize (fixed) = 3.6s + load_item (0.001 × 5000 = 5s) + process_item (0.490 × 5000 = 2450s) = 3.6 + 5.0 + 2450.0 = 2458.6 ≈ 2459s
 - D) Incorrect — 4900s would imply process_item percall of ~0.98s, double what the profile shows
 
 ---

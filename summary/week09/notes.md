@@ -252,7 +252,8 @@ def double_kernel_2d(x, y):
         y[i, j] = 2 * x[i, j]
 
 tpb = (16, 16)
-bpg = (x.shape[0] // tpb[0], x.shape[1] // tpb[1])
+bpg = ((x.shape[0] + tpb[0] - 1) // tpb[0],
+       (x.shape[1] + tpb[1] - 1) // tpb[1])
 double_kernel_2d[bpg, tpb](x, y)
 ```
 

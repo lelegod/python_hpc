@@ -58,7 +58,7 @@ For the same data stored column-major (`order='F'`, Fortran style):
 - `np.ones((2,3)).strides` → `(24, 8)` (float64, 8 bytes/element)
 - `np.ones((4,2,5)).strides` → `(80, 40, 8)`
 - `a = np.ones((3,4)); b = a[1, :]` → `b.strides = (8,)` — a 1D view into row 1
-- `a = np.ones((5,6)); b = a[1, :]` → `b.strides = (48,)` (stride inherits from a's column stride)
+- `a = np.ones((5,6)); b = a[1, :]` → `b.strides = (8,)` — row slice stride is always element size (8 bytes for float64)
 
 **Indexing formula:**
 ```python

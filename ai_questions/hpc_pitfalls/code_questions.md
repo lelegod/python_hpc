@@ -467,7 +467,7 @@ export MPI_NUM_THREADS=8
 python matmul.py
 ```
 
-`matmul.py` runs a for loop over 100 `np.matmul` calls with single-threaded BLAS. Which statement is true about this script?
+`matmul.py` runs a serial for loop over 100 `np.matmul` calls. Which statement is true about this script?
 
 **A)** This script is buggy — exporting `OMP_NUM_THREADS=8` with a serial for loop causes oversubscription
 
@@ -516,7 +516,7 @@ Rank these from fastest to slowest for a program printing 100,000 lines.
 ## Q14 — ProcessPool vs ThreadPool for NumPy
 
 ```python
-from multiprocessing.pool import ProcessPool
+from multiprocessing.pool import Pool
 import numpy as np
 
 def single_matmul(args):
@@ -525,27 +525,27 @@ def single_matmul(args):
 
 def matmuls(A, B):
     n = A.shape[0]
-    with ProcessPool(8) as p:
+    with Pool(8) as p:
         C = np.concatenate(p.map(single_matmul, zip(A, B)))
     return C
 ```
 
-A colleague proposes this `ProcessPool`-based version instead of `ThreadPool`. What is the main performance concern compared to a `ThreadPool` solution?
+A colleague proposes this `Pool`-based (process pool) version instead of `ThreadPool`. What is the main performance concern compared to a `ThreadPool` solution?
 
-**A)** `ProcessPool` cannot use NumPy because each worker gets a separate Python interpreter
+**A)** `Pool` (process pool) cannot use NumPy because each worker gets a separate Python interpreter
 
-**B)** `ProcessPool` requires serializing (pickling) each 1000×1000 float64 array for inter-process communication, adding significant data transfer overhead not present with ThreadPool
+**B)** `Pool` (process pool) requires serializing (pickling) each 1000×1000 float64 array for inter-process communication, adding significant data transfer overhead not present with ThreadPool
 
-**C)** `ProcessPool` workers cannot run on HPC clusters because they require root privileges
+**C)** `Pool` (process pool) workers cannot run on HPC clusters because they require root privileges
 
-**D)** `ProcessPool` ignores `OMP_NUM_THREADS` so BLAS always uses 1 thread in each worker
+**D)** `Pool` (process pool) ignores `OMP_NUM_THREADS` so BLAS always uses 1 thread in each worker
 
 **Answer: B**
 
-- A) Incorrect — `ProcessPool` workers do have separate Python interpreters, but they can absolutely use NumPy. Each worker imports and uses NumPy independently.
-- B) Correct — `ProcessPool` workers are separate OS processes. Data passed to them must be serialized (pickled) and sent through an IPC pipe. Each 1000×1000 float64 array is 8 MB; serializing and transmitting 100 such arrays adds substantial overhead compared to `ThreadPool`, where threads share the same memory address space and array slices are just views — no copying required.
-- C) Incorrect — `ProcessPool` is a standard Python library feature with no special privilege requirements; it works on HPC clusters without issue.
-- D) Incorrect — `ProcessPool` workers inherit the parent's exported environment, including `OMP_NUM_THREADS`. BLAS in each worker respects the thread count directive.
+- A) Incorrect — Process pool workers do have separate Python interpreters, but they can absolutely use NumPy. Each worker imports and uses NumPy independently.
+- B) Correct — Process pool workers are separate OS processes. Data passed to them must be serialized (pickled) and sent through an IPC pipe. Each 1000×1000 float64 array is 8 MB; serializing and transmitting 100 such arrays adds substantial overhead compared to `ThreadPool`, where threads share the same memory address space and array slices are just views — no copying required.
+- C) Incorrect — `multiprocessing.pool.Pool` is a standard Python library feature with no special privilege requirements; it works on HPC clusters without issue.
+- D) Incorrect — Process pool workers inherit the parent's exported environment, including `OMP_NUM_THREADS`. BLAS in each worker respects the thread count directive.
 
 ---
 

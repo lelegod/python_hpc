@@ -50,7 +50,7 @@ print(np.float16(10000) + np.float16(1))
 **Answer: B**
 
 - A) Incorrect — adding 1 is below the ULP threshold at 10000, so no increment occurs
-- B) Correct — float16 ULP at 10000 ≈ 10; adding 1 is far below half-ULP, so it rounds away and the result stays 10000.0
+- B) Correct — float16 ULP at 10000 = 8 (values in [8192, 16384) are spaced 8 apart); adding 1 is below half-ULP (4), so it rounds away and the result stays 10000.0
 - C) Incorrect — 10001 is nowhere near the float16 max of 65504
 - D) Incorrect — NumPy does not raise a RuntimeWarning for sub-ULP additions; the result simply stays the same
 
@@ -217,7 +217,7 @@ print(a + np.float32(1) == a)
 
 | Q | dtype | Phenomenon | Result |
 |---|-------|------------|--------|
-| 1 | float16 | ULP at 10000 ≈ 10; +1 is below resolution | `10000.0` |
+| 1 | float16 | ULP at 10000 = 8; +1 < half-ULP (4), rounds away | `10000.0` |
 | 2 | float16 | ULP at 100 = 0.0625; 0.05 rounds up | `100.06` |
 | 3 | int8 | Signed overflow wraps (two's complement) | `-126` |
 | 4 | uint8 | Unsigned underflow wraps mod 256 | `[246]` |
@@ -228,7 +228,7 @@ print(a + np.float32(1) == a)
 
 ## Key Facts Reference
 
-- **float16:** ULP at 100 = 0.0625; ULP at 10000 ≈ 10; max ≈ 65504; overflow → `inf`
+- **float16:** ULP at 100 = 0.0625; ULP at 10000 = 8; max ≈ 65504; overflow → `inf`
 - **float32:** ~7 significant decimal digits; exact integers up to 2^24 = 16,777,216
 - **int8:** -128 to 127; signed overflow wraps silently (no exception)
 - **uint8:** 0 to 255; underflow wraps mod 256

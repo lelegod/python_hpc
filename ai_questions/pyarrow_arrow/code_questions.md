@@ -243,17 +243,17 @@ print(table['x'][0].as_py())
 
 What does `table['x'][0].as_py()` print?
 
-**A)** `99.0` — Arrow shares the NumPy buffer, so the modification is reflected in the table.
+**A)** `99.0` — Arrow shares the NumPy buffer by default for aligned numeric columns, so the modification is reflected in the table.
 **B)** `1.0` — Arrow always copies numeric data from Pandas, so the table is unaffected.
 **C)** Raises `ArrowInvalid` because Arrow tables are immutable and `from_pandas` rejects mutable input.
-**D)** The result is undefined and depends on the PyArrow version.
+**D)** The result is implementation-defined and depends on the PyArrow version.
 
-**Answer: B**
+**Answer: A**
 
-- A) Incorrect — While Arrow can share NumPy buffers in some circumstances, `pa.Table.from_pandas()` by default makes a copy when the resulting Arrow table must be immutable. Mutating the source array after conversion does not change the Arrow table.
-- B) Correct — `pa.Table.from_pandas()` copies the numeric data into Arrow's immutable buffer. Subsequent modification of the Pandas DataFrame's underlying NumPy array does not affect the Arrow table.
-- C) Incorrect — `from_pandas` does not raise an error for mutable input; it simply copies the data.
-- D) Incorrect — The behaviour is defined: PyArrow copies the data, so the Arrow table always reflects the state at conversion time.
+- A) Correct — `pa.Table.from_pandas()` performs zero-copy sharing of the underlying NumPy buffer for aligned, compatible numeric columns by default. The Arrow array points into the same memory as the Pandas column. After `df['x'].values[0] = 99.0` mutates the buffer, `table['x'][0].as_py()` reflects that mutation and prints `99.0`.
+- B) Incorrect — PyArrow does NOT always copy numeric data. For C-contiguous, aligned NumPy arrays, `from_pandas()` shares the buffer (zero-copy) unless `copy=True` is explicitly passed. Claiming it "always copies" is wrong.
+- C) Incorrect — `from_pandas` does not raise an error for mutable input; Arrow's immutability is a convention, not enforced at the memory level for shared buffers.
+- D) Incorrect — The behaviour is consistent for modern PyArrow (≥ 0.17): zero-copy is the default for compatible numeric arrays. It is not undefined.
 
 ---
 
@@ -408,11 +408,12 @@ import pyarrow.csv as pa_csv
 
 table = pa_csv.read_csv('2023_01.csv')
 col = table['value']
-sliced = col[100:200]
+# Combine chunks so we can inspect the underlying buffer
+col_arr    = col.combine_chunks()        # pyarrow.Array
+sliced_arr = col_arr[100:200]            # sliced pyarrow.Array
 
-import sys
-original_buf = col.buffers()[1]
-sliced_buf   = sliced.combine_chunks().buffers()[1]
+original_buf = col_arr.buffers()[1]
+sliced_buf   = sliced_arr.buffers()[1]
 
 print(original_buf == sliced_buf)
 ```
@@ -421,15 +422,15 @@ What does this code demonstrate about Arrow slice semantics?
 
 **A)** `True` — slicing returns a view over the same buffer; no data is copied.
 **B)** `False` — slicing always allocates a new buffer containing only the sliced elements.
-**C)** Raises `AttributeError` — `ChunkedArray` has no `.buffers()` method.
-**D)** `True` — but only because `col` and `sliced` point to the same Python object.
+**C)** Raises `AttributeError` — `Array` has no `.buffers()` method.
+**D)** `True` — but only because `col_arr` and `sliced_arr` point to the same Python object.
 
 **Answer: A**
 
-- A) Correct — Arrow slicing is zero-copy. `col[100:200]` creates a new `Array` (or `ChunkedArray`) that records a different `offset` and `length` into the original buffer. The underlying data buffer is shared, not copied. Both arrays point to the same memory.
+- A) Correct — Arrow slicing is zero-copy. `col_arr[100:200]` creates a new `Array` object that records a different `offset` and `length` into the original buffer. The underlying data buffer is shared, not copied. Both arrays point to the same memory, so `original_buf == sliced_buf` evaluates to `True`.
 - B) Incorrect — Arrow explicitly avoids copying on slice for performance reasons; this is one of Arrow's core design goals.
-- C) Incorrect — `ChunkedArray` does have a `.buffers()` method; however, the buffer comparison logic in the snippet is illustrative rather than the exact API call — the conceptual answer (A) is what the exam tests.
-- D) Incorrect — `col` and `sliced` are distinct Python objects with different offsets/lengths, but they share the same underlying data buffer. They are not the same object.
+- C) Incorrect — `pyarrow.Array` does have a `.buffers()` method that returns the list of underlying memory buffers. (Note: `ChunkedArray` does not have `.buffers()` directly; that is why `combine_chunks()` is called first to obtain a single `Array`.)
+- D) Incorrect — `col_arr` and `sliced_arr` are distinct Python objects with different offsets/lengths, but they share the same underlying data buffer. They are not the same object.
 
 ---
 

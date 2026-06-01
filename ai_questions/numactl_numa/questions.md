@@ -153,18 +153,18 @@ Which of the following correctly describes what `numactl --interleave=all` does?
 
 **Mental Model:** The NUMA plateau appears at approximately 50% of the total cores (the size of one socket). Up to that point, all workers fit on one socket and use only fast local memory. Adding workers beyond the first socket's capacity forces remote memory accesses, which counteract any additional parallelism.
 
-In the CelebA reduction speedup plot (without numactl), the speedup improves up to about 24 cores, then stops increasing or decreases. Why does the plateau occur at approximately 50% of cores?
+In the CelebA reduction speedup plot (without numactl), the speedup improves up to about 16 cores, then stops increasing or decreases. Why does the plateau occur at approximately 50% of cores?
 
-- A) Python's GIL prevents more than one thread from running at a time beyond 24 threads.
-- B) The cost of spawning additional processes exceeds the benefit beyond 24 processes.
-- C) All cores up to the first socket boundary (~24) access local memory on NUMA node 0; additional cores land on socket 1 and pay a remote-memory penalty that offsets the parallelism gain.
+- A) Python's GIL prevents more than one thread from running at a time beyond 16 threads.
+- B) The cost of spawning additional processes exceeds the benefit beyond 16 processes.
+- C) All cores up to the first socket boundary (16 cores on socket 0) access local memory on NUMA node 0; additional cores land on socket 1 and pay a remote-memory penalty that offsets the parallelism gain.
 - D) Amdahl's Law predicts a plateau at 50% of the cores due to the serial fraction of the program.
 
 **Answer: C**
 
 - A) Incorrect — The exercise uses `multiprocessing.Pool`, not multithreading. The GIL does not affect multiprocessing workers; each worker is a separate OS process with its own interpreter.
 - B) Incorrect — Process spawning overhead is a one-time cost paid at pool creation, not a per-task overhead that grows with core count. The plateau is not caused by spawning overhead.
-- C) Correct — The Xeon Gold 6226R dual-socket node has ~24 cores per socket. Workers up to 24 run on socket 0 and access the array in local DRAM on NUMA node 0 at full speed. The 25th and beyond run on socket 1 and must cross the inter-socket link for every array access, paying a heavy latency penalty that erases the speedup from extra parallelism.
+- C) Correct — The Xeon Gold 6226R dual-socket node has 16 cores per socket (32 cores total). Workers up to 16 run on socket 0 and access the array in local DRAM on NUMA node 0 at full speed. The 17th and beyond run on socket 1 and must cross the inter-socket link for every array access, paying a heavy latency penalty that erases the speedup from extra parallelism.
 - D) Incorrect — Amdahl's Law predicts an asymptotic plateau (S_max = 1/(1-F)) that applies equally at all core counts; it does not specifically produce a plateau at 50% of cores. The observed plateau at the socket boundary is a hardware NUMA effect, not an Amdahl serial-fraction effect.
 
 ---
@@ -394,14 +394,14 @@ In an LSF job script for the CelebA reduction, a student adds `-R "span[hosts=1]
 In the CelebA mean-face reduction exercise on the DTU HPC cluster (without numactl), a student observes that speedup peaks then decreases. Approximately at how many processes does this turn-around point occur, and why?
 
 - A) At p = 2, because the reduction algorithm requires synchronisation at every step.
-- B) At p ≈ 16–24, around the number of cores on one socket, because adding processes beyond the first socket requires remote NUMA access for all data.
+- B) At p ≈ 16, around the number of cores on one socket, because adding processes beyond the first socket requires remote NUMA access for all data.
 - C) At p = 32, because Python's multiprocessing pool is capped at 32 workers.
 - D) At p = 1, because the shared array must be locked by a single process at a time.
 
 **Answer: B**
 
 - A) Incorrect — Binary tree reduction does synchronise at each round, but this adds only logarithmic overhead. It does not cause a peak-and-decline pattern at p = 2; at p = 2 speedup is still growing.
-- B) Correct — The Xeon Gold 6226R dual-socket DTU nodes expose approximately 16–24 physical cores per socket (depending on exact configuration). Once all processes on socket 0 are busy, additional workers land on socket 1 and access the array — which is entirely on NUMA node 0 — remotely. The remote latency overhead exceeds the parallelism benefit, causing speedup to plateau and then decline.
+- B) Correct — The Xeon Gold 6226R has 16 physical cores per socket, giving 32 cores total on the dual-socket DTU node. Once all 16 processes on socket 0 are busy, additional workers land on socket 1 and access the array — which is entirely on NUMA node 0 — remotely. The remote latency overhead exceeds the parallelism benefit, causing speedup to plateau and then decline around p = 16.
 - C) Incorrect — Python's `multiprocessing.Pool` has no built-in cap at 32 workers. It can spawn as many workers as you request. The plateau is a hardware NUMA effect, not a software limit.
 - D) Incorrect — `mp.RawArray` with the initialiser pattern allows concurrent reads and writes to different elements without locking. Each reduction step accesses disjoint elements (stride-based), so there is no global lock causing a bottleneck at p = 1.
 

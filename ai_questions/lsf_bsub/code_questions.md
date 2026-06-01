@@ -272,7 +272,7 @@ python cleanup_tempfiles.py
 - A) Incorrect — `done()` only triggers on **DONE** (success). If any process job exits with an error, the cleanup job would never run, leaving temporary files behind.
 - B) Correct — `ended()` triggers when all jobs named `process` have reached **any** terminal state (DONE or EXIT). This guarantees cleanup runs whether processing succeeded or failed.
 - C) Incorrect — `exit()` only triggers on failure, so cleanup would not run after a successful processing run.
-- D) Incorrect — `started()` is not a standard LSF dependency condition for this use case and would not wait for completion.
+- D) Incorrect — `started()` triggers when the named jobs begin running, not when they finish. Cleanup would start while processing is still in progress, which is incorrect.
 
 ---
 

@@ -52,7 +52,7 @@
   - [Transfer dominates runtime](#host-device-data-transfer-dominates-runtime-for-simple-kernels)
   - [JIT warmup](#jit-warmup-time-the-second-call-not-the-first)
   - [Thread divergence](#thread-divergence-kills-gpu-performance)
-  - [Shared memory limit](#shared-memory-is-limited-48-kb-per-block)
+  - [Shared memory limit](#shared-memory-is-limited-48-kb-per-sm)
   - [Bounds check required](#always-bounds-check-in-gpu-kernels)
 - [Debugging HPC Code](#debugging-hpc-code)
   - [Step 1: Profile first](#step-1-profile-before-optimising)
@@ -760,9 +760,9 @@ def bad_kernel(x, out):
 # Better: restructure to avoid divergent branches, or ensure uniform branching
 ```
 
-### Shared memory is limited (~48 KB per block)
+### Shared memory is limited (~48 KB per SM)
 
-GPU shared memory (the per-block fast scratchpad) is typically 48 KB per SM. Requesting more causes the kernel to fail at runtime or reduces occupancy.
+GPU shared memory (the per-block fast scratchpad) is allocated from an SM pool of typically 48 KB. Each block's shared memory request is carved from this pool — requesting too much per block either causes the kernel to fail at runtime or reduces occupancy (fewer blocks can run simultaneously on the SM).
 
 ```python
 from numba import cuda, float32
@@ -979,12 +979,11 @@ Time on 1 core from T(p):   T(1) = T(p) × S(p)
 **Test with concrete numbers, not abstract reasoning:**
 ```
 # Is abssum(x,y) = abs(x+y) associative?
-abssum(abssum(1, 2), -3) = abssum(3, -3) = abs(0) = 0
-abssum(1, abssum(2, -3)) = abssum(1, -1) = abs(0) = 0  ← same, try another
-abssum(abssum(3, -1), -3) = abssum(2, -3) = 1
-abssum(3, abssum(-1, -3)) = abssum(3, -4) = 1  ← same again... try more
-abssum(abssum(1, 2), -3) = 0
-abssum(1, abssum(2, -3)) = abs(1 + abs(2-3)) = abs(1+1) = 2  ← 0 ≠ 2, NOT associative
+# Note: abssum always returns a non-negative value (it's an abs).
+# Try a = 1, b = 2, c = -3:
+abssum(abssum(1, 2), -3) = abssum(abs(1+2), -3) = abssum(3, -3) = abs(3+(-3)) = abs(0) = 0
+abssum(1, abssum(2, -3)) = abssum(1, abs(2+(-3))) = abssum(1, abs(-1)) = abssum(1, 1) = abs(1+1) = 2
+# 0 ≠ 2 → NOT associative
 ```
 
 **MCQ distractor patterns:**

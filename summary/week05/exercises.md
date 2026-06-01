@@ -162,10 +162,10 @@ Run the three implementations as a batch job and measure their run time using th
 > #BSUB -q hpc
 > #BSUB -n 10
 > #BSUB -R "span[hosts=1]"
-> #BSUB -R "select[model == XeonGold6226R]"
+> #BSUB -R "select[model==XeonGold6226R]"
 > #BSUB -W 00:10
-> source /dtu/sw/dcc/dcc_rc
-> conda activate python_hpc
+> source /dtu/projects/02613_2025/conda/conda_init.sh
+> conda activate 02613
 > time python pi_serial.py
 > time python pi_parallel.py
 > time python pi_chunked.py
