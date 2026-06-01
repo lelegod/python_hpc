@@ -27,6 +27,17 @@
 - [Q18 — Pairwise Distance Matrix Shape](#q18--pairwise-distance-matrix-shape)
 - [Q19 — Row-Wise Normalization Shape](#q19--row-wise-normalization-shape)
 - [Q20 — Fix (3,4) + (3,) with [:, None]](#q20--fix-34--3-with--none)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q21 — np.broadcast_to Shape and Writability](#q21--npbroadcast_to-shape-and-writability)
+- [Q22 — In-Place Add with Shape Expansion](#q22--in-place-add-with-shape-expansion)
+- [Q23 — Haversine dsin2 Intermediate Shape](#q23--haversine-dsin2-intermediate-shape)
+- [Q24 — distmat_1d Output Shape](#q24--distmat_1d-output-shape)
+- [Q25 — 0-D Array Broadcasting Shape](#q25--0-d-array-broadcasting-shape)
+- [Q26 — np.broadcast_shapes ValueError](#q26--npbroadcast_shapes-valueerror)
+- [Q27 — Stacked newaxis Reshape](#q27--stacked-newaxis-reshape)
+- [Q28 — In-Place Op on Size-1 Leading Dim](#q28--in-place-op-on-size-1-leading-dim)
+- [Q29 — Three-Way Add with 0-D](#q29--three-way-add-with-0-d)
+- [Q30 — np.outer vs Broadcasting Outer Product](#q30--npouter-vs-broadcasting-outer-product)
 
 ---
 
@@ -583,3 +594,296 @@ print("Fixed shape:", c2.shape)
 - B) Correct — `a + b` fails (ValueError caught, prints "Error"). Then `b2 = b[:,None]` gives shape `(3,1)`. `a + b2`: `(3,4)` vs `(3,1)` → dim 0: 3 vs 3, dim 1: 4 vs 1 → 4. Result `(3,4)`. Prints "Fixed shape: (3, 4)".
 - C) Incorrect — `b[:,None]` is `(3,1)` and the fixed result is `(3,4)`, not `(3,1)`. The 1 stretches to 4.
 - D) Incorrect — `(3,)` cannot produce a `(3,3)` result with `(3,4)` since 4 ≠ 3 and neither is 1. The first operation always fails.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets np.broadcast_to, in-place restrictions, haversine internals, 0-D arrays, np.broadcast_shapes, and advanced newaxis patterns.
+
+---
+
+## Q21 — np.broadcast_to Shape and Writability
+
+```python
+import numpy as np
+a = np.ones((1, 4))
+b = np.broadcast_to(a, (3, 4))
+print(b.shape)
+b[0, 0] = 99  # attempt to write
+```
+
+**What is the output?**
+
+- A) `(3, 4)` then `b[0,0]` becomes `99`
+- B) `(1, 4)` — shape is not updated by broadcast_to
+- C) `(3, 4)` then `ValueError` is raised on the assignment
+- D) `(3, 4)` then a `UserWarning` is emitted and the write is silently ignored
+
+**Answer: C**
+
+- A) Incorrect — `np.broadcast_to` returns a read-only view. The shape is correctly reported as `(3, 4)`, but any write attempt raises a `ValueError`, not silently succeeds.
+- B) Incorrect — `np.broadcast_to(a, (3, 4))` does update the reported `.shape` to `(3, 4)`. The strides change (broadcast dim gets stride 0), but the shape attribute reflects the target shape.
+- C) Correct — `b.shape` is `(3, 4)`. However, `b.flags.writeable` is `False`. Writing to any element raises `ValueError: assignment destination is read-only`. To get a writable copy call `b.copy()`.
+- D) Incorrect — NumPy does not emit warnings for attempted writes to read-only arrays; it raises a hard `ValueError` immediately.
+
+---
+
+## Q22 — In-Place Add with Shape Expansion
+
+```python
+import numpy as np
+a = np.ones((2, 3))
+b = np.ones((4, 3))
+try:
+    a += b
+    print("OK", a.shape)
+except ValueError:
+    print("Error")
+```
+
+**What is the output?**
+
+- A) `OK (4, 3)`
+- B) `OK (2, 3)`
+- C) `Error`
+- D) `OK (2, 4, 3)`
+
+**Answer: C**
+
+- A) Incorrect — in-place operations cannot change the shape of `a`. Even if NumPy could broadcast `(2,3)` and `(4,3)`, the result would need to fit back into `a`, which has only 2 rows.
+- B) Incorrect — `(2,3)` and `(4,3)` are not broadcast-compatible at all: dim 0 is 2 vs 4, neither is 1. This is incompatible even for a regular (non-in-place) addition.
+- C) Correct — `(2,3)` and `(4,3)` cannot be broadcast: dim 0 is 2 vs 4, both > 1 and unequal. NumPy raises `ValueError`. Even if they were compatible, an in-place op requires the output shape to equal `a`'s shape `(2,3)`.
+- D) Incorrect — broadcasting never adds a dimension to the output unless the inputs have different ranks. Here both inputs are rank 2.
+
+---
+
+## Q23 — Haversine dsin2 Intermediate Shape
+
+```python
+import numpy as np
+
+def dsin2_shape(p1, p2):
+    p1 = np.radians(p1)
+    p2 = np.radians(p2)
+    dsin2 = np.sin(0.5 * (p1[:, None, :] - p2[None, :, :])) ** 2
+    return dsin2.shape
+
+p1 = np.random.rand(10, 2)
+p2 = np.random.rand(15, 2)
+print(dsin2_shape(p1, p2))
+```
+
+**What is the output?**
+
+- A) `(10, 15)`
+- B) `(10, 15, 2)`
+- C) `(10, 2, 15)`
+- D) `(15, 10, 2)`
+
+**Answer: B**
+
+- A) Incorrect — the coordinate axis (size 2) is not reduced at this stage. The subtraction is on the full `(lat, lon)` pair. The axis-2 reduction happens later when computing `a = dsin2[:,:,0] + cosprod * dsin2[:,:,1]`.
+- B) Correct — `p1[:, None, :]` is `(10, 1, 2)` and `p2[None, :, :]` is `(1, 15, 2)`. Broadcasting: dim 0: 10 vs 1 → 10, dim 1: 1 vs 15 → 15, dim 2: 2 vs 2 → 2. `np.sin` is a ufunc that preserves shape. `** 2` also preserves shape. Result: `(10, 15, 2)`.
+- C) Incorrect — the coordinate axis (size 2) is always the last axis in this indexing pattern. The `[:, None, :]` places the new axis in the middle, not at the end.
+- D) Incorrect — the index order `p1[:, None, :]` makes p1's N the first axis and p2's N the second axis. The result is `(N_p1, N_p2, 2)` = `(10, 15, 2)`, not the transposed `(15, 10, 2)`.
+
+---
+
+## Q24 — distmat_1d Output Shape
+
+```python
+import numpy as np
+
+def distmat_1d(x, y):
+    return abs(x[:, None] - y)
+
+x = np.array([1, 3])
+y = np.array([1, 2, 3])
+result = distmat_1d(x, y)
+print(result.shape)
+print(result[1, 2])
+```
+
+**What is the output?**
+
+- A) `(2, 3)` then `0`
+- B) `(2, 3)` then `2`
+- C) `(3, 2)` then `0`
+- D) `ValueError`
+
+**Answer: A**
+
+- A) Correct — `x[:,None]` is `(2,1)` and `y` is `(3,)` which pads to `(1,3)`. Broadcasting: `(2,1) - (1,3)` → `(2,3)`. `result[1, 2]` = `abs(x[1] - y[2])` = `abs(3 - 3)` = `0`.
+- B) Incorrect — `result[1, 2]` = `abs(x[1] - y[2])` = `abs(3 - 3)` = 0, not 2. `result[0, 2]` would be `abs(1 - 3)` = 2.
+- C) Incorrect — `x[:,None]` puts x's elements along axis 0 (rows) and y's elements along axis 1 (columns), giving shape `(len(x), len(y))` = `(2, 3)`. The transposed `(3,2)` would require `y[:,None] - x`.
+- D) Incorrect — `(2,1)` and `(1,3)` are perfectly compatible for broadcasting.
+
+---
+
+## Q25 — 0-D Array Broadcasting Shape
+
+```python
+import numpy as np
+scalar = np.float64(3.0)     # 0-D array, shape ()
+arr    = np.ones((4, 5, 2))
+result = arr * scalar
+print(result.shape)
+print(scalar.ndim)
+```
+
+**What is the output?**
+
+- A) `(4, 5, 2)` then `0`
+- B) `(1,)` then `1`
+- C) `(4, 5, 2)` then `1`
+- D) ValueError
+
+**Answer: A**
+
+- A) Correct — `np.float64(3.0)` is a 0-D NumPy scalar with shape `()` and `ndim == 0`. It broadcasts against any shape. The result shape equals `arr`'s shape: `(4, 5, 2)`. `scalar.ndim` is `0`.
+- B) Incorrect — `np.float64(3.0)` has shape `()`, not `(1,)`. A 0-D array has no axes; `ndim` is 0, not 1. `np.array([3.0])` would have shape `(1,)` and `ndim == 1`.
+- C) Incorrect — the result shape is correct at `(4,5,2)`, but `scalar.ndim` is 0, not 1. A 0-D array truly has zero dimensions.
+- D) Incorrect — 0-D arrays are unconditionally compatible for broadcasting with any array shape. No error is raised.
+
+---
+
+## Q26 — np.broadcast_shapes ValueError
+
+```python
+import numpy as np
+try:
+    s = np.broadcast_shapes((4, 3), (3, 4))
+    print(s)
+except ValueError:
+    print("Error")
+```
+
+**What is the output?**
+
+- A) `(4, 4)`
+- B) `(4, 3, 4)`
+- C) `Error`
+- D) `(3, 4)`
+
+**Answer: C**
+
+- A) Incorrect — for a `(4,4)` result both dim 0 and dim 1 would need to resolve to 4. Dim 0: 4 vs 3 — neither is 1, they are unequal. Incompatible.
+- B) Incorrect — `np.broadcast_shapes` never increases the rank beyond the maximum of its inputs. Both inputs are rank 2 so the result (if valid) would also be rank 2.
+- C) Correct — right-align (same rank): dim 0 is 4 vs 3 (incompatible), dim 1 is 3 vs 4 (incompatible). Both pairs fail the broadcast rule. `np.broadcast_shapes` raises `ValueError`. The trap: the shapes contain the same numbers (3 and 4) but in opposite orders, so every dimension pair is a mismatch.
+- D) Incorrect — `(3,4)` would be the second input's shape. `np.broadcast_shapes` does not simply return one of the inputs; it raises an error when shapes are incompatible.
+
+---
+
+## Q27 — Stacked newaxis Reshape
+
+```python
+import numpy as np
+x = np.arange(12).reshape(3, 4)
+y = x[:, None, :, None]
+print(y.shape)
+print(y[2, 0, 3, 0])
+```
+
+**What is the output?**
+
+- A) `(3, 4, 1, 1)` then `11`
+- B) `(3, 1, 4, 1)` then `11`
+- C) `(3, 1, 4, 1)` then `3`
+- D) `(1, 3, 1, 4)` then `11`
+
+**Answer: B**
+
+- A) Incorrect — the `None`s are interleaved between the two slice positions, not appended. The pattern `[:, None, :, None]` inserts a size-1 axis after axis 0 and after axis 1 of the original array.
+- B) Correct — `x` has shape `(3, 4)`. Indexing `[:, None, :, None]`: `:` → axis 0 (size 3), `None` → new axis (size 1), `:` → axis 1 (size 4), `None` → new axis (size 1). Shape: `(3, 1, 4, 1)`. `y[2, 0, 3, 0]` = `x[2, 3]` = element at row 2, col 3 of a 0-indexed (3,4) range array = `2*4 + 3` = `11`.
+- C) Incorrect — the shape is correct at `(3,1,4,1)` but `y[2,0,3,0]` = `x[2,3]` = `11`, not `3`. `x[0,3]` would be `3`.
+- D) Incorrect — `(1,3,1,4)` would require both `None`s to come before the slices: `[None, :, None, :]`. The given pattern interleaves `None` after each slice.
+
+---
+
+## Q28 — In-Place Op on Size-1 Leading Dim
+
+```python
+import numpy as np
+a = np.ones((1, 5))
+b = np.ones((3, 5))
+try:
+    a += b
+    print("OK", a.shape)
+except ValueError:
+    print("Error")
+```
+
+**What is the output?**
+
+- A) `OK (1, 5)` — in-place ops broadcast silently
+- B) `OK (3, 5)` — `a` is resized to fit the broadcast result
+- C) `Error`
+- D) `OK (1, 5)` — only one row of `b` is used
+
+**Answer: C**
+
+- A) Incorrect — broadcasting `(1,5)` and `(3,5)` would give `(3,5)`. But `a` has shape `(1,5)` and an in-place op cannot resize it. NumPy raises a ValueError rather than silently truncating.
+- B) Incorrect — NumPy never reallocates or resizes an array during in-place operations. The left-hand operand's shape is fixed; the result must fit exactly.
+- C) Correct — `(1,5)` and `(3,5)` broadcast to `(3,5)`. Since `(3,5)` ≠ `(1,5)`, the in-place `+=` would need to expand `a`, which is not allowed. NumPy raises `ValueError: non-broadcastable output operand with shape (1,5) doesn't match the broadcast shape (3,5)`.
+- D) Incorrect — NumPy does not partially apply broadcasts in in-place ops. The mismatch is detected and an error is raised immediately.
+
+---
+
+## Q29 — Three-Way Add with 0-D
+
+```python
+import numpy as np
+a = np.ones((2, 3))
+b = np.ones((3,))
+c = np.float64(10.0)
+result = a + b + c
+print(result.shape)
+print(result[0, 0])
+```
+
+**What is the output?**
+
+- A) `(2, 3)` then `12.0`
+- B) `(3,)` then `12.0`
+- C) `(2, 3)` then `11.0`
+- D) ValueError
+
+**Answer: A**
+
+- A) Correct — evaluate left-to-right. First `a + b`: `(2,3)` and `(3,)` pads to `(1,3)` → `(2,3)`. All elements are 2.0. Then `(2,3) + c` where `c` is 0-D: 0-D broadcasts to `(2,3)`. All elements become `2.0 + 10.0 = 12.0`. Shape: `(2,3)`.
+- B) Incorrect — the result shape is `(2,3)`, not `(3,)`. The addition with `a` (shape `(2,3)`) expands the result to `(2,3)`.
+- C) Incorrect — the value is 12.0, not 11.0. `a` has all ones, `b` has all ones, and `c` is 10.0. `1 + 1 + 10 = 12`.
+- D) Incorrect — all three operands are mutually broadcast-compatible. No ValueError occurs at any step.
+
+---
+
+## Q30 — np.outer vs Broadcasting Outer Product
+
+```python
+import numpy as np
+u = np.array([1.0, 2.0, 3.0])
+v = np.array([4.0, 5.0])
+
+r1 = np.outer(u, v)
+r2 = u[:, None] * v[None, :]
+
+print(r1.shape, r2.shape)
+print(np.array_equal(r1, r2))
+```
+
+**What is the output?**
+
+- A) `(3, 2) (3, 2)` then `True`
+- B) `(3, 2) (3, 2)` then `False`
+- C) `(6,) (3, 2)` then `False`
+- D) `(2, 3) (3, 2)` then `False`
+
+**Answer: A**
+
+- A) Correct — `np.outer(u, v)` computes the outer product, giving shape `(3, 2)` with `r1[i,j] = u[i] * v[j]`. `u[:,None]` is `(3,1)` and `v[None,:]` is `(1,2)`. Broadcasting: `(3,1) * (1,2)` → `(3,2)` with the same element formula. Both shapes are `(3,2)` and the values are identical, so `np.array_equal` returns `True`.
+- B) Incorrect — `np.outer` and the broadcasting outer product produce numerically identical results. `np.array_equal` returns `True`.
+- C) Incorrect — `np.outer` always returns a 2D array of shape `(len(u), len(v))`. It does not flatten to 1D. `(6,)` would require flattening, which `np.outer` does not do to the output.
+- D) Incorrect — `np.outer(u, v)` has shape `(len(u), len(v))` = `(3, 2)`, not the transposed `(2, 3)`. The first argument's length is always the number of rows.
+
+---

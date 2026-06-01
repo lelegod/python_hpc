@@ -25,6 +25,17 @@
 - [Q16 — Categorical vs Object Memory](#q16-categorical-vs-object-memory)
 - [Q17 — float16 NaN vs inf](#q17-float16-nan-vs-inf)
 - [Q18 — int32 vs int64 Memory Tradeoff](#q18-int32-vs-int64-memory-tradeoff)
+- [Set 3 — Extended Practice](#set-3-extended-practice)
+- [Q19 — astype() produces a copy](#q19-astype-produces-a-copy)
+- [Q20 — dtype promotion: float32 + float64](#q20-dtype-promotion-float32--float64)
+- [Q21 — np.finfo() eps value for float32](#q21-npfinfo-eps-value-for-float32)
+- [Q22 — float64 exact integer limit](#q22-float64-exact-integer-limit)
+- [Q23 — NaN propagation through sum](#q23-nan-propagation-through-sum)
+- [Q24 — complex64 itemsize](#q24-complex64-itemsize)
+- [Q25 — mixed-dtype array construction](#q25-mixed-dtype-array-construction)
+- [Q26 — uint16 overflow wrap to zero](#q26-uint16-overflow-wrap-to-zero)
+- [Q27 — np.iinfo() max for int16](#q27-npiinfo-max-for-int16)
+- [Q28 — inf minus inf produces NaN](#q28-inf-minus-inf-produces-nan)
 
 ---
 
@@ -491,5 +502,255 @@ print(a.nbytes - b.nbytes)
 - B) Incorrect — 1,000,000 byte difference would imply a 1 byte per element difference, corresponding to int8 vs no-dtype or similar. int64 vs int32 differs by 4 bytes per element
 - C) Correct — a.nbytes = 1,000,000 × 8 = 8,000,000; b.nbytes = 1,000,000 × 4 = 4,000,000; difference = 4,000,000 bytes
 - D) Incorrect — 8,000,000 would be the full size of the int64 array (a.nbytes), not the difference between the two arrays
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets astype() copy semantics, dtype promotion, np.finfo/iinfo, NaN/inf rules, complex memory layout, and uint overflow traps.
+
+---
+
+## Q19 — astype() produces a copy
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+arr = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+arr2 = arr.astype(np.float32)
+arr2[0] = 99.0
+print(arr[0])
+```
+
+**A)** `99.0`
+**B)** `1.0`
+**C)** `99.0` with a RuntimeWarning
+**D)** `MemoryError`
+
+**Answer: B**
+
+- A) Incorrect — `astype()` allocates a new array; `arr2` is an independent copy. Modifying `arr2[0]` has no effect on the original `arr`
+- B) Correct — `astype(np.float32)` creates a new buffer with converted values. `arr` still holds its original value 1.0 unchanged
+- C) Incorrect — no warning is raised; the assignment `arr2[0] = 99.0` is a normal in-bounds write on the copied array
+- D) Incorrect — `astype()` allocates a small 3-element array; no memory error occurs
+
+---
+
+## Q20 — dtype promotion: float32 + float64
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+a = np.ones(3, dtype=np.float32)
+b = np.ones(3, dtype=np.float64)
+result = a + b
+print(result.dtype)
+```
+
+**A)** `float32`
+**B)** `float64`
+**C)** `float128`
+**D)** `object`
+
+**Answer: B**
+
+- A) Incorrect — NumPy never demotes precision; using float32 would discard information present in the float64 operand
+- B) Correct — NumPy promotes to the higher dtype in mixed-type arithmetic. float64 > float32, so the result is float64 regardless of operand order
+- C) Incorrect — float128 is not introduced by mixing float32 and float64; NumPy only promotes to the minimum dtype needed to represent both operands
+- D) Incorrect — object dtype is reserved for non-numeric or mixed Python-object arrays; two numeric float arrays always produce a numeric result
+
+---
+
+## Q21 — np.finfo() eps value for float32
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+info = np.finfo(np.float32)
+print(info.eps < 1e-6)
+```
+
+**A)** `False` — float32 eps is larger than 1e-6
+**B)** `True` — float32 eps ≈ 1.19e-7, which is less than 1e-6
+**C)** `True` — float32 eps is exactly 0.0
+**D)** `False` — np.finfo() is only valid for float64
+
+**Answer: B**
+
+- A) Incorrect — float32 eps ≈ 1.19 × 10⁻⁷, which is indeed smaller than 1e-6; the comparison is True, not False
+- B) Correct — `np.finfo(np.float32).eps` ≈ 1.1920929e-07. Since 1.19e-7 < 1e-6, the expression evaluates to True
+- C) Incorrect — eps is never exactly 0.0 for any floating-point type; 0.0 would imply infinite precision
+- D) Incorrect — `np.finfo()` accepts any NumPy float dtype including float16, float32, and float64
+
+---
+
+## Q22 — float64 exact integer limit
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+limit = np.float64(2**53)
+print(limit + np.float64(1) == limit)
+```
+
+**A)** `False` — float64 can distinguish 2^53 and 2^53 + 1
+**B)** `True` — 2^53 + 1 rounds to 2^53 in float64
+**C)** `False` — this would only be True for float32
+**D)** `True` — all float64 additions of 1 are no-ops
+
+**Answer: B**
+
+- A) Incorrect — 2^53 is exactly the boundary; integers at and beyond 2^53 lose consecutive-integer resolution in float64, so 2^53 + 1 rounds back to 2^53
+- B) Correct — float64 has a 52-bit explicit mantissa plus an implicit leading 1, giving 53 bits of significand. At the value 2^53 the ULP is 2, so adding 1 is below half-ULP and rounds to zero change
+- C) Incorrect — float32's limit is 2^24, much smaller. The statement being True is specific to the 2^53 boundary of float64
+- D) Incorrect — adding 1 is a no-op only near and beyond the exact integer limit; at small values like 5.0, `np.float64(5.0) + 1.0 == 6.0` which is False
+
+---
+
+## Q23 — NaN propagation through sum
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+arr = np.array([1.0, 2.0, np.nan, 4.0])
+print(np.sum(arr))
+```
+
+**A)** `7.0`
+**B)** `nan`
+**C)** `inf`
+**D)** `ValueError`
+
+**Answer: B**
+
+- A) Incorrect — `np.sum()` does not skip NaN; use `np.nansum()` to ignore NaN values and get 7.0
+- B) Correct — any arithmetic involving NaN produces NaN per IEEE 754. The NaN at index 2 propagates through the entire summation, yielding nan
+- C) Incorrect — NaN and inf are distinct special values; summing NaN with finite numbers does not produce inf
+- D) Incorrect — NaN is a valid IEEE 754 bit pattern; NumPy never raises ValueError for NaN in arithmetic operations
+
+---
+
+## Q24 — complex64 itemsize
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+arr = np.zeros(100, dtype=np.complex64)
+print(arr.nbytes)
+```
+
+**A)** `400`
+**B)** `800`
+**C)** `1600`
+**D)** `200`
+
+**Answer: B**
+
+- A) Incorrect — 400 bytes = 100 × 4 bytes, which corresponds to float32 (one float32 per element). complex64 stores two float32 values per element, so it is twice that size
+- B) Correct — complex64 stores two float32 components (real + imaginary) per element: 4 + 4 = 8 bytes each. 100 × 8 = 800 bytes
+- C) Incorrect — 1600 bytes = 100 × 16 bytes, which corresponds to complex128 (two float64 per element). complex64 uses float32 components, not float64
+- D) Incorrect — 200 bytes = 100 × 2 bytes, which corresponds to float16 or int16. complex64 uses 8 bytes per element
+
+---
+
+## Q25 — mixed-dtype array construction
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+arr = np.array([1, 2, 3.0])
+print(arr.dtype)
+```
+
+**A)** `int64`
+**B)** `float32`
+**C)** `float64`
+**D)** `object`
+
+**Answer: C**
+
+- A) Incorrect — the presence of `3.0` (a Python float, which is 64-bit) forces promotion beyond int64; the array cannot stay integer-typed
+- B) Incorrect — NumPy does not default to float32 for Python float literals; Python floats are 64-bit, so the inferred dtype is float64
+- C) Correct — Python's `3.0` is a float64 scalar. `np.array()` finds the minimum common dtype, which is float64. All three elements are stored as float64
+- D) Incorrect — object dtype requires non-numeric or incompatible types; integers and floats are compatible numeric types that promote to float64
+
+---
+
+## Q26 — uint16 overflow wrap to zero
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+x = np.uint16(65535)
+print(x + np.uint16(1))
+```
+
+**A)** `65536`
+**B)** `-1`
+**C)** `0`
+**D)** `32768`
+
+**Answer: C**
+
+- A) Incorrect — 65536 exceeds uint16's maximum of 65535; the arithmetic wraps modulo 2^16 = 65536, giving 65536 mod 65536 = 0
+- B) Incorrect — uint16 is unsigned; negative values are impossible. The bit pattern `0xFFFF` + 1 = `0x10000` truncated to 16 bits = `0x0000` = 0
+- C) Correct — uint16 arithmetic is modulo 65536. Adding 1 to the maximum value 65535 wraps around to 0. No warning or exception is raised
+- D) Incorrect — 32768 is the minimum value of int16 (signed) after its own overflow, not uint16. The uint16 wrap point is 0, not 32768
+
+---
+
+## Q27 — np.iinfo() max for int16
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+print(np.iinfo(np.int16).max)
+```
+
+**A)** `255`
+**B)** `32767`
+**C)** `65535`
+**D)** `32768`
+
+**Answer: B**
+
+- A) Incorrect — 255 is `np.iinfo(np.uint8).max`. int16 is a 16-bit signed type, not an 8-bit unsigned type
+- B) Correct — int16 range is −32768 to 32767 = −2^15 to 2^15 − 1. `np.iinfo(np.int16).max` returns 32767
+- C) Incorrect — 65535 is `np.iinfo(np.uint16).max` (unsigned 16-bit). Confusing int16 max (32767) with uint16 max (65535) is the most common int16 trap on the exam
+- D) Incorrect — 32768 = 2^15 is int16's minimum in absolute value (`np.iinfo(np.int16).min == -32768`), not the maximum
+
+---
+
+## Q28 — inf minus inf produces NaN
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+a = np.float64('inf')
+b = np.float64('inf')
+print(a - b)
+```
+
+**A)** `0.0`
+**B)** `inf`
+**C)** `nan`
+**D)** `ZeroDivisionError`
+
+**Answer: C**
+
+- A) Incorrect — mathematically ∞ − ∞ is indeterminate, not zero. IEEE 754 defines it as NaN to signal this indeterminate form rather than returning a misleading finite value
+- B) Incorrect — `inf - inf` is not infinity; it is an indeterminate form. `inf + inf` would give inf, but subtraction of equal infinities is undefined
+- C) Correct — IEEE 754 defines `inf - inf` as NaN (indeterminate form). NumPy will also issue a RuntimeWarning: invalid value encountered in subtract
+- D) Incorrect — floating-point operations on infinities never raise Python exceptions; they follow IEEE 754 rules and produce NaN or inf with optional RuntimeWarnings
 
 ---

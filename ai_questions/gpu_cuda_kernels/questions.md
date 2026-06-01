@@ -30,13 +30,24 @@
 - [Q23 — GPU Queue and Resource Flags (BSUB)](#q23-gpu-queue-and-resource-flags-bsub)
 - [Q24 — `cuda.to_device` vs `cuda.device_array_like` Transfers](#q24-cudato_device-vs-cudadevice_array_like-transfers)
 - [Q25 — Transfer Count with Mixed NumPy and Device Arrays](#q25-transfer-count-with-mixed-numpy-and-device-arrays)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q26 — Shared Memory Size Must Be a Compile-Time Constant](#q26--shared-memory-size-must-be-a-compile-time-constant)
+- [Q27 — When to Use `cuda.atomic.add`](#q27--when-to-use-cudaatomicadd)
+- [Q28 — `cuda.synchronize()` and Accurate GPU Timing](#q28--cudasynchronize-and-accurate-gpu-timing)
+- [Q29 — Pinned (Page-Locked) Memory and Transfer Speed](#q29--pinned-page-locked-memory-and-transfer-speed)
+- [Q30 — `@cuda.jit` Kernel Return Values](#q30--cudajit-kernel-return-values)
+- [Q31 — `cuda.blockDim.x` vs `cuda.gridDim.x`](#q31--cudablocktdimx-vs-cudagriddimx)
+- [Q32 — GPU Occupancy: Definition and Limiting Factors](#q32--gpu-occupancy-definition-and-limiting-factors)
+- [Q33 — `cuda.grid(2)` Axis Mapping: x=row or x=col?](#q33--cudagrid2-axis-mapping-xrow-or-xcol)
+- [Q34 — JIT Compilation Warm-Up Requirement](#q34--jit-compilation-warm-up-requirement)
+- [Q35 — Grid-Stride Loop: Purpose and Correctness](#q35--grid-stride-loop-purpose-and-correctness)
 
 ---
 
 > Topics: Thread blocks, warp coalescing, grid dimensions, memory access patterns, CPU vs CUDA layout rules.
 > Exam frequency: **Every exam** — 4+ questions per exam.
 
-**Navigate:** &nbsp;[▶ Set 1 — Original Questions (Q1–Q13)](#q1--best-block-shape-for-coalescing-row-major)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice (Q14–Q25)](#set-2--generated-practice-questions-exam-day-focus)
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions (Q1–Q13)](#q1--best-block-shape-for-coalescing-row-major)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice (Q14–Q25)](#set-2--generated-practice-questions-exam-day-focus)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 3 — Extended Practice (Q26–Q35)](#set-3--extended-practice)
 
 ---
 
@@ -622,5 +633,286 @@ How many total HtoD transfers occur?
 - B) Incorrect — `d_weights` is already a device array; passing it to the kernel does not trigger a new HtoD; only NumPy arguments auto-transfer
 - C) Correct — `cuda.to_device(weights)` = 1 HtoD (before loop); each iteration: `inp` (NumPy) → 1 auto HtoD; `d_weights`, `d_out` (device arrays) → 0; total HtoD = 1 + 10 = 11. DtoH = 10 (one `copy_to_host()` per iteration).
 - D) Incorrect — `d_weights` and `d_out` are device arrays; they generate 0 automatic HtoD when passed to a kernel
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets concepts not yet covered: shared memory constraints, atomic operations, host synchronisation for timing, pinned memory, kernel return values, blockDim vs gridDim, occupancy, grid(2) axis confusion, JIT warm-up, grid-stride loops.
+
+---
+
+## Q26 — Shared Memory Size Must Be a Compile-Time Constant
+
+> **Week reference:** Week 9
+
+**Mental Model:** `cuda.shared.array(shape, dtype)` differs from `np.zeros` — the shape argument must be a Python integer literal known at compile time, not a runtime variable. This is because shared memory is allocated by the compiler when building the PTX binary, not at kernel launch. Passing a variable causes a Numba compilation error.
+
+A developer writes a shared-memory kernel where the block size is passed in as a parameter:
+
+```python
+@cuda.jit
+def kernel(data, n, block_size):
+    shared = cuda.shared.array(block_size, dtype=float64)
+    ...
+```
+
+What happens when this kernel is compiled?
+
+- A) It compiles successfully; `block_size` is treated as a constant by the CUDA compiler
+- B) It fails to compile because `cuda.shared.array` requires a compile-time integer literal, not a runtime variable
+- C) It compiles but the shared array is always created with size 0
+- D) It compiles but silently falls back to global memory when `block_size` is not a literal
+
+**Answer: B**
+
+- A) Incorrect — `block_size` is a kernel argument received at runtime; the Numba/PTX compiler cannot evaluate it at compile time and will raise a `TypingError` or `LoweringError`
+- B) Correct — `cuda.shared.array` requires a Python integer literal (e.g., `cuda.shared.array(256, dtype=float64)`) so that the CUDA compiler can embed the allocation size in the PTX binary at compile time; using a runtime variable is a hard compilation error
+- C) Incorrect — Numba does not silently use size 0; the compilation fails before any code is generated
+- D) Incorrect — there is no automatic fallback to global memory; Numba raises an error and refuses to compile the kernel
+
+---
+
+## Q27 — When to Use `cuda.atomic.add`
+
+> **Week reference:** Week 9
+
+**Mental Model:** A race condition occurs when multiple threads read-modify-write the same memory location simultaneously. Without an atomic operation, two threads can both read the old value, both compute an update, and one write silently overwrites the other's result. `cuda.atomic.add(array, index, value)` guarantees the read-modify-write is indivisible, eliminating the race.
+
+Multiple threads in different blocks all need to increment a single counter `count[0]` (a device array). Which implementation is correct?
+
+- A) `count[0] += 1` — each thread increments independently
+- B) `cuda.atomic.add(count, 0, 1)` — performs an atomic read-modify-write on `count[0]`
+- C) `count[0] = count[0] + 1` inside a `if cuda.threadIdx.x == 0:` block only
+- D) `count[0] += cuda.threadIdx.x` — threads add their own ID to avoid collisions
+
+**Answer: B**
+
+- A) Incorrect — `count[0] += 1` compiles to a non-atomic load-add-store sequence; threads from different warps or blocks can race: both read the same stale value, both compute +1, and one increment is lost
+- B) Correct — `cuda.atomic.add(array, index, value)` performs an atomic read-modify-write that is guaranteed to be indivisible at the hardware level; every increment is counted regardless of how many threads execute concurrently
+- C) Incorrect — restricting to `threadIdx.x == 0` limits to one thread per block, so only `gridDim.x` increments occur instead of the total thread count; this undercounts and still has a race across blocks since multiple blocks' thread-0 all write to `count[0]`
+- D) Incorrect — adding `threadIdx.x` does not prevent races and produces the wrong total; the value written to `count[0]` would be meaningless even if it were atomic
+
+---
+
+## Q28 — `cuda.synchronize()` and Accurate GPU Timing
+
+> **Week reference:** Week 9
+
+**Mental Model:** CUDA kernel launches are asynchronous — the host returns immediately after queuing the kernel on the GPU. If you call `perf_counter()` right after a kernel launch, you measure only the host-side launch overhead (microseconds), not the actual GPU execution time. `cuda.synchronize()` blocks the host until all pending GPU work is complete, so the wall clock measured after it reflects true GPU time.
+
+A benchmark times a CUDA kernel like this:
+
+```python
+t0 = perf_counter()
+my_kernel[bpg, tpb](d_arr)
+t1 = perf_counter()
+print(t1 - t0, "seconds")
+```
+
+Why does this almost always print a time that is too small?
+
+- A) `perf_counter()` has too low a resolution to measure GPU kernels
+- B) The kernel launch is asynchronous; `t1` is recorded before the kernel finishes executing on the GPU
+- C) `d_arr` must be copied back to host before the kernel is considered complete
+- D) The kernel is not JIT-compiled yet, so it runs on the CPU and the time is for CPU execution
+
+**Answer: B**
+
+- A) Incorrect — `perf_counter()` has sub-microsecond resolution on modern systems, which is more than sufficient; the issue is not resolution but asynchrony
+- B) Correct — `my_kernel[bpg, tpb](d_arr)` enqueues work on the GPU and returns to Python immediately; `t1` captures the time after the launch call returns, not after the GPU finishes; to get accurate wall time, insert `cuda.synchronize()` before `t1 = perf_counter()`
+- C) Incorrect — the timing error exists even if you never copy results back; the copy is a separate concern; the issue is purely that the launch returns before GPU execution ends
+- D) Incorrect — even after JIT compilation the kernel runs on the GPU; the asynchronous-launch issue is the same regardless of whether the kernel was just compiled or previously cached
+
+---
+
+## Q29 — Pinned (Page-Locked) Memory and Transfer Speed
+
+> **Week reference:** Week 9
+
+**Mental Model:** Normal NumPy arrays are in pageable (swappable) host memory. The OS can page them out to disk, so before a DMA transfer the CUDA driver must first stage the data through a locked intermediate buffer — adding latency. Pinned (page-locked) memory is permanently resident in RAM; the GPU's DMA engine can transfer directly without staging, giving higher and more consistent PCIe bandwidth.
+
+Which statement correctly describes the benefit of using `cuda.pinned_array` instead of a regular NumPy array for data that will be transferred to the GPU?
+
+- A) Pinned arrays are stored on the GPU, so no HtoD transfer is needed
+- B) Pinned arrays skip the CUDA driver entirely, transferring data via shared CPU/GPU cache
+- C) Pinned arrays reside in page-locked host memory, allowing the GPU's DMA engine to transfer directly without a staging copy, resulting in higher and more consistent PCIe bandwidth
+- D) Pinned arrays are compressed before transfer, reducing the bytes sent over PCIe
+
+**Answer: C**
+
+- A) Incorrect — pinned arrays are still host (CPU-side) memory; they do require an HtoD transfer; the benefit is speed of that transfer, not elimination of it
+- B) Incorrect — there is no direct "shared CPU/GPU cache" path; the transfer still uses the PCIe bus; pinning eliminates the intermediate staging buffer, not the PCIe link itself
+- C) Correct — page-locked (pinned) memory cannot be swapped out by the OS; this lets the GPU DMA engine bypass the driver's internal staging buffer and transfer directly from the fixed physical address, achieving higher sustainable bandwidth (often 2× faster than pageable transfers on PCIe 4.0 systems)
+- D) Incorrect — CUDA does not compress array data during HtoD/DtoH transfers; the same number of bytes is sent regardless of whether memory is pinned
+
+---
+
+## Q30 — `@cuda.jit` Kernel Return Values
+
+> **Week reference:** Week 9
+
+**Mental Model:** A CUDA kernel is a void function — it can only communicate results by writing to arrays passed as arguments. Attempting to return a computed value raises an error at compile time because there is no mechanism to send a scalar return value from thousands of GPU threads back to a single host variable.
+
+A developer writes:
+
+```python
+@cuda.jit
+def dot_product(a, b):
+    i = cuda.grid(1)
+    if i < a.shape[0]:
+        return a[i] * b[i]
+
+result = dot_product[bpg, tpb](d_a, d_b)
+print(result)
+```
+
+What is the output of `print(result)`?
+
+- A) The element-wise product array of `a` and `b`
+- B) A compilation error — CUDA kernels cannot return values from individual threads
+- C) `None` — `@cuda.jit` kernels always return `None`; results must be written to an output array argument
+- D) The sum of all element-wise products (a dot product scalar)
+
+**Answer: C**
+
+- A) Incorrect — CUDA kernels cannot return arrays; they must write to a pre-allocated output array passed as an argument
+- B) Incorrect — in Numba CUDA, a `return` statement inside a kernel is silently ignored (treated as an early exit from that thread), rather than causing a compilation error; the kernel call itself returns `None`
+- C) Correct — all `@cuda.jit` kernel calls return `None` to the host; the `return a[i] * b[i]` statement inside the kernel causes that individual thread to exit early without writing to any output, and the host-side call returns `None`; the correct pattern is to pass an output array `out` and write `out[i] = a[i] * b[i]`
+- D) Incorrect — a dot product requires a reduction (summing partial products), which requires shared memory, atomic operations, or a second pass; a simple per-thread return cannot produce a scalar sum
+
+---
+
+## Q31 — `cuda.blockDim.x` vs `cuda.gridDim.x`
+
+> **Week reference:** Week 9
+
+**Mental Model:** `cuda.blockDim.x` is the number of threads per block in the x-dimension (set at launch time, same for every thread). `cuda.gridDim.x` is the number of blocks in the grid's x-dimension (also set at launch, same for every thread). Neither changes during kernel execution. The total thread count = `gridDim.x × blockDim.x`.
+
+A kernel is launched as `my_kernel[200, 512](data)`. Inside the kernel, what values do `cuda.blockDim.x` and `cuda.gridDim.x` hold?
+
+- A) `blockDim.x = 200`, `gridDim.x = 512`
+- B) `blockDim.x = 512`, `gridDim.x = 200`
+- C) `blockDim.x = 512`, `gridDim.x = 102400` (total threads)
+- D) Both equal 512; block and grid dimensions are always equal
+
+**Answer: B**
+
+- A) Incorrect — the launch syntax is `kernel[blocks_per_grid, threads_per_block]`; the first argument is blocks (200) and the second is threads per block (512); the values are swapped in this option
+- B) Correct — `kernel[blocks_per_grid, threads_per_block]` → `blockDim.x = threads_per_block = 512`, `gridDim.x = blocks_per_grid = 200`; total threads = 200 × 512 = 102,400
+- C) Incorrect — `gridDim.x` is the number of blocks (200), not the total thread count; the total thread count is a derived value, not directly stored in any single CUDA variable
+- D) Incorrect — there is no requirement for block and grid dimensions to be equal; they are independent parameters set independently at launch
+
+---
+
+## Q32 — GPU Occupancy: Definition and Limiting Factors
+
+> **Week reference:** Week 9
+
+**Mental Model:** Occupancy = (active warps on SM) / (maximum warps the SM can physically hold). High occupancy lets the SM hide memory latency by switching to ready warps. Three resources per SM are shared across all resident blocks: registers per thread, shared memory per block, and the warp/thread count limit. Any one of these can cap occupancy below 100%.
+
+Which statement about GPU occupancy is correct?
+
+- A) Occupancy is the fraction of GPU cores performing floating-point operations at any given clock cycle
+- B) Occupancy is the ratio of active warps on a Streaming Multiprocessor (SM) to the maximum warps the SM supports; it is limited by registers per thread, shared memory per block, and the hardware warp limit
+- C) 100% occupancy always means maximum performance; you should always optimise for highest occupancy
+- D) Occupancy is determined solely by the number of threads per block; block shapes have no effect
+
+**Answer: B**
+
+- A) Incorrect — this describes compute utilisation or throughput efficiency, not occupancy; occupancy specifically measures warps scheduled on the SM, whether they are executing, waiting for memory, or stalled
+- B) Correct — occupancy = active_warps / max_warps_per_SM; the three primary limiters are (1) register usage per thread (more registers → fewer threads fit), (2) shared memory per block (more shared memory → fewer blocks fit), and (3) the hardware warp/thread count limit; the CUDA Occupancy Calculator can be used to find the optimal trade-off
+- C) Incorrect — 100% occupancy does not guarantee maximum performance; if the kernel is compute-bound (not memory-latency-bound), adding more warps provides no benefit and may even hurt by increasing register spilling; optimal occupancy depends on the kernel's arithmetic intensity
+- D) Incorrect — shared memory usage per block also affects occupancy; additionally, the block shape (1D vs 2D vs 3D) interacts with the threads-per-block limit but is not the sole factor
+
+---
+
+## Q33 — `cuda.grid(2)` Axis Mapping: x=row or x=col?
+
+> **Week reference:** Week 9
+
+**Mental Model:** `cuda.grid(2)` returns `(x_index, y_index)` where x corresponds to `blockIdx.x * blockDim.x + threadIdx.x`. In most DTU 02613 kernels, the convention is `row, col = cuda.grid(2)`, making row the x-dimension. Adjacent threads (differing by 1 in threadIdx.x) thus have the same col but different row — the exact opposite of what coalescing needs. This is the root cause of the coalescing trap in most 2D kernels.
+
+In a kernel written as `row, col = cuda.grid(2)`, which dimension do adjacent warp threads differ in, and what does that mean for coalescing a row-major array `A[row, col]`?
+
+- A) Adjacent threads differ in `col` (y-dim), so they access `A[row, col], A[row, col+1], ...` — fully coalesced
+- B) Adjacent threads differ in `row` (x-dim), so they access `A[row, col], A[row+1, col], ...` — strided, non-coalesced
+- C) Adjacent threads differ equally in `row` and `col` — partial coalescing
+- D) Neither: `cuda.grid(2)` always assigns consecutive global IDs to consecutive output pixels regardless of row or col
+
+**Answer: B**
+
+- A) Incorrect — `col` corresponds to the y-dimension (threadIdx.y); within a warp, threadIdx.x increments first, not threadIdx.y; adjacent warp threads share the same col value
+- B) Correct — adjacent warp threads (thread ID differs by 1) have consecutive threadIdx.x values; since `row = blockIdx.x * blockDim.x + threadIdx.x`, they differ in `row`; in row-major `A`, `A[row, col]` and `A[row+1, col]` are `A.shape[1]` elements apart — a large stride — so access is non-coalesced; fix: use block shape `(1, N)` so blockDim.x=1 and col varies instead
+- C) Incorrect — at fixed blockDim, col is constant across adjacent warp threads (since threadIdx.y is the same for the first 32 threads when blockDim.x ≥ 32); there is no "partial" shared variation
+- D) Incorrect — `cuda.grid(2)` maps threads to 2D indices using the block/grid layout; row and col are distinct and row varies within a warp by default; consecutive global IDs do not map to consecutive output pixel coordinates in 2D
+
+---
+
+## Q34 — JIT Compilation Warm-Up Requirement
+
+> **Week reference:** Week 9
+
+**Mental Model:** Numba compiles CUDA kernels lazily on the first call, converting Python to PTX/SASS at runtime. This compilation can take hundreds of milliseconds to seconds. If you include the first call in your timing loop, you measure compilation + execution instead of pure execution time. Always do one warm-up call (outside the timing block) before benchmarking.
+
+A developer benchmarks a Numba CUDA kernel like this:
+
+```python
+times = []
+for _ in range(10):
+    t0 = perf_counter()
+    kernel[bpg, tpb](d_arr)
+    cuda.synchronize()
+    times.append(perf_counter() - t0)
+print(min(times))
+```
+
+The first iteration takes 1.2 s while subsequent iterations take ~0.003 s. What explains the 400× difference?
+
+- A) The GPU overheats on the first run and throttles, recovering on subsequent runs
+- B) The first call triggers Numba's JIT compilation of the kernel from Python to GPU machine code; subsequent calls use the cached compiled binary
+- C) The first call allocates GPU memory that is reused on subsequent calls
+- D) CUDA streams are not used, so the first call waits for a preceding kernel to finish
+
+**Answer: B**
+
+- A) Incorrect — thermal throttling does not cause a 400× slowdown on the first call, nor does it recover in milliseconds; GPU throttling typically causes gradual performance reduction under sustained load, not a single-call spike
+- B) Correct — Numba compiles CUDA kernels on first use (lazy/JIT compilation); the 1.2 s includes Python-to-PTX compilation, PTX-to-SASS GPU binary generation, and kernel loading — a one-time cost; all subsequent calls execute the pre-compiled binary in ~3 ms; fix: add one warm-up call before the timing loop
+- C) Incorrect — `cuda.device_array` and `cuda.to_device` allocate memory explicitly; the kernel call itself does not trigger significant allocations that would explain 1.2 s on the first call
+- D) Incorrect — default CUDA streams are used and there is no preceding kernel in this snippet; stream ordering does not cause a first-call delay of 1.2 s
+
+---
+
+## Q35 — Grid-Stride Loop: Purpose and Correctness
+
+> **Week reference:** Week 9
+
+**Mental Model:** A grid-stride loop allows a fixed-size grid to process an arbitrarily large array. Instead of launching one thread per element (which may exceed GPU limits or waste scheduling overhead), each thread processes elements at indices `i, i + gridDim.x * blockDim.x, i + 2 * gridDim.x * blockDim.x, ...`. The stride equals the total number of threads in the grid, ensuring every element is processed exactly once.
+
+A kernel uses a grid-stride loop to process an array of size N=10,000 with only 256 threads per block and 8 blocks (2048 total threads):
+
+```python
+@cuda.jit
+def kernel(data, n):
+    i = cuda.grid(1)
+    stride = cuda.gridDim.x * cuda.blockDim.x
+    while i < n:
+        data[i] = data[i] * 2.0
+        i += stride
+```
+
+How many iterations of the while loop does thread 0 (global index 0) execute?
+
+- A) 1 — thread 0 only processes element 0
+- B) 4 — stride = 2048, N = 10000, so thread 0 processes indices 0, 2048, 4096, 6144, stopping before 10000
+- C) 5 — thread 0 processes 0, 2048, 4096, 6144, 8192 (all ≤ 9999)
+- D) 10000 — each thread processes all elements
+
+**Answer: C**
+
+- A) Incorrect — without a grid-stride loop, each thread processes exactly one element; the grid-stride pattern is precisely designed to make each thread process multiple elements
+- B) Incorrect — counting: 0, 2048, 4096, 6144, 8192; all five values are < 10000, so the loop runs 5 times, not 4; the error is stopping the count one iteration early
+- C) Correct — thread 0 starts at i=0; stride = 8 * 256 = 2048; iterations: i=0 (< 10000 ✓), i=2048 (✓), i=4096 (✓), i=6144 (✓), i=8192 (✓), i=10240 (≥ 10000, loop exits); 5 iterations total
+- D) Incorrect — each thread processes N/total_threads elements on average (here 10000/2048 ≈ 4.9); no single thread processes all N elements; the workload is evenly distributed across all threads
 
 ---

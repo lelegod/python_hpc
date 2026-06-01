@@ -24,6 +24,17 @@
 - [Q16 — Missing syncthreads Bug](#q16-missing-syncthreads-bug)
 - [Q17 — Counting Reduction Steps for N=256](#q17-counting-reduction-steps-for-n256)
 - [Q18 — Custom Reduction: Weighted Sum](#q18-custom-reduction-weighted-sum)
+- [Set 3 — Extended Practice](#set-3-extended-practice)
+- [Q19 — Value Lock: Correct vs Incorrect Increment](#q19--value-lock-correct-vs-incorrect-increment)
+- [Q20 — Value Type Code Truncation](#q20--value-type-code-truncation)
+- [Q21 — Pool.reduce() AttributeError Trap](#q21--poolreduce-attributeerror-trap)
+- [Q22 — Shared Array Non-Overlapping Writes](#q22--shared-array-non-overlapping-writes)
+- [Q23 — Tree Reduction Loop Count in reduction_full.py Style](#q23--tree-reduction-loop-count-in-reduction_fullpy-style)
+- [Q24 — Partial Max Reduction with Pool.map](#q24--partial-max-reduction-with-poolmap)
+- [Q25 — Deadlock from Inconsistent Lock Ordering](#q25--deadlock-from-inconsistent-lock-ordering)
+- [Q26 — Atomic Add on multiprocessing.Value](#q26--atomic-add-on-multiprocessingvalue)
+- [Q27 — Wrong Reduction: Mutable Default Accumulator](#q27--wrong-reduction-mutable-default-accumulator)
+- [Q28 — Two-Level Reduction: What Does Each Phase Return?](#q28--two-level-reduction-what-does-each-phase-return)
 
 ---
 
@@ -588,5 +599,399 @@ Is this parallel weighted sum correct, and what is `total`?
 **Answer: B**
 
 `total = sum(v * w for v, w in pairs) = 0.5*(10+20+30+40+50+60+70+80) = 0.5*360 = 180.0`. The parallel approach is valid because the overall reduction is a sum of independent terms — addition is associative and commutative. Chunking into partial sums and then summing the partials gives the same result as the serial sum. Answer A is wrong: addition of weighted terms is associative and commutative, so parallelisation is perfectly valid. Answer C (360.0) would require weights of 1.0 instead of 0.5. Answer D is wrong: `Pool.map` handles any picklable iterable including lists of tuples.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets race conditions on Value, type-code truncation, Pool.reduce() trap, shared array writes, tree-loop counting, max reductions, deadlock, atomic patterns, and mutable accumulator bugs.
+
+---
+
+## Q19 — Value Lock: Correct vs Incorrect Increment
+
+> **Week reference:** Week 6
+
+```python
+import multiprocessing as mp
+
+def bad_increment(counter, n):
+    for _ in range(n):
+        counter.value += 1          # no lock
+
+def good_increment(counter, n):
+    for _ in range(n):
+        with counter.get_lock():
+            counter.value += 1      # locked
+
+counter_bad  = mp.Value('i', 0)
+counter_good = mp.Value('i', 0)
+
+procs_bad  = [mp.Process(target=bad_increment,  args=(counter_bad,  1000)) for _ in range(4)]
+procs_good = [mp.Process(target=good_increment, args=(counter_good, 1000)) for _ in range(4)]
+
+for p in procs_bad:  p.start()
+for p in procs_bad:  p.join()
+
+for p in procs_good: p.start()
+for p in procs_good: p.join()
+```
+
+What are the most likely final values of `counter_bad.value` and `counter_good.value`?
+
+- A) Both are 4000
+- B) `counter_bad.value` is 4000; `counter_good.value` may be less than 4000
+- C) `counter_bad.value` may be less than 4000; `counter_good.value` is exactly 4000
+- D) Both may be less than 4000 because `get_lock()` does not provide real mutual exclusion
+
+**Answer: C**
+
+- A) Incorrect — `bad_increment` has a race condition: concurrent read-modify-write sequences can overlap across processes, causing lost updates.
+- B) Incorrect — it is `counter_bad` that suffers the race, not `counter_good`. The lock in `good_increment` serialises each increment into an atomic read-modify-write.
+- C) Correct — `bad_increment`'s `counter.value += 1` is a non-atomic three-step sequence; multiple processes can read the same value and write the same incremented result, losing updates. `good_increment` uses `counter.get_lock()` as a mutex, guaranteeing that each `+= 1` completes atomically: final value is always exactly 4000.
+- D) Incorrect — `multiprocessing.Value.get_lock()` returns a genuine `multiprocessing.Lock` that provides mutual exclusion across processes.
+
+---
+
+## Q20 — Value Type Code Truncation
+
+> **Week reference:** Week 6
+
+```python
+import multiprocessing as mp
+
+total = mp.Value('i', 0)    # 'i' = signed int
+
+partial_results = [3.9, 2.1, 4.8]
+
+for x in partial_results:
+    with total.get_lock():
+        total.value += x
+
+print(total.value)
+```
+
+What does this code print?
+
+- A) `10.8`
+- B) `10`
+- C) `9`
+- D) `TypeError` — you cannot add a float to an integer Value
+
+**Answer: C**
+
+- A) Incorrect — `'i'` stores a C signed integer; fractional parts are truncated at each assignment.
+- B) Incorrect — truncation happens after each addition, not at the end. `0 + 3.9 = 3.9 → truncated to 3`; `3 + 2.1 = 5.1 → truncated to 5`; `5 + 4.8 = 9.8 → truncated to 9`.
+- C) Correct — each `total.value += x` reads the integer, adds the float (Python promotes to float), then stores back as C int, truncating toward zero. Step-by-step: `0+3.9=3.9→3`; `3+2.1=5.1→5`; `5+4.8=9.8→9`. Final value is 9, not the mathematically correct 10. Fix: use `mp.Value('d', 0.0)`.
+- D) Incorrect — Python does not raise TypeError; ctypes silently truncates the float when storing it in the integer-typed shared memory.
+
+---
+
+## Q21 — Pool.reduce() AttributeError Trap
+
+> **Week reference:** Week 6
+
+```python
+from multiprocessing import Pool
+import operator
+
+data = list(range(1, 9))   # [1, 2, 3, 4, 5, 6, 7, 8]
+
+with Pool(4) as p:
+    result = p.reduce(operator.add, data)
+
+print(result)
+```
+
+What happens when this code runs?
+
+- A) Prints `36` — Pool.reduce performs a parallel tree reduction
+- B) Prints `36` — Pool.reduce delegates to functools.reduce internally
+- C) Raises `AttributeError: 'Pool' object has no attribute 'reduce'`
+- D) Prints a list of partial sums, because Pool.reduce is an alias for Pool.map
+
+**Answer: C**
+
+- A) Incorrect — `Pool.reduce` does not exist; no parallel tree reduction is performed.
+- B) Incorrect — `Pool` has no `reduce` method and does not delegate to `functools.reduce`.
+- C) Correct — `multiprocessing.Pool` provides `map`, `starmap`, `imap`, `imap_unordered`, and `apply` — but NOT `reduce`. The correct pattern is `functools.reduce(operator.add, p.map(worker, chunks))`.
+- D) Incorrect — `Pool.reduce` does not exist at all; `Pool.map` is a separate method that applies a function element-wise.
+
+---
+
+## Q22 — Shared Array Non-Overlapping Writes
+
+> **Week reference:** Week 6
+
+```python
+import ctypes
+import multiprocessing as mp
+import numpy as np
+
+def write_partial(args):
+    idx, val, shared_arr = args
+    arr = np.frombuffer(shared_arr, dtype='float32')
+    arr[idx] = val   # each worker writes to a unique index
+
+shared = mp.RawArray(ctypes.c_float, 4)
+
+tasks = [(0, 10.0, shared),
+         (1, 20.0, shared),
+         (2, 30.0, shared),
+         (3, 40.0, shared)]
+
+with mp.Pool(4) as p:
+    p.map(write_partial, tasks)
+
+result = np.frombuffer(shared, dtype='float32')
+print(result)
+```
+
+What does `result` contain, and is any lock needed?
+
+- A) `[10. 20. 30. 40.]`; no lock needed because each worker writes to a distinct index
+- B) `[10. 20. 30. 40.]`; a lock is still needed to prevent cache-line false sharing
+- C) Unpredictable values; a lock is always required for any shared memory write
+- D) `[0. 0. 0. 0.]`; `mp.RawArray` is read-only from worker processes
+
+**Answer: A**
+
+- A) Correct — each task writes to a unique, non-overlapping index (0, 1, 2, 3). There is no concurrent write to any single memory location, so no lock is required. The output is deterministically `[10. 20. 30. 40.]`. This is the same principle used in `reduction_full.py`.
+- B) Incorrect — while cache-line false sharing can degrade performance (multiple indices may share a cache line), it does not cause data corruption when writes are to distinct locations. No lock is needed for correctness.
+- C) Incorrect — locks are only needed when multiple processes write to the same memory location concurrently. Disjoint write targets require no synchronisation.
+- D) Incorrect — `mp.RawArray` is readable and writable from all processes that hold a reference to it; workers can freely write to it.
+
+---
+
+## Q23 — Tree Reduction Loop Count in reduction_full.py Style
+
+> **Week reference:** Week 6
+
+```python
+import numpy as np
+import multiprocessing as mp
+
+N = 8   # number of elements
+
+def reduce_step(args):
+    b, s, arr = args
+    if b + s < len(arr):
+        arr[b] += arr[b + s]
+
+arr = list(range(1, N + 1))   # [1, 2, 3, 4, 5, 6, 7, 8]
+rounds = 0
+
+with mp.Pool(4) as p:
+    for j in range(int(np.ceil(np.log2(N)))):
+        s = 2**j
+        p.map(reduce_step, [(i, s, arr) for i in range(0, N, 2*s)])
+        rounds += 1
+
+print(rounds, arr[0])
+```
+
+What does this code print (assuming the shared array updates propagate correctly)?
+
+- A) `3 36`
+- B) `3 36` — but only if the operator is commutative
+- C) `8 36`
+- D) `3 1` — only the first element survives
+
+**Answer: A**
+
+- A) Correct — `ceil(log2(8)) = 3` rounds. Round j=0 (s=1): pairs (0,1),(2,3),(4,5),(6,7) accumulate adjacent pairs. Round j=1 (s=2): pairs (0,2),(4,6) accumulate stride-2 pairs. Round j=2 (s=4): pair (0,4) accumulates the two halves. Final: `arr[0] = sum(1..8) = 36`, completed in 3 rounds.
+- B) Incorrect qualifier — addition is both commutative and associative; the result is correct for either property alone in ordered groupings.
+- C) Incorrect — 8 rounds would be the serial case; the tree reduces it to `ceil(log2(8)) = 3`.
+- D) Incorrect — `arr[0]` accumulates the full sum across all tree levels; it does not retain only the initial value of 1.
+
+---
+
+## Q24 — Partial Max Reduction with Pool.map
+
+> **Week reference:** Week 6
+
+```python
+from multiprocessing import Pool
+
+def chunk_max(chunk):
+    return max(chunk)
+
+data = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
+chunks = [data[i:i+4] for i in range(0, len(data), 4)]
+
+with Pool(3) as p:
+    partials = p.map(chunk_max, chunks)
+
+final = max(partials)
+print(chunks, partials, final)
+```
+
+What are `chunks`, `partials`, and `final`?
+
+- A) `chunks=[[3,1,4,1],[5,9,2,6],[5,3,5]]`; `partials=[4,9,5]`; `final=9`
+- B) `chunks=[[3,1,4,1],[5,9,2,6],[5,3,5]]`; `partials=[1,2,3]` (indices of max); `final=3`
+- C) `chunks=[[3,1,4],[1,5,9],[2,6,5],[3,5]]`; `partials=[4,9,6,5]`; `final=9`
+- D) `chunks=[[3,1,4,1],[5,9,2,6],[5,3,5]]`; `partials=[4,9,5]`; `final=5` (last element of partials)
+
+**Answer: A**
+
+- A) Correct — `range(0, 11, 4)` gives start indices 0, 4, 8. `data[0:4]=[3,1,4,1]`, `data[4:8]=[5,9,2,6]`, `data[8:12]=[5,3,5]`. `chunk_max` returns: `max([3,1,4,1])=4`, `max([5,9,2,6])=9`, `max([5,3,5])=5`. `partials=[4,9,5]`. `final=max([4,9,5])=9`. Correct because `max` is both associative and commutative.
+- B) Incorrect — `chunk_max` returns the maximum value, not the index of the maximum.
+- C) Incorrect — `range(0, 11, 4)` with step 4 produces chunks of size 4 (with the last chunk smaller). The chunk boundaries are 0, 4, 8 — not 0, 3, 6, 9.
+- D) Incorrect — `final = max(partials)` returns the maximum element, not the last element. `max([4,9,5]) = 9`, not 5.
+
+---
+
+## Q25 — Deadlock from Inconsistent Lock Ordering
+
+> **Week reference:** Week 6
+
+```python
+import multiprocessing as mp
+import time
+
+lock_a = mp.Lock()
+lock_b = mp.Lock()
+
+def process_one():
+    lock_a.acquire()
+    time.sleep(0.01)
+    lock_b.acquire()   # blocks if process_two holds lock_b
+    lock_b.release()
+    lock_a.release()
+
+def process_two():
+    lock_b.acquire()
+    time.sleep(0.01)
+    lock_a.acquire()   # blocks if process_one holds lock_a
+    lock_a.release()
+    lock_b.release()
+
+p1 = mp.Process(target=process_one)
+p2 = mp.Process(target=process_two)
+p1.start(); p2.start()
+p1.join();  p2.join()
+```
+
+What is the likely outcome of running this code?
+
+- A) Both processes complete successfully because `mp.Lock` detects circular waits and breaks them
+- B) The program deadlocks: `p1` holds `lock_a` waiting for `lock_b`, while `p2` holds `lock_b` waiting for `lock_a`
+- C) `process_two` always completes first because it acquires `lock_b` which has implicit higher priority
+- D) A `DeadlockError` is raised after the `time.sleep` calls
+
+**Answer: B**
+
+- A) Incorrect — Python's `multiprocessing.Lock` has no deadlock detection; it is a thin wrapper over an OS mutex. Circular waits hang indefinitely.
+- B) Correct — with the `sleep(0.01)` calls ensuring interleaving: `p1` acquires `lock_a`, `p2` acquires `lock_b`, then `p1` blocks waiting for `lock_b` (held by `p2`) and `p2` blocks waiting for `lock_a` (held by `p1`). Neither can proceed. Fix: both processes should always acquire locks in the same order (e.g., always `lock_a` before `lock_b`).
+- C) Incorrect — locks have no priority; whichever process acquires a lock first holds it until released.
+- D) Incorrect — Python raises no `DeadlockError`; the program simply hangs, blocking `join()` forever.
+
+---
+
+## Q26 — Atomic Add on multiprocessing.Value
+
+> **Week reference:** Week 6
+
+```python
+import multiprocessing as mp
+
+def worker(val, result):
+    result.value += val   # no lock
+
+result = mp.Value('d', 0.0)
+processes = [mp.Process(target=worker, args=(1.0, result)) for _ in range(8)]
+for p in processes: p.start()
+for p in processes: p.join()
+print(result.value)
+```
+
+What is printed, and what is the correct fix?
+
+- A) `8.0` always; no fix needed because floating-point addition is atomic on modern CPUs
+- B) A value between 1.0 and 8.0 (inclusive), non-deterministically; fix by wrapping the increment with `result.get_lock()`
+- C) `0.0` because `mp.Value` blocks all writes from child processes
+- D) `8.0` reliably because `'d'` (double) values use hardware atomic 64-bit writes
+
+**Answer: B**
+
+- A) Incorrect — floating-point addition is NOT atomic at the Python level; `result.value += val` is three steps regardless of CPU architecture.
+- B) Correct — without the lock, concurrent read-modify-write operations race and some increments are lost. The final value is non-deterministically between 1.0 and 8.0. The fix is: `with result.get_lock(): result.value += val`.
+- C) Incorrect — `mp.Value` does not block writes; it is a shared memory object explicitly designed for cross-process read/write access.
+- D) Incorrect — 64-bit aligned writes may be atomic at the hardware level, but Python's `+=` involves separate bytecode load and store instructions, breaking atomicity at the language level.
+
+---
+
+## Q27 — Wrong Reduction: Mutable Default Accumulator
+
+> **Week reference:** Week 6
+
+```python
+from multiprocessing import Pool
+
+def accumulate(chunk, acc=[]):
+    for x in chunk:
+        acc.append(x * 2)
+    return acc
+
+chunks = [[1, 2], [3, 4], [5, 6]]
+
+with Pool(1) as p:   # single worker for deterministic output
+    results = p.map(accumulate, chunks)
+
+print(results)
+```
+
+What does `results` contain, and what is the bug?
+
+- A) `[[2, 4], [6, 8], [10, 12]]` — correct; each chunk is processed independently
+- B) `[[2, 4], [2, 4, 6, 8], [2, 4, 6, 8, 10, 12]]` — the mutable default `acc=[]` persists across calls in the same worker process, growing with each call
+- C) `[[2, 4, 6, 8, 10, 12], [2, 4, 6, 8, 10, 12], [2, 4, 6, 8, 10, 12]]` — all three entries are the same final list
+- D) `[]` — mutable default arguments are not picklable and raise `PicklingError`
+
+**Answer: B**
+
+- A) Incorrect — the mutable default `acc=[]` is created once when the function is defined in the worker process. Subsequent calls reuse the same list, not a fresh one.
+- B) Correct — Python's mutable default argument trap: `acc=[]` is evaluated once at definition time. Each `Pool.map` call to `accumulate` appends to the same list object. First call returns `[2,4]`; second call returns `[2,4,6,8]`; third returns `[2,4,6,8,10,12]`. Fix: use `acc=None` and `acc = []` inside the function body.
+- C) Incorrect — with a single worker processing chunks sequentially, `Pool.map` captures the return value after each call. Since the list grows with each call, the three captured references reflect the state at each return: `[2,4]`, `[2,4,6,8]`, `[2,4,6,8,10,12]` — not the final state three times.
+- D) Incorrect — lists are picklable; no `PicklingError` is raised. The bug is semantic, not a serialisation error.
+
+---
+
+## Q28 — Two-Level Reduction: What Does Each Phase Return?
+
+> **Week reference:** Week 6
+
+```python
+from multiprocessing import Pool
+from functools import reduce
+import operator
+
+def partial_min(chunk):
+    return min(chunk)
+
+data = [8, 3, 7, 1, 5, 2, 9, 4]
+chunk_size = 2
+chunks = [data[i:i+chunk_size] for i in range(0, len(data), chunk_size)]
+
+with Pool(4) as p:
+    phase1 = p.map(partial_min, chunks)
+
+phase2 = reduce(operator.mul, phase1)   # BUG: wrong operator
+```
+
+`chunks` is `[[8,3],[7,1],[5,2],[9,4]]`. What is `phase1`, what does `phase2` compute, and is `phase2` the correct overall minimum?
+
+- A) `phase1=[3,1,2,4]`; `phase2=24`; incorrect — `reduce(mul,...)` gives the product of partial mins, not the overall minimum
+- B) `phase1=[3,1,2,4]`; `phase2=1`; correct — the product of `[3,1,2,4]` happens to equal the minimum
+- C) `phase1=[8,7,5,9]`; `phase2=2520`; incorrect — `partial_min` returns the first element, not the minimum
+- D) `phase1=[3,1,2,4]`; `phase2=10`; correct — `reduce(mul,...)` sums the partial mins
+
+**Answer: A**
+
+- A) Correct — `partial_min` correctly returns the minimum of each chunk: `min([8,3])=3`, `min([7,1])=1`, `min([5,2])=2`, `min([9,4])=4`. So `phase1=[3,1,2,4]`. The bug is in the combine step: `reduce(operator.mul, [3,1,2,4])` computes `3*1*2*4=24` — a product, not the overall minimum. The correct combine is `reduce(min, phase1)` or `min(phase1)`, which gives 1.
+- B) Incorrect — `3*1*2*4=24`, not 1. The product coincidentally equalling the minimum is false here.
+- C) Incorrect — `partial_min` calls Python's built-in `min`, which returns the minimum element, not the first element. `phase1=[3,1,2,4]`, not `[8,7,5,9]`.
+- D) Incorrect — `reduce(operator.mul, ...)` computes a product, not a sum. `3*1*2*4=24`, not 10.
 
 ---

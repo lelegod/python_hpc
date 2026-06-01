@@ -26,6 +26,17 @@
 - [Q18 — Interpreting Speedup from `time` with 8 Workers](#q18-interpreting-speedup-from-time-with-8-workers)
 - [Q19 — When Does `nogil=True` Not Help?](#q19-when-does-nogiltrue-not-help)
 - [Q20 — Combining `imap_unordered` and Task Batching](#q20-combining-imap_unordered-and-task-batching)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q21 — `pool.starmap` vs Lambda with `spawn`](#q21--poolstarmap-vs-lambda-with-spawn)
+- [Q22 — `pool.imap` Return Type and Memory](#q22--poolimap-return-type-and-memory)
+- [Q23 — `apply_async` Pattern from `pi_parallel.py`](#q23--apply_async-pattern-from-pi_parallelpy)
+- [Q24 — Chunked vs Per-Sample Parallelism](#q24--chunked-vs-per-sample-parallelism)
+- [Q25 — `fork` Inherits Parent State](#q25--fork-inherits-parent-state)
+- [Q26 — `ProcessPoolExecutor.map` vs `Pool.starmap`](#q26--processpoolexecutormap-vs-poolstarmap)
+- [Q27 — Lambda Pickling Failure with `spawn`](#q27--lambda-pickling-failure-with-spawn)
+- [Q28 — `RawArray` Shared Memory Pattern](#q28--rawarray-shared-memory-pattern)
+- [Q29 — Non-Associative Operator in Reduction](#q29--non-associative-operator-in-reduction)
+- [Q30 — `pool.map` with `chunksize` Effect on `time` Output](#q30--poolmap-with-chunksize-effect-on-time-output)
 
 ---
 
@@ -696,5 +707,400 @@ with Pool(8) as pool:
 - B) Correct — batching reduces IPC round-trips by 1,000×; dynamic scheduling across batches keeps workers busy.
 - C) Incorrect — `pool.map` is valid and commonly used; `imap_unordered` is not a requirement.
 - D) Incorrect — the `__main__` guard is required for all `multiprocessing.Pool` usage on Windows/macOS regardless of which map variant is used.
+
+---
+
+## Set 3 — Extended Practice
+
+- [Q21 — `pool.starmap` vs Lambda with `spawn`](#q21--poolstarmap-vs-lambda-with-spawn)
+- [Q22 — `pool.imap` Return Type and Memory](#q22--poolimap-return-type-and-memory)
+- [Q23 — `apply_async` Pattern from `pi_parallel.py`](#q23--apply_async-pattern-from-pi_parallelpy)
+- [Q24 — Chunked vs Per-Sample Parallelism](#q24--chunked-vs-per-sample-parallelism)
+- [Q25 — `fork` Inherits Parent State](#q25--fork-inherits-parent-state)
+- [Q26 — `ProcessPoolExecutor.map` vs `Pool.starmap`](#q26--processpoolexecutormap-vs-poolstarmap)
+- [Q27 — Lambda Pickling Failure with `spawn`](#q27--lambda-pickling-failure-with-spawn)
+- [Q28 — `RawArray` Shared Memory Pattern](#q28--rawarray-shared-memory-pattern)
+- [Q29 — Non-Associative Operator in Reduction](#q29--non-associative-operator-in-reduction)
+- [Q30 — `pool.map` with `chunksize` Effect on `time` Output](#q30--poolmap-with-chunksize-effect-on-time-output)
+
+---
+
+## Q21 — `pool.starmap` vs Lambda with `spawn`
+
+> **Week reference:** Week 5
+
+```python
+import multiprocessing
+
+def score(x, weight):
+    return x * weight
+
+pairs = [(i, 0.5) for i in range(100)]
+
+if __name__ == '__main__':
+    with multiprocessing.Pool(4) as pool:
+        # Option A:
+        results_a = pool.map(lambda p: score(*p), pairs)
+
+        # Option B:
+        results_b = pool.starmap(score, pairs)
+```
+
+**On macOS (default start method: `spawn`), which option works and which fails?**
+
+- A) Both work — `spawn` can handle lambdas since Python 3.8
+- B) Option A fails with `AttributeError: Can't pickle local object '<lambda>'`; Option B works correctly
+- C) Option B fails because `starmap` is not compatible with the `spawn` start method
+- D) Both fail — multi-argument functions require `apply_async` with explicit `args` tuples on `spawn`
+
+**Answer: B**
+
+- A) Incorrect — lambdas have never been picklable in CPython regardless of Python version. The `spawn` start method requires pickling the task function; lambdas fail at this step.
+- B) Correct — `spawn` pickles the function to send it to workers. `lambda p: score(*p)` is anonymous and not importable by name → `AttributeError`. `pool.starmap(score, pairs)` sends the named function `score` (importable from the module) and the argument list; this pickles cleanly.
+- C) Incorrect — `starmap` is a standard `multiprocessing.Pool` method that works with all start methods including `spawn`. It is unrelated to start method compatibility.
+- D) Incorrect — `starmap` solves multi-argument functions correctly on all start methods. `apply_async` with `args=` tuples also works, but it is per-task and lower-level. Neither requires `spawn` workarounds.
+
+---
+
+## Q22 — `pool.imap` Return Type and Memory
+
+> **Week reference:** Week 6
+
+```python
+from multiprocessing import Pool
+import sys
+
+def square(x):
+    return x * x
+
+if __name__ == '__main__':
+    with Pool(4) as pool:
+        result = pool.imap(square, range(10_000_000))
+        print(type(result))
+        print(sys.getsizeof(result))
+        first_ten = [next(result) for _ in range(10)]
+        print(first_ten)
+```
+
+**What does this code print for `type(result)` and `sys.getsizeof(result)`, and what is `first_ten`?**
+
+- A) `<class 'list'>`, ~80 MB (stores all 10M results), `[0, 1, 4, 9, 16, 25, 36, 49, 64, 81]`
+- B) `<class 'multiprocessing.pool.IMapIterator'>`, a small fixed size (~100 bytes), `[0, 1, 4, 9, 16, 25, 36, 49, 64, 81]`
+- C) `<class 'generator'>`, a small fixed size, `[0, 1, 4, 9, 16, 25, 36, 49, 64, 81]`
+- D) `<class 'multiprocessing.pool.IMapIterator'>`, a small fixed size, but `next(result)` raises `StopIteration` — `imap` results must be consumed with `for r in result:`
+
+**Answer: B**
+
+- A) Incorrect — `imap` does not materialise all results into a list. The iterator object itself is tiny regardless of dataset size; this is the key memory advantage over `pool.map`.
+- B) Correct — `pool.imap` returns an `IMapIterator` (a lazy iterator). The object itself is small (just state and a queue reference). `next(result)` fetches results one by one in submission order; the first 10 values are `[0, 1, 4, ..., 81]`.
+- C) Incorrect — `IMapIterator` is not a plain Python generator; it is a multiprocessing-specific class. However, the memory behaviour (lazy, small footprint) is conceptually similar.
+- D) Incorrect — `IMapIterator` supports `next()` via the iterator protocol. Both `next(result)` and `for r in result:` are valid. `StopIteration` is only raised when the iterator is exhausted (after all 10M values have been consumed).
+
+---
+
+## Q23 — `apply_async` Pattern from `pi_parallel.py`
+
+> **Week reference:** Week 5
+
+```python
+import random
+import multiprocessing
+
+def sample():
+    x = random.uniform(-1.0, 1.0)
+    y = random.uniform(-1.0, 1.0)
+    return 1 if x**2 + y**2 <= 1 else 0
+
+if __name__ == '__main__':
+    samples = 1_000_000
+    n_proc = 10
+    pool = multiprocessing.Pool(n_proc)
+    results_async = [pool.apply_async(sample) for i in range(samples)]
+    hits = sum(r.get() for r in results_async)
+    pi = 4.0 * hits / samples
+    print(pi)
+```
+
+**This code is correct but slow. What is the primary performance problem?**
+
+- A) `random.uniform` is not thread-safe and causes incorrect results under multiprocessing
+- B) `pool.apply_async` is called 1,000,000 times — one task per sample — causing 1,000,000 IPC round-trips; the overhead far exceeds the cost of one sample
+- C) The `if __name__ == '__main__':` guard prevents tasks from running in worker processes
+- D) `sum(r.get() ...)` is sequential and blocks parallel execution of the samples
+
+**Answer: B**
+
+- A) Incorrect — `random.uniform` is not shared between processes; each worker has its own independent RNG state (forked or re-seeded at spawn). There is no thread-safety issue.
+- B) Correct — this is the exact anti-pattern the course quiz demonstrates. One `apply_async` call per sample = 1,000,000 IPC messages. Each sample takes ~1 µs to compute; each IPC round-trip costs ~10–100 µs. The overhead is 10–100× the useful work. The fix is `pi_chunked.py`: submit 10 tasks of 100,000 samples each.
+- C) Incorrect — the `__main__` guard is present and correctly wraps the pool creation and usage. Workers receive tasks via the queue and execute `sample()` without issues.
+- D) Incorrect — `sum(r.get() ...)` does collect results sequentially, but workers run concurrently while the main process iterates. The bottleneck is the 1,000,000-task IPC overhead, not the sequential result collection.
+
+---
+
+## Q24 — Chunked vs Per-Sample Parallelism
+
+> **Week reference:** Week 5
+
+```python
+import random, multiprocessing
+
+def sample_multiple(n):
+    hits = 0
+    for _ in range(n):
+        x = random.uniform(-1.0, 1.0)
+        y = random.uniform(-1.0, 1.0)
+        if x**2 + y**2 <= 1:
+            hits += 1
+    return hits
+
+if __name__ == '__main__':
+    samples = 1_000_000
+    n_proc = 10
+    chunk = samples // n_proc          # 100_000 per worker
+    pool = multiprocessing.Pool(n_proc)
+    results = [pool.apply_async(sample_multiple, (chunk,))
+               for _ in range(n_proc)]
+    hits = sum(r.get() for r in results)
+    pi = 4.0 * hits / samples
+    print(pi)
+```
+
+**Compared to the per-sample version (Q23), why is this code significantly faster?**
+
+- A) `sample_multiple` uses a compiled C extension that bypasses the GIL
+- B) Only 10 IPC round-trips are made instead of 1,000,000; each worker does 100,000 samples locally, so the IPC overhead is amortised over 100,000 units of work per trip
+- C) Using `range` instead of `random.uniform` in a loop is faster
+- D) `pool.apply_async` with a tuple argument is faster than without arguments
+
+**Answer: B**
+
+- A) Incorrect — `sample_multiple` is pure Python, just like `sample`. No C extensions are involved. The GIL is not the relevant factor here (multiprocessing bypasses it regardless).
+- B) Correct — 10 IPC calls instead of 1,000,000: overhead drops by 100,000×. Each worker receives one argument (`chunk = 100,000`), loops 100,000 times locally, and returns one integer. Total IPC cost ≈ 10 × 100 µs = 1 ms vs 1,000,000 × 100 µs = 100 seconds for the per-sample version.
+- C) Incorrect — both versions call `random.uniform` per sample; the loop structure is essentially identical. The speedup comes from reduced IPC, not loop mechanics.
+- D) Incorrect — `apply_async` with or without arguments has essentially the same overhead. The argument tuple `(chunk,)` is trivially small to pickle; this is not the source of the speedup.
+
+---
+
+## Q25 — `fork` Inherits Parent State
+
+> **Week reference:** Week 5
+
+```python
+import multiprocessing
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def worker_task(x):
+    logger.info(f"processing {x}")
+    return x * 2
+
+if __name__ == '__main__':
+    multiprocessing.set_start_method('fork')
+    with multiprocessing.Pool(4) as pool:
+        results = pool.map(worker_task, range(8))
+    print(results)
+```
+
+**On macOS, what risk does `set_start_method('fork')` introduce in this code?**
+
+- A) `fork` cannot be used on macOS at all; this raises `OSError`
+- B) The `logging` module uses internal locks; if a lock is held in the parent at fork time, the child inherits a locked lock with no thread to release it, potentially causing a deadlock on the first `logger.info` call in a worker
+- C) `fork` causes all workers to share the same RNG state, making `random` calls non-random
+- D) `set_start_method` must be called before importing `logging`; calling it after causes undefined behaviour
+
+**Answer: B**
+
+- A) Incorrect — `fork` is available on macOS (POSIX-compliant). Python emits a `DeprecationWarning` in newer versions but it does not raise `OSError`.
+- B) Correct — the `logging` module's `StreamHandler` uses a lock to prevent interleaved output. If a log message is in progress in the parent when `fork` fires, the child inherits the locked lock. The lock's owning thread does not exist in the child, so when the child calls `logger.info`, it tries to acquire the lock and hangs forever. This is a real production issue on macOS and the reason `spawn` is the macOS default.
+- C) Incorrect — `fork` does copy the parent's RNG state to all children (so each child starts with the same seed). However this causes correlated random numbers, not a deadlock. It is a correctness issue for Monte Carlo work but not the "risk" the question targets.
+- D) Incorrect — `set_start_method` can be called at any point before the first `Pool` is created. The import order does not affect its behaviour.
+
+---
+
+## Q26 — `ProcessPoolExecutor.map` vs `Pool.starmap`
+
+> **Week reference:** Week 5
+
+```python
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import Pool
+
+def distance(x, y):
+    return ((x[0]-y[0])**2 + (x[1]-y[1])**2)**0.5
+
+points_a = [(0,0), (1,1), (2,2)]
+points_b = [(3,3), (4,4), (5,5)]
+
+if __name__ == '__main__':
+    # Attempt 1: ProcessPoolExecutor
+    with ProcessPoolExecutor(4) as ex:
+        results1 = list(ex.map(distance, points_a, points_b))
+
+    # Attempt 2: multiprocessing.Pool
+    pairs = list(zip(points_a, points_b))
+    with Pool(4) as pool:
+        results2 = pool.starmap(distance, pairs)
+
+    print(results1)
+    print(results2)
+```
+
+**What does each approach print?**
+
+- A) Both print `[4.243, 4.243, 4.243]` — both correctly compute distances between paired points
+- B) `results1` prints `[4.243, 4.243, 4.243]`; `results2` raises `TypeError` because `starmap` cannot unpack coordinate tuples
+- C) `results1` raises `TypeError`; `results2` prints `[4.243, 4.243, 4.243]`
+- D) Both raise `TypeError` — neither `ex.map` nor `pool.starmap` can handle tuple arguments for functions expecting two arguments
+
+**Answer: A**
+
+- A) Correct — `ProcessPoolExecutor.map(func, iter1, iter2)` accepts multiple iterables and passes one element from each as separate positional arguments (like Python's built-in `map`). `distance(points_a[i], points_b[i])` is called for each `i`. `Pool.starmap(func, [(a0,b0), (a1,b1), ...])` unpacks each tuple as positional arguments: `distance(*pair)`. Both call `distance((0,0), (3,3))` etc., computing `sqrt(18) ≈ 4.243`. Both produce identical results.
+- B) Incorrect — `pool.starmap(distance, pairs)` with `pairs = [((0,0),(3,3)), ...]` correctly unpacks each 2-tuple as `distance((0,0), (3,3))`. The function receives two tuple arguments, which is what it expects.
+- C) Incorrect — `ex.map(distance, points_a, points_b)` passes elements from both iterables as separate arguments. This is the standard multi-iterable `map` protocol and works correctly.
+- D) Incorrect — both approaches are designed for multi-argument functions. `ex.map` with multiple iterables and `pool.starmap` with a list of argument tuples both work correctly.
+
+---
+
+## Q27 — Lambda Pickling Failure with `spawn`
+
+> **Week reference:** Week 5
+
+```python
+import multiprocessing
+
+if __name__ == '__main__':
+    multiprocessing.set_start_method('spawn')
+    with multiprocessing.Pool(4) as pool:
+        results = pool.map(lambda x: x**3, range(10))
+    print(results)
+```
+
+**What error does this raise, and on which line does it occur?**
+
+- A) `RuntimeError: context has already been set` — `set_start_method('spawn')` cannot be called inside `if __name__ == '__main__':`
+- B) `AttributeError: Can't pickle local object '<lambda>'` — raised when `pool.map` tries to pickle the lambda to send it to workers
+- C) `PicklingError: Can't pickle <class 'function'>` — raised when the pool is created with `spawn`
+- D) The code runs correctly and prints `[0, 1, 8, 27, 64, 125, 216, 343, 512, 729]`
+
+**Answer: B**
+
+- A) Incorrect — `set_start_method` can be called inside `if __name__ == '__main__':` as long as it is called before any Pool is created. No `RuntimeError` here.
+- B) Correct — `pool.map` attempts to pickle the `lambda x: x**3` to serialize it into the task queue for workers. Python's `pickle` cannot serialize lambdas because they are anonymous and have no importable name. The error is `AttributeError: Can't pickle local object '<lambda>'`, raised at the `pool.map(...)` call.
+- C) Incorrect — the pool itself is created successfully; workers are spawned without issue. The pickling error occurs specifically when the task function (the lambda) is serialized, not at pool creation time.
+- D) Incorrect — this would be the correct output if the code worked. But with `spawn` and a lambda, it always fails with a pickling error.
+
+---
+
+## Q28 — `RawArray` Shared Memory Pattern
+
+> **Week reference:** Week 6
+
+```python
+import ctypes
+import multiprocessing as mp
+import numpy as np
+
+def init(shared_):
+    global shared_arr
+    shared_arr = shared_
+
+def add_one(i):
+    arr = np.frombuffer(shared_arr, dtype='float32')
+    arr[i] += 1.0
+
+if __name__ == '__main__':
+    data = np.array([10.0, 20.0, 30.0, 40.0], dtype='float32')
+    raw = mp.RawArray(ctypes.c_float, data.size)
+    buf = np.frombuffer(raw, dtype='float32')
+    np.copyto(buf, data)
+
+    with mp.Pool(4, initializer=init, initargs=(raw,)) as pool:
+        pool.map(add_one, range(4))
+
+    final = np.frombuffer(raw, dtype='float32')
+    print(final)
+```
+
+**What does `final` print?**
+
+- A) `[10. 20. 30. 40.]` — workers operate on their own copies; the `RawArray` in the main process is unchanged
+- B) `[11. 21. 31. 41.]` — workers modify the shared `RawArray` directly; changes are visible in the main process
+- C) `[14. 24. 34. 44.]` — each of 4 workers adds 1.0 to all 4 elements
+- D) A random result — concurrent writes to shared memory without locks cause data races
+
+**Answer: B**
+
+- A) Incorrect — `RawArray` is a shared memory object. Workers do not receive copies; they access the same physical memory pages as the main process. Changes made by workers are immediately visible to the main process.
+- B) Correct — each worker is assigned a unique index `i` (0, 1, 2, 3) via `pool.map(add_one, range(4))`. Worker 0 adds 1 to index 0, worker 1 to index 1, etc. Since each worker writes to a distinct array element, there are no data races. `final = [11., 21., 31., 41.]`.
+- C) Incorrect — each worker receives a single index `i` and only modifies `arr[i]`. Worker 0 only touches index 0, not all 4 elements.
+- D) Incorrect — a data race would occur only if multiple workers wrote to the same index simultaneously. Here each index is assigned to exactly one worker (`range(4)` distributes indices 0–3 one per worker), so no race condition exists.
+
+---
+
+## Q29 — Non-Associative Operator in Reduction
+
+> **Week reference:** Week 6
+
+```python
+def abssum(x, y):
+    return abs(x + y)
+
+# Tree reduction applied to [-3, 2, -5, 4]:
+# Round 1 (parallel): abssum(-3, 2) = 1,  abssum(-5, 4) = 1
+# Round 2 (parallel): abssum(1, 1) = 2
+
+# Serial left-to-right application:
+# abssum(abssum(abssum(-3, 2), -5), 4)
+# = abssum(abssum(1, -5), 4)
+# = abssum(4, 4) = 8    ← different from 2!
+```
+
+**What does this demonstrate about using `abssum` as a parallel reduction operator?**
+
+- A) The tree reduction is correct; the serial version is wrong because it uses a different ordering
+- B) `abssum` is not associative: different groupings give different results (2 vs 8), making it invalid for parallel reduction trees that apply the operator in unpredictable groupings
+- C) Both results are wrong; the correct answer is `abs(-3+2-5+4) = 2`, which equals the tree result, so the tree reduction is valid
+- D) The parallel tree is valid because it always produces the minimum possible result, which is desirable for numerical stability
+
+**Answer: B**
+
+- A) Incorrect — a valid combining operator must give the same result regardless of grouping. "Different ordering" is exactly the problem: a correct operator (like `+`) gives the same answer regardless of grouping order. `abssum` does not.
+- B) Correct — the tree gives 2; serial left-to-right gives 8; other groupings give other values. `abssum` is not associative: `abs(abs(a+b)+c) ≠ abs(a+abs(b+c))` in general. Parallel reduction trees apply the operator in a tree structure that changes grouping; a non-associative operator produces incorrect and unpredictable results.
+- C) Incorrect — `abs(-3+2-5+4) = abs(-2) = 2`. The tree result happens to equal this, but that is coincidental for this specific input. For other inputs the tree result would differ. The operator's non-associativity means you cannot rely on the result being correct.
+- D) Incorrect — there is no mathematical guarantee that a parallel reduction tree with `abssum` produces a minimum, maximum, or any other useful value. The result is simply unpredictable and incorrect.
+
+---
+
+## Q30 — `pool.map` with `chunksize` Effect on `time` Output
+
+> **Week reference:** Week 6
+
+```python
+# Scenario A: chunksize=1 (one task per IPC call)
+# 10,000 tasks each taking 1ms
+# pool.map(func, range(10_000), chunksize=1)
+# Result: real=5.2s, user=19.8s
+
+# Scenario B: chunksize=250 (40 IPC calls total)
+# same 10,000 tasks, same 1ms each
+# pool.map(func, range(10_000), chunksize=250)
+# Result: real=2.6s, user=10.2s
+```
+
+**Why does Scenario B have lower `user` time than Scenario A, even though both do the same computation?**
+
+- A) `chunksize=250` forces workers to run faster by using SIMD instructions
+- B) Scenario A makes 10,000 IPC round-trips (each with pickle/unpickle overhead); Scenario B makes 40 round-trips. The IPC overhead is CPU work counted in `user` time; reducing IPC calls reduces `user` time by removing that overhead
+- C) `chunksize=1` causes context switching which is counted as `sys` time, not `user` time
+- D) Both `user` times should be identical; the numbers given are physically impossible
+
+**Answer: B**
+
+- A) Incorrect — `chunksize` controls scheduling granularity, not instruction-level optimisation. No SIMD or compiler effects are involved.
+- B) Correct — IPC overhead (pickling, queue writes, queue reads, unpickling) is Python/C code that runs on the CPU and is counted as `user` time. Scenario A: 10,000 round-trips × ~100 µs IPC each = ~1 second of pure IPC overhead added to `user`. Scenario B: 40 round-trips × ~100 µs = ~4 ms of IPC overhead — negligible. The reduction in IPC work reduces `user` time proportionally. Both real and user time decrease because idle-free workers do less overhead work per unit of useful computation.
+- C) Incorrect — IPC queue operations involve kernel calls (pipe reads/writes) which do add `sys` time, but the dominant cost of pickling and unpickling is pure `user`-space CPU work. Context switching overhead between the pool workers themselves is also a `sys`-time effect, but the primary explanation is IPC pickle overhead in user space.
+- D) Incorrect — the numbers are physically plausible. A 2× difference in `user` time between `chunksize=1` and `chunksize=250` for 1ms tasks is consistent with IPC overhead dominating at fine granularity.
 
 ---

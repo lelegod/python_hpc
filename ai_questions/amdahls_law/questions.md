@@ -27,6 +27,17 @@
 - [Q20 — Serial Fraction Bottleneck at Scale](#q20-serial-fraction-bottleneck-at-scale)
 - [Q21 — Comparing Efficiency Before and After Optimization](#q21-comparing-efficiency-before-and-after-optimization)
 - [Q22 — Amdahl Limit When Serial Work is Fixed Overhead](#q22-amdahl-limit-when-serial-work-is-fixed-overhead)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q23 — Optimize the Serial Part vs Add Cores](#q23--optimize-the-serial-part-vs-add-cores)
+- [Q24 — Two-Point Speedup Curve to Pin Down F](#q24--two-point-speedup-curve-to-pin-down-f)
+- [Q25 — Weak Scaling vs Strong Scaling](#q25--weak-scaling-vs-strong-scaling)
+- [Q26 — Parallel Fraction from a Plot Saturation Value](#q26--parallel-fraction-from-a-plot-saturation-value)
+- [Q27 — S(p) vs T(p) Confusion Trap](#q27--sp-vs-tp-confusion-trap)
+- [Q28 — Serial Fraction Derived from a Two-Phase Program](#q28--serial-fraction-derived-from-a-two-phase-program)
+- [Q29 — Gustafson Scaled Speedup Exceeds Amdahl S_max](#q29--gustafson-scaled-speedup-exceeds-amdahl-s_max)
+- [Q30 — Hardware Ceiling vs Theoretical S_max](#q30--hardware-ceiling-vs-theoretical-s_max)
+- [Q31 — Efficiency as p Approaches Infinity](#q31--efficiency-as-p-approaches-infinity)
+- [Q32 — Parallel Fraction Cannot Exceed 1](#q32--parallel-fraction-cannot-exceed-1)
 
 ---
 
@@ -492,3 +503,231 @@ A program always spends exactly 4 seconds on serial setup regardless of problem 
 - B) Incorrect — S(8) = 8.0 requires perfect linear speedup (F = 1.0). With 4 seconds of mandatory serial work, the parallel part alone takes at least 4s on any number of cores, so T(8) ≥ 4s and S(8) ≤ 10. Linear speedup is impossible.
 - C) Incorrect — S_max = 40 would require 1/(1-F) = 40, meaning 1-F = 0.025, so F = 0.975. That corresponds to only 1 second of serial work. The problem states 4 seconds (10% of 40s).
 - D) Incorrect — S_max = 20 requires F = 0.95 (serial fraction 5%), which corresponds to 2 seconds of serial work. The setup is 4 seconds (10%), giving S_max = 10, not 20.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets: optimize-serial-vs-add-cores decisions, two-phase programs, Gustafson scaled speedup, hardware ceiling vs S_max, S(p)/T(p) confusion, weak vs strong scaling, and edge cases not covered in Sets 1–2.
+
+---
+
+## Q23 — Optimize the Serial Part vs Add Cores
+
+> **Week reference:** Week 5
+
+**Mental Model:** When the serial fraction is the bottleneck, optimizing it always raises S_max and benefits every core count — whereas adding more cores to a fixed S_max delivers only diminishing returns beyond a certain point.
+
+A program has a serial phase of 20 seconds and a parallel phase of 100 seconds (total: 120 seconds on one core), matching the DTU quiz scenario. The maximum speedup S_max = 6. A new optimization reduces the serial phase from 20 s to 5 s, giving a new total T'(1) = 105 s. After optimization, what is the new S_max?
+
+- A) S_max' = 6 — the maximum speedup is unchanged because the parallel phase still takes 100 s.
+- B) S_max' = 21 — because the new serial fraction is 5/105.
+- C) S_max' = 20 — because the serial phase was reduced by a factor of 4.
+- D) S_max' = 100 — because the parallel phase dominates the new total.
+
+**Answer: B**
+
+- A) Incorrect — S_max depends on the serial fraction, which changes when the serial phase is reduced. The old serial fraction was 20/120 = 1/6, giving S_max = 6. After optimization the serial fraction is 5/105 = 1/21, giving S_max = 21. Reducing the serial phase always increases S_max.
+- B) Correct — New parallel fraction F' = 100/105 = 20/21. New serial fraction = 5/105 = 1/21. S_max' = 1/(1 - 20/21) = 1/(1/21) = 21. The optimization dramatically raises the ceiling from 6× to 21×.
+- C) Incorrect — The original serial fraction was 1/6, giving S_max = 6. Multiplying S_max by 4 (=20/5) would give 24, not 21, and does not follow the formula. S_max is not proportional to the reduction factor of the serial phase in isolation.
+- D) Incorrect — S_max = 100 would require the entire program to be parallelizable (F = 1.0). There is still 5 s of serial work, so the serial fraction is 5/105 ≠ 0, and S_max is finite at 21.
+
+---
+
+## Q24 — Two-Point Speedup Curve to Pin Down F
+
+> **Week reference:** Week 5
+
+**Mental Model:** Two distinct speedup measurements at different core counts are sufficient to uniquely determine F — solve the Amdahl equation at each point and check consistency, or solve the two simultaneous equations algebraically.
+
+A developer measures S(2) = 1.6 and S(4) = 2.29 for the same program. Using only the measurement at p = 4 and the formula F = p(1 - 1/S)/(p - 1), what is the parallel fraction F?
+
+- A) F = 0.60
+- B) F = 0.75
+- C) F = 0.80
+- D) F = 0.90
+
+**Answer: B**
+
+- A) Incorrect — F = 0.60 gives S(4) = 1/(0.40 + 0.15) = 1/0.55 ≈ 1.82, not 2.29. This value of F produces too little speedup.
+- B) Correct — F = 4 × (1 - 1/2.29) / (4 - 1) = 4 × (1 - 0.4367) / 3 = 4 × 0.5633 / 3 ≈ 2.253 / 3 ≈ 0.751 ≈ 0.75. Verify: S(4) = 1/(0.25 + 0.75/4) = 1/(0.25 + 0.1875) = 1/0.4375 ≈ 2.286 ≈ 2.29 ✓. Cross-check with S(2): 1/(0.25 + 0.375) = 1/0.625 = 1.60 ✓.
+- C) Incorrect — F = 0.80 gives S(4) = 1/(0.20 + 0.20) = 1/0.40 = 2.50, not 2.29. F = 0.80 overestimates the observed speedup.
+- D) Incorrect — F = 0.90 gives S(4) = 1/(0.10 + 0.225) = 1/0.325 ≈ 3.08, well above the observed 2.29. A higher F always produces higher speedup; 0.90 is too large.
+
+---
+
+## Q25 — Weak Scaling vs Strong Scaling
+
+> **Week reference:** Week 5
+
+**Mental Model:** Strong scaling fixes the problem size and adds cores — speedup is bounded by Amdahl's Law. Weak scaling grows the problem proportionally with the number of cores — the goal is constant runtime, and Gustafson's Law describes the scaled speedup.
+
+Which statement best distinguishes weak scaling from strong scaling in the context of Amdahl's and Gustafson's Laws?
+
+- A) Strong scaling is described by Gustafson's Law; weak scaling is described by Amdahl's Law.
+- B) Strong scaling keeps problem size fixed and is bounded by Amdahl's Law; weak scaling grows the problem with core count and is better described by Gustafson's Law.
+- C) Both laws apply equally to both scaling regimes; the difference is only in how efficiency is defined.
+- D) Weak scaling is used only when F = 1.0; strong scaling applies for all values of F.
+
+**Answer: B**
+
+- A) Incorrect — the assignment is reversed. Amdahl's Law models strong scaling (fixed problem, more cores). Gustafson's Law models weak scaling (problem grows with cores, constant runtime per core).
+- B) Correct — Strong scaling: fixed problem size, increase cores, speedup bounded by S_max = 1/(1-F) (Amdahl). Weak scaling: problem size grows proportionally with cores so each core always has the same workload; Gustafson's formula S_G(p) = p - α(p-1) captures the "scaled" speedup achievable and grows nearly linearly with p when α is small.
+- C) Incorrect — the two laws model fundamentally different experimental designs. Amdahl assumes a fixed amount of work; Gustafson assumes that work scales with available resources. Efficiency is defined consistently in both (E = S/p), but the formulas and limits differ.
+- D) Incorrect — weak scaling is not restricted to F = 1.0. Programs with any serial fraction can be run under a weak-scaling regime; the key is that the problem size increases to keep per-core work constant, not that the program is fully parallel.
+
+---
+
+## Q26 — Parallel Fraction from a Plot Saturation Value
+
+> **Week reference:** Week 5
+
+**Mental Model:** Reading S_max from a speedup-vs-cores plot and inverting Amdahl's formula — the most common exam trap is confusing the serial fraction (1 - F = 1/S_max) with the parallel fraction F, accidentally reporting 0.2 when the answer is 0.8.
+
+A speed-up curve plotted from timing data for a production program saturates at approximately 5 as the number of cores increases. What is the parallel fraction F?
+
+- A) F = 0.20
+- B) F = 0.75
+- C) F = 0.80
+- D) F = 0.95
+
+**Answer: C**
+
+- A) Incorrect — F = 0.20 would give S_max = 1/(1 - 0.20) = 1/0.80 = 1.25. A saturation at 1.25 is nearly no speedup at all. This confuses the serial fraction (1 - F = 0.20) with the parallel fraction (F = 0.80).
+- B) Incorrect — F = 0.75 gives S_max = 1/(1 - 0.75) = 4.0, not 5. A program saturating at 4 would have F = 0.75; the question states saturation at 5.
+- C) Correct — S_max = 5 → 1/(1-F) = 5 → 1-F = 0.20 → F = 0.80. This is the standard inversion of Amdahl's formula and matches the DTU 2024 exam Q2 scenario exactly.
+- D) Incorrect — F = 0.95 gives S_max = 1/(1 - 0.95) = 20, which is far above the observed saturation of 5. F = 0.95 would correspond to a much more parallel program.
+
+---
+
+## Q27 — S(p) vs T(p) Confusion Trap
+
+> **Week reference:** Week 5
+
+**Mental Model:** Speedup S(p) = T(1)/T(p) is always ≥ 1 and increases with p (approaching S_max). Runtime T(p) = T(1)/S(p) is always ≤ T(1) and decreases with p (approaching a floor of (1-F)×T(1)). A very common exam trap is to compute S(p) but report T(p), or vice versa.
+
+A program with F = 0.9 runs for T(1) = 50 seconds on one core. Which answer correctly gives BOTH S(10) and T(10)?
+
+- A) S(10) ≈ 5.26, T(10) ≈ 9.5 seconds
+- B) S(10) ≈ 5.26, T(10) = 50 seconds
+- C) S(10) = 10, T(10) = 5 seconds
+- D) S(10) ≈ 9.5, T(10) ≈ 5.26 seconds
+
+**Answer: A**
+
+- A) Correct — S(10) = 1/((1-0.9) + 0.9/10) = 1/(0.1 + 0.09) = 1/0.19 ≈ 5.263. T(10) = T(1)/S(10) = 50/5.263 ≈ 9.5 s. Sanity check: the serial portion alone takes (1-F)×T(1) = 0.1×50 = 5 s, so T(10) must be above 5 s — 9.5 s is consistent.
+- B) Incorrect — T(10) = 50 s would mean no speedup at all (S = 1). Using 10 cores with F = 0.9 clearly provides speedup above 1; the runtime must be well below 50 s.
+- C) Incorrect — S(10) = 10 would require F = 1.0 (zero serial fraction). With a 10% serial portion, S_max = 10 is the ceiling only as p → ∞; at finite p = 10, S is strictly less than S_max. S(10) ≈ 5.26, not 10.
+- D) Incorrect — this swaps the values of S(10) and T(10). The numeric value 9.5 is T(10) in seconds, not the speedup. The speedup ≈ 5.26 is a dimensionless ratio, not a time. Swapping them is the classic S(p) / T(p) confusion trap.
+
+---
+
+## Q28 — Serial Fraction Derived from a Two-Phase Program
+
+> **Week reference:** Week 5
+
+**Mental Model:** For a program split into a fixed serial phase and a fully parallel phase, the serial fraction is always the serial phase time divided by the total single-core time — not divided by the parallel phase time alone.
+
+A program consists of two phases running on one core: a serial data-loading phase (20 s) that cannot be parallelized, and a parallel computation phase (80 s) that is fully parallelizable. What is the serial fraction used in Amdahl's Law, and what is S_max?
+
+- A) Serial fraction = 20/80 = 0.25, S_max = 4
+- B) Serial fraction = 20/100 = 0.20, S_max = 5
+- C) Serial fraction = 80/100 = 0.80, S_max = 1.25
+- D) Serial fraction = 20/100 = 0.20, S_max = 20
+
+**Answer: B**
+
+- A) Incorrect — the serial fraction is always expressed as a fraction of the total runtime, not of the parallel phase alone. 20/80 = 0.25 would mean 25% serial, giving S_max = 4, but this uses the wrong denominator.
+- B) Correct — total single-core runtime T(1) = 20 + 80 = 100 s. Serial fraction = 20/100 = 0.20. Parallel fraction F = 0.80. S_max = 1/(1 - 0.80) = 1/0.20 = 5. This matches the course quiz scenario directly.
+- C) Incorrect — 80/100 = 0.80 is the parallel fraction F, not the serial fraction. Plugging 0.80 in as the serial fraction into 1/(1-F) would give S_max = 1/0.20 = 5, but the formula would be misapplied (the parallel fraction cannot equal the serial fraction in Amdahl's formula).
+- D) Incorrect — the serial fraction 0.20 is correct, but S_max = 1/0.20 = 5, not 20. S_max = 20 would require a serial fraction of 0.05 (5%). This error arises from multiplying the fraction by 100 before inverting.
+
+---
+
+## Q29 — Gustafson Scaled Speedup Exceeds Amdahl S_max
+
+> **Week reference:** Week 5
+
+**Mental Model:** Amdahl's S_max is a hard ceiling for a fixed workload. Gustafson's scaled speedup S_G(p) can exceed S_max because the workload grows with p — more cores process more data in the same time, so the "speedup" measures a different quantity (work done vs a hypothetical single-core run of the same large problem).
+
+A program has serial fraction α = 0.1 (Gustafson notation). On p = 20 cores, Gustafson's scaled speedup S_G(20) = 19.05. What is Amdahl's S_max for the same program (using F = 1 - α = 0.9), and which is larger?
+
+- A) S_max = 9; S_G = 19.05 > S_max because Gustafson's model is more optimistic.
+- B) S_max = 10; S_G = 19.05 > S_max because Gustafson grows the problem with cores.
+- C) S_max = 10; S_max > S_G because the Amdahl ceiling is always higher than any finite-p scaled speedup.
+- D) S_max = 0.9; Gustafson and Amdahl give equivalent results when F = 1 - α.
+
+**Answer: B**
+
+- A) Incorrect — S_max = 1/(1 - 0.9) = 1/0.1 = 10, not 9. S_max = 9 would require a serial fraction of 1/9 ≈ 0.111, corresponding to F ≈ 0.889. The correct answer is S_max = 10.
+- B) Correct — S_max (Amdahl, fixed problem) = 1/(1 - 0.9) = 10. S_G(20) = 20 - 0.1 × 19 = 19.05. S_G = 19.05 > S_max = 10 because Gustafson's model assumes the problem size scales with p: when you add cores you solve a proportionally larger problem in the same wall time. The comparison is not apples-to-apples; S_G measures scaled throughput, not speedup on a fixed problem.
+- C) Incorrect — the comparison is reversed. Amdahl's S_max = 10 is lower than Gustafson's S_G(20) = 19.05. Amdahl sets a ceiling for fixed-size speedup; Gustafson's quantity can exceed that ceiling because it describes a different experiment (scaled problem size).
+- D) Incorrect — S_max is not 0.9. F = 0.9 is the parallel fraction; S_max = 1/(1 - F) = 10. The two laws use the same parameters but answer different questions: Amdahl asks "how fast can you solve the same problem?" Gustafson asks "how much more work can you do in the same time?"
+
+---
+
+## Q30 — Hardware Ceiling vs Theoretical S_max
+
+> **Week reference:** Week 5
+
+**Mental Model:** S_max = 1/(1-F) is an asymptotic limit requiring infinite cores. When evaluating whether a speedup target is achievable, you must check S(p) at the actual maximum available core count — not compare the target against S_max. The target may be below S_max yet still unreachable with limited hardware.
+
+A program has parallel fraction F = 0.8 and the best available hardware has 8 cores. Management needs a speedup of at least 4×. S_max = 5 — is the target achievable?
+
+- A) Yes — the target (4×) is below S_max (5×), so enough cores will get there.
+- B) No — S(8) ≈ 3.33 < 4, and the hardware ceiling is below the target even though S_max = 5.
+- C) Yes — S(8) = 4.0 exactly with F = 0.8.
+- D) No — S_max = 5, which means the speedup can never exceed 5, and 4 is within that ceiling but the hardware prevents it from being reached.
+
+**Answer: B**
+
+- A) Incorrect — the target being below S_max only guarantees it is theoretically achievable with a sufficient number of cores. It does not guarantee it is achievable with the specific hardware available (8 cores). Always evaluate S(p) at the actual core count.
+- B) Correct — S(8) = 1/((1-0.8) + 0.8/8) = 1/(0.2 + 0.1) = 1/0.3 ≈ 3.33 < 4. The 8-core machine cannot deliver the required 4× speedup. To reach 4×, you would need to solve 4 = 1/(0.2 + 0.8/p) → p = 0.8/(0.25 - 0.2) = 16 cores. This is the exact DTU 2024 exam Q3 scenario.
+- C) Incorrect — S(8) = 1/0.3 ≈ 3.33, not 4.0. For S(8) = 4.0 with p = 8 you would need 1/(0.2 + 0.8/8) = 1/0.3 ≠ 4; the denominator would need to be 0.25, requiring F ≈ 0.933.
+- D) Incorrect — this answer is true but misleading: yes, the hardware prevents reaching 4× in practice, but the reasoning given is confused. S_max = 5 means the absolute ceiling is 5; 4 is within that ceiling and would be achievable with more cores (~16). The issue is that the company only has 8 cores, not that the physics forbids it.
+
+---
+
+## Q31 — Efficiency as p Approaches Infinity
+
+> **Week reference:** Week 5
+
+**Mental Model:** Efficiency E(p) = S(p)/p is a measure of how well cores are utilized. As p → ∞, S(p) → S_max (a finite constant), so E(p) → S_max/p → 0. Efficiency always falls toward zero as cores increase — it never approaches F or any other fixed fraction.
+
+A program with parallel fraction F = 0.85 is run on successively more cores. Which statement about the long-run behavior of efficiency E(p) = S(p)/p is correct?
+
+- A) E(p) → 0.85 as p → ∞, because efficiency is bounded below by the parallel fraction.
+- B) E(p) → 0 as p → ∞, because S(p) approaches a finite constant while p grows without bound.
+- C) E(p) → 1 as p → ∞, because the serial bottleneck becomes negligible relative to the total work.
+- D) E(p) remains approximately constant at 1/(1-F) for large p.
+
+**Answer: B**
+
+- A) Incorrect — E(p) approaches 0, not F. F is the parallel fraction of work; efficiency measures utilization per core. As p → ∞, S(p) → S_max = 1/(1-F) ≈ 6.67 (for F = 0.85), so E(p) = S(p)/p → 6.67/∞ = 0. The parallel fraction F is irrelevant as a lower bound for E.
+- B) Correct — S(p) → S_max = 1/(1-F) = 1/0.15 ≈ 6.67 as p → ∞. E(p) = S(p)/p → 6.67/p → 0. Efficiency is not bounded away from zero; it falls without limit as cores are added beyond the point of diminishing returns.
+- C) Incorrect — E → 1 would mean perfect linear speedup (S = p), which requires F = 1.0. With a 15% serial fraction the serial portion always consumes a growing fraction of total core-time as p increases, driving E toward zero, not toward 1.
+- D) Incorrect — 1/(1-F) is S_max, a speedup value greater than 1. Efficiency E(p) = S(p)/p is always strictly between 0 and 1 for any p > 1 and F < 1. Efficiency cannot equal or approach a quantity larger than 1.
+
+---
+
+## Q32 — Parallel Fraction Cannot Exceed 1
+
+> **Week reference:** Week 5
+
+**Mental Model:** F is a fraction of total runtime so it must satisfy 0 ≤ F ≤ 1. If back-solving yields F > 1, there is an error in the data or the formula — the most common cause is accidentally using T(p)/T(1) (slowdown ratio) instead of T(1)/T(p) (speedup).
+
+A student measures T(1) = 50 s and T(4) = 60 s and applies the formula F = p(1 - 1/S)/(p - 1) with S = T(1)/T(p) = 50/60. They obtain a negative F value. What does this indicate?
+
+- A) The serial fraction exceeds 100%, which is valid for programs with synchronization overhead.
+- B) The parallel code is slower than the serial code (slowdown), violating the assumption of Amdahl's Law that adding cores helps.
+- C) F is negative because the formula requires S > 1; a sub-unity speedup indicates measurement error that must be discarded.
+- D) The student used the wrong formula; the correct one gives F between 0 and 1 for any S value.
+
+**Answer: B**
+
+- A) Incorrect — a parallel fraction cannot exceed 100% (F > 1 is not meaningful) and cannot be negative. Synchronization overhead is a real-world cost not modelled by basic Amdahl's Law; it is one reason observed speedup can be less than 1.
+- B) Correct — S = T(1)/T(p) = 50/60 ≈ 0.833 < 1 means the 4-core run is slower than the 1-core run (slowdown). In this regime, 1 - 1/S = 1 - 1.2 = -0.2, giving F = 4 × (-0.2) / 3 ≈ -0.267. A negative F signals that the data violates the Amdahl assumption (more cores → no improvement). Real causes include excessive IPC overhead, memory bandwidth saturation, or process-spawn costs dominating a short workload.
+- C) Incorrect — the formula is correct; it is defined for any S. For S < 1 it correctly returns a negative F, which is a diagnostic result indicating invalid (slowdown) data rather than a programming error in the formula.
+- D) Incorrect — the formula is valid regardless of S. There is no alternative formula that produces F ∈ [0, 1] when S < 1; the data itself is outside the regime where Amdahl's Law applies.
+
+---

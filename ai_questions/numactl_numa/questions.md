@@ -27,6 +27,17 @@
 - [Q20 — NUMA Effect on the Speedup Curve Shape](#q20--numa-effect-on-the-speedup-curve-shape)
 - [Q21 — Why the First Socket Sees Fast Access](#q21--why-the-first-socket-sees-fast-access)
 - [Q22 — Combining numactl Flags](#q22--combining-numactl-flags)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q23 — numactl Does Not Migrate Existing Pages](#q23--numactl-does-not-migrate-existing-pages)
+- [Q24 — When Does First-Touch Actually Happen?](#q24--when-does-first-touch-actually-happen)
+- [Q25 — The UMA Fantasy vs NUMA Reality](#q25--the-uma-fantasy-vs-numa-reality)
+- [Q26 — NUMA Con: Access Time Depends on Memory Bank](#q26--numa-con-access-time-depends-on-memory-bank)
+- [Q27 — NUMA Pro: Data-Heavy Tasks Only Stall One CPU](#q27--numa-pro-data-heavy-tasks-only-stall-one-cpu)
+- [Q28 — What Happens When --membind Node Runs Out of Memory?](#q28--what-happens-when---membind-node-runs-out-of-memory)
+- [Q29 — numactl Applies to the Process and Its Forked Children](#q29--numactl-applies-to-the-process-and-its-forked-children)
+- [Q30 — --interleave=all Reduces Peak Per-Node Bandwidth](#q30----interleaveall-reduces-peak-per-node-bandwidth)
+- [Q31 — First-Touch on malloc vs First Write](#q31--first-touch-on-malloc-vs-first-write)
+- [Q32 — Which Workload Sees No Benefit from --interleave=all?](#q32--which-workload-sees-no-benefit-from---interleaveall)
 
 ---
 
@@ -536,3 +547,236 @@ A student wants to ensure that a multiprocessing reduction job runs entirely wit
 - B) Incorrect — `--cpunodebind=0` restricts cores to socket 0 but does not restrict memory placement. Memory will still be allocated using the default first-touch policy. If the main process runs on socket 0, data will be local, but this is not guaranteed without `--membind=0`. More importantly, the student wants an explicit guarantee.
 - C) Correct — `--cpunodebind=0` pins all processes to the cores of NUMA node 0, and `--membind=0` ensures all memory is allocated from NUMA node 0's DRAM. Together, both computation and data are confined to node 0, guaranteeing that every memory access is local with no inter-socket traffic.
 - D) Incorrect — `--membind=1` allocates all memory on NUMA node 1 while the cores (unbound by this flag) may run on socket 0. This would make all accesses remote for socket 0 cores — the worst possible configuration, not the best.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets first-touch timing, page migration limits, UMA vs NUMA architecture, membind failure modes, per-node bandwidth effects, and workload-type matching.
+
+---
+
+## Q23 — numactl Does Not Migrate Existing Pages
+
+> **Week reference:** Week 6
+
+**Mental Model:** numactl sets a memory policy for future allocations only. Pages that have already been allocated and first-touched before numactl takes effect remain on whatever NUMA node they originally landed on. numactl cannot retroactively move pages that are already resident in physical memory.
+
+A student loads a 20 GB array without numactl (landing all pages on NUMA node 0), then wraps a second computation in `numactl --interleave=all python step2.py`. Does the 20 GB array become interleaved?
+
+- A) Yes — `numactl --interleave=all` scans existing allocations and migrates half the pages to node 1 at startup.
+- B) No — numactl sets a policy for future allocations only; the already-placed pages stay on node 0 unless explicitly migrated with kernel interfaces like `move_pages()`.
+- C) Yes — the OS automatically detects the memory imbalance and moves pages to node 1 within a few milliseconds.
+- D) No — numactl refuses to start if any memory is already allocated on node 0.
+
+**Answer: B**
+
+- A) Incorrect — numactl does not scan or migrate existing allocations at startup. It applies a new NUMA memory policy to the process, but physical pages already mapped into the process's address space keep their existing node placement. Re-interleaving requires explicitly freeing and re-allocating the data.
+- B) Correct — numactl's memory policy flags (`--interleave`, `--membind`, `--preferred`) are prospective: they govern where new physical pages will be placed when the OS services future page faults. Pages that were already fault-in before the policy was set remain on their original node. To move them you would need `move_pages()` or `mbind()` with `MPOL_MF_MOVE`.
+- C) Incorrect — Linux's NUMA balancing (autonuma) can migrate hot pages, but this is a background heuristic, not a deterministic guarantee, and it does not happen within milliseconds. It is also not triggered by numactl.
+- D) Incorrect — numactl starts the specified program normally regardless of existing memory state. It does not inspect memory allocation history before launching.
+
+---
+
+## Q24 — When Does First-Touch Actually Happen?
+
+> **Week reference:** Week 6
+
+**Mental Model:** In Linux, `malloc()` (or `np.empty()`) only reserves virtual address space — it does not allocate physical pages. Physical pages are allocated on first write (or, for read-only mappings, on first read that triggers a page fault). This means the core that first writes to a newly allocated buffer, not the core that called malloc, determines which NUMA node the pages land on.
+
+A Python process on socket 0 calls `arr = np.empty((1_000_000,), dtype='float32')` and immediately passes `arr` to a worker process on socket 1, which fills it with `arr[:] = 0.0`. On a dual-socket NUMA machine without numactl, on which NUMA node do arr's pages reside after the fill?
+
+- A) NUMA node 0 — because `np.empty()` was called in the socket 0 process, which allocates the pages.
+- B) NUMA node 1 — because the worker process on socket 1 is the first to write to the pages, triggering the physical allocation via first-touch.
+- C) Evenly split between both nodes — `np.empty()` uses interleaved allocation by default.
+- D) Whichever node has more free memory at the time of the write.
+
+**Answer: B**
+
+- A) Incorrect — `np.empty()` calls `malloc()` which on Linux only reserves virtual address space (via `mmap` or `brk`). No physical pages are allocated at this point; the pages are in a "not-yet-backed" state. The NUMA node is determined at first write, not at malloc time.
+- B) Correct — The worker on socket 1 performs `arr[:] = 0.0`, which is the first write to each page. This write triggers a page fault for each 4 KB page, and the OS satisfies each fault by allocating a physical page from socket 1's local DRAM (since the faulting core is on socket 1). All pages therefore land on NUMA node 1.
+- C) Incorrect — `np.empty()` uses the default NUMA policy (first-touch), not interleaving. Interleaving must be explicitly requested via numactl or `mbind()`.
+- D) Incorrect — Linux does not dynamically load-balance NUMA placement based on free memory under the default policy. Free memory on the target node is a factor only if the local node is exhausted; otherwise first-touch always wins.
+
+---
+
+## Q25 — The UMA Fantasy vs NUMA Reality
+
+> **Week reference:** Week 6
+
+**Mental Model:** The lecture contrasts "the fantasy" (a single flat memory pool equidistant from both CPUs) with "the reality" (two separate DRAM banks, each attached to one socket, connected by a slow inter-socket link). Modern HPC servers implement the reality, which is why NUMA-aware programming is necessary.
+
+The lecture slide titled "The fantasy" shows two CPUs connected to a single shared memory block. The slide titled "The reality: Non-Uniform Memory Access" shows two CPUs each connected to their own memory block with a slow inter-socket link. Which statement correctly identifies what is depicted?
+
+- A) The fantasy is how Linux presents memory to applications; the reality is the physical hardware underneath.
+- B) The fantasy is an architectural design that does not exist in practice; the reality is that dual-socket servers have separate per-socket DRAM banks with non-uniform access latency.
+- C) Both diagrams describe the same hardware; "non-uniform" refers only to cache levels, not DRAM placement.
+- D) The reality diagram describes a UMA (Uniform Memory Access) system, not a NUMA system.
+
+**Answer: B**
+
+- A) Incorrect — Linux does not hide NUMA from applications; in fact, it exposes it via `numactl --hardware` and the `/sys/devices/system/node/` filesystem. The OS is aware of NUMA topology and uses it for memory placement decisions.
+- B) Correct — The fantasy is UMA (uniform memory access): a theoretical design where both CPUs access a single shared memory at equal latency. In reality, HPC servers attach separate DRAM banks to each socket. Both CPUs can access both banks, but local access (same socket) is fast and remote access (across the inter-socket link) is slow — approximately 2.1x slower on the DTU cluster.
+- C) Incorrect — The non-uniformity in NUMA refers to DRAM access latency, not cache levels. L1/L2/L3 cache hierarchies exist within each socket but are separate from the NUMA topology described here.
+- D) Incorrect — The reality diagram explicitly depicts NUMA: two separate memory banks, a "Fast" local path and a "Slow" inter-socket path. UMA would show a single shared memory with equal-length paths to both CPUs.
+
+---
+
+## Q26 — NUMA Con: Access Time Depends on Memory Bank
+
+> **Week reference:** Week 6
+
+**Mental Model:** The lecture explicitly lists NUMA's con: "Access time depends on mem. bank." This means the same virtual address can incur wildly different latencies depending on which core is performing the access and on which socket the backing physical page happens to reside. This unpredictability is the root cause of the NUMA plateau in the speedup curve.
+
+The lecture slide on NUMA tradeoffs lists one "Con." What is it, and why does it matter for HPC workloads?
+
+- A) Con: NUMA doubles memory consumption because each socket stores a redundant copy of all data.
+- B) Con: NUMA prevents more than one process from accessing memory simultaneously due to hardware locking.
+- C) Con: Access time depends on the memory bank — a core on socket 1 accessing data on NUMA node 0 pays a higher latency than a core on socket 0 accessing the same data.
+- D) Con: NUMA requires the use of numactl for any Python program to run correctly on HPC clusters.
+
+**Answer: C**
+
+- A) Incorrect — NUMA does not store redundant copies of data. Each page resides on exactly one NUMA node's DRAM. Total memory capacity is the sum of both nodes; there is no duplication overhead.
+- B) Incorrect — NUMA does not introduce hardware locking on memory access. Multiple processes can read from different NUMA nodes simultaneously. The performance issue is latency, not mutual exclusion.
+- C) Correct — The sole con listed in the lecture is that access time depends on the memory bank. When a core on socket 1 accesses a page homed on node 0, it must traverse the inter-socket link (Intel QPI/UPI or AMD Infinity Fabric), adding latency. This asymmetry causes the NUMA plateau: workers on socket 1 are slower than workers on socket 0 for the same shared data.
+- D) Incorrect — Python programs run correctly on NUMA systems without numactl; they just may not perform optimally. numactl is an optimization tool, not a correctness requirement.
+
+---
+
+## Q27 — NUMA Pro: Data-Heavy Tasks Only Stall One CPU
+
+> **Week reference:** Week 6
+
+**Mental Model:** The lecture lists two NUMA pros: "Double the bandwidth" and "Data heavy tasks only stalls one CPU." The second pro means that when a memory-bound task runs entirely on one socket, a memory bandwidth stall (waiting for DRAM) only affects that socket's CPU. The other socket's CPU and DRAM remain free for other work, which is an advantage for running two independent memory-bound workloads simultaneously.
+
+The lecture lists "Data heavy tasks only stalls one CPU" as a NUMA pro. What does this mean in practice?
+
+- A) NUMA hardware prevents data-heavy tasks from running on more than one CPU simultaneously.
+- B) When a memory-bound task is bound to one socket, its DRAM bandwidth saturation only blocks that socket's cores; the other socket's cores and DRAM remain available for independent work.
+- C) Data-heavy tasks require only one CPU core because NUMA provides automatic data prefetching.
+- D) A stall on one socket causes the other socket to compensate by running at double speed.
+
+**Answer: B**
+
+- A) Incorrect — NUMA does not prevent multi-socket parallelism. The point is about resource isolation, not restrictions. Without numactl, tasks freely span both sockets.
+- B) Correct — In a UMA system, one memory-hungry task saturates the shared memory bus, stalling all cores. In NUMA, if a task is pinned to socket 0 with `--cpunodebind=0 --membind=0`, only socket 0's DRAM controller is saturated. Socket 1's cores can run a completely separate task using socket 1's DRAM without interference. This is a genuine throughput advantage for HPC workloads.
+- C) Incorrect — NUMA does not provide automatic data prefetching. The benefit is about bandwidth isolation between sockets, not about reducing the number of cores needed.
+- D) Incorrect — CPUs do not compensate for a stalled neighbour by running faster. Each socket's clock frequency is independent of the other's memory stall state.
+
+---
+
+## Q28 — What Happens When --membind Node Runs Out of Memory?
+
+> **Week reference:** Week 6
+
+**Mental Model:** `--membind=N` uses a strict binding policy: if NUMA node N has no free memory left, the allocation fails rather than falling back to another node. This is different from `--preferred=N`, which tries node N first but falls back to other nodes if necessary. The strict behaviour of `--membind` means it can cause an out-of-memory error if the dataset is too large for one node.
+
+A student runs `numactl --membind=0 python reduction.py data.npy` on a machine where NUMA node 0 has only 32 GB of DRAM and the dataset is 50 GB. What happens?
+
+- A) The allocation succeeds silently; `--membind=0` overflows to node 1 automatically once node 0 is full.
+- B) The allocation fails or the OS invokes the OOM killer, because `--membind=0` uses a strict policy that does not fall back to node 1.
+- C) The OS swaps 18 GB of the dataset to disk and allocates the remaining 32 GB on node 0, completing successfully but slowly.
+- D) numactl prints a warning and automatically switches to `--interleave=all` to fit the dataset.
+
+**Answer: B**
+
+- A) Incorrect — `--membind` is a strict (MPOL_BIND) policy, not a preferred policy. It does not silently fall back to node 1 when node 0 is exhausted. This is a key distinction from `--preferred=0`, which does fall back.
+- B) Correct — With `--membind=0`, if NUMA node 0 cannot satisfy an allocation (due to insufficient free memory), the allocation fails. The kernel returns ENOMEM to the allocating function. Python will raise a `MemoryError`, or if the system is under pressure, the OOM killer may terminate the process. There is no automatic overflow to node 1.
+- C) Incorrect — The OS will not partially allocate on node 0 and swap the rest; the strict membind policy simply fails the allocation for pages that cannot be placed on node 0. Swap behaviour is a system-level response to physical memory exhaustion, but `--membind` failures typically occur before swap is invoked.
+- D) Incorrect — numactl does not modify the policy at runtime or switch to interleaving. It applies the specified policy strictly and lets the OS return errors if the policy cannot be satisfied.
+
+---
+
+## Q29 — numactl Applies to the Process and Its Forked Children
+
+> **Week reference:** Week 6
+
+**Mental Model:** When numactl launches a program, it sets NUMA memory and CPU policies on the process using Linux kernel interfaces (`mbind`, `set_mempolicy`, `sched_setaffinity`). These policies are inherited by child processes created via `fork()`. This is why `numactl --interleave=all python reduction.py` correctly interleaves memory for the main process and all `multiprocessing.Pool` workers — they inherit the policy through fork.
+
+A student runs `numactl --interleave=all python reduction.py`. The Python script spawns 16 worker processes using `multiprocessing.Pool`. Do the worker processes inherit the interleave memory policy?
+
+- A) No — each worker process starts fresh without any numactl policy, so their allocations default to first-touch.
+- B) Yes — worker processes created via `fork()` inherit the parent's NUMA memory policy, so their allocations are also interleaved across all nodes.
+- C) No — only the main process benefits from interleaving; workers need their own separate `numactl` invocations.
+- D) Yes — but only if the worker processes explicitly call `numactl` before any memory allocation.
+
+**Answer: B**
+
+- A) Incorrect — NUMA memory policies set via `set_mempolicy()` (which numactl uses internally) are inherited across `fork()`. The child process starts with the same memory policy as the parent. Workers spawned by `multiprocessing.Pool` use `fork` (on Linux), so they inherit the interleave policy.
+- B) Correct — Linux NUMA policies are part of the process's memory management metadata, which is copied during `fork()`. When `multiprocessing.Pool` forks worker processes, each worker inherits the interleave policy set by numactl on the parent. All subsequent allocations in those workers (including the `mp.RawArray` pages first-touched by workers) are placed using the interleave policy.
+- C) Incorrect — Workers do not need separate numactl invocations. The forked workers inherit the parent's policy automatically. Running numactl inside a worker would be both redundant and impractical.
+- D) Incorrect — No explicit numactl call is needed inside worker processes. Fork-based inheritance is automatic and transparent; the kernel maintains the policy metadata and applies it without any action from the child process.
+
+---
+
+## Q30 — --interleave=all Reduces Peak Per-Node Bandwidth
+
+> **Week reference:** Week 6
+
+**Mental Model:** `--interleave=all` spreads pages across all NUMA nodes, which has a subtle trade-off: it increases aggregate bandwidth (both DRAM controllers serve requests), but it reduces the peak bandwidth available per node for any single workload. A socket 0 job that previously had 100% of node 0's bandwidth now gets roughly 50% of node 0's bandwidth (the other 50% of its data is on node 1, served at remote latency). For a workload running on all cores, this equalisation is beneficial; for a workload pinned to one socket, it is a net negative.
+
+Which statement correctly describes the trade-off of `--interleave=all` with respect to memory bandwidth?
+
+- A) `--interleave=all` doubles the per-node bandwidth, so every process gets twice the bandwidth it would otherwise.
+- B) `--interleave=all` increases aggregate system bandwidth (both DRAM controllers active) but reduces per-node peak bandwidth for any individual workload, since half its data is served remotely.
+- C) `--interleave=all` has no effect on bandwidth; it only affects latency.
+- D) `--interleave=all` increases peak bandwidth only for processes pinned to socket 0; socket 1 processes see no change.
+
+**Answer: B**
+
+- A) Incorrect — Doubling per-node bandwidth is not possible with interleaving. Each node's DRAM controller still has the same physical bandwidth ceiling. Interleaving splits the data between both controllers, so each controller handles roughly half the accesses for any given process.
+- B) Correct — With interleaving, the aggregate bandwidth available to the whole system increases because both DRAM controllers are active simultaneously. However, an individual process now receives approximately 50% of its data from node 0 (at local speed) and 50% from node 1 (at remote speed). For workloads spanning both sockets, this equalisation improves scaling. For a workload confined to socket 0, it reduces effective bandwidth compared to a fully local configuration.
+- C) Incorrect — Interleaving affects both latency (average increases slightly for local-only access cases) and bandwidth distribution. The bandwidth split between the two controllers is a primary effect, not a secondary one.
+- D) Incorrect — Interleaving applies the same round-robin page placement regardless of which socket's cores access the data. Both socket 0 and socket 1 processes see their data split between both nodes; neither gets preferential treatment.
+
+---
+
+## Q31 — First-Touch on malloc vs First Write
+
+> **Week reference:** Week 6
+
+**Mental Model:** Linux uses demand paging: `malloc` (and Python's memory allocator, or `np.empty`) only requests virtual address space. Physical DRAM pages are mapped only when the process accesses (faults into) a page for the first time. For writable memory, this fault is triggered by the first write, not by malloc. For read-only `mmap` (e.g., loading a file), the fault is triggered by the first read.
+
+Which of the following Python operations on a dual-socket NUMA machine (without numactl) is the actual moment that determines which NUMA node `arr`'s pages are placed on?
+
+```python
+import numpy as np
+arr = np.empty((50_000_000,), dtype='float32')   # (1)
+arr[:] = 0.0                                      # (2)
+result = np.sum(arr)                              # (3)
+```
+
+- A) Line (1) — `np.empty()` allocates and places the physical pages on the local NUMA node of the calling process.
+- B) Line (2) — `arr[:] = 0.0` is the first write to each page, triggering the page fault that allocates physical DRAM pages via first-touch policy.
+- C) Line (3) — `np.sum(arr)` is the first read, which triggers page faults and places pages on the current node.
+- D) Pages are allocated uniformly across all NUMA nodes regardless of which line executes first.
+
+**Answer: B**
+
+- A) Incorrect — `np.empty()` calls `malloc` internally, which on Linux only adds entries to the process's virtual memory map (`vm_area_struct`). No physical DRAM pages are assigned. The pages remain in a faulted-out state until they are first accessed.
+- B) Correct — `arr[:] = 0.0` writes 0.0 to every element. Each write to a previously unaccessed 4 KB page triggers a minor page fault. The kernel allocates a physical page from the DRAM of the NUMA node that the currently running core belongs to. This is first-touch: the writing core determines node placement.
+- C) Incorrect — For writable anonymous memory (the backing of `np.empty`), the first read alone does not trigger allocation in the way that a write does. On some kernels, a read to uninitialized writable memory may be served via a zero page, delaying true allocation further. In practice, the write in line (2) precedes line (3), so (2) always determines placement.
+- D) Incorrect — Pages are not uniformly distributed by default. Without numactl, the default first-touch policy places each page on the node of the core that first touches it — deterministically, not uniformly.
+
+---
+
+## Q32 — Which Workload Sees No Benefit from --interleave=all?
+
+> **Week reference:** Week 6
+
+**Mental Model:** `--interleave=all` is beneficial when a memory-bound workload spans both NUMA nodes, because it equalises the average remote-vs-local access ratio across all cores. A workload that is entirely compute-bound (never saturates memory bandwidth) or a workload already pinned to one socket that fits entirely within one socket's memory sees no benefit — and may see a small penalty from the increased average latency of interleaved accesses.
+
+Which of the following workloads is least likely to benefit from `numactl --interleave=all`?
+
+- A) A parallel image reduction over 100,000 images using all 32 cores of a dual-socket node.
+- B) A matrix multiply using only 4 cores on socket 0, with the matrices fitting entirely in socket 0's DRAM and L3 cache.
+- C) A parallel sort of a 60 GB array using all 32 cores where the array must span both NUMA nodes.
+- D) A parallel computation where each of the 32 workers accesses a distinct portion of a shared 40 GB array.
+
+**Answer: B**
+
+- A) Incorrect (would benefit) — This is the canonical use case: a memory-bound task across all 32 cores. Without interleaving, socket 1 workers access data remotely. With interleaving, all workers see balanced access latency.
+- B) Correct (no benefit, possible penalty) — This workload uses 4 cores on socket 0 with data that fits in socket 0's DRAM and L3 cache. Without numactl, all data is local to socket 0 (100% local accesses). With `--interleave=all`, roughly half the pages move to node 1, making half the accesses remote. This strictly worsens performance for this configuration. Small-core-count, socket-local workloads should use `--cpunodebind=0 --membind=0`, not `--interleave=all`.
+- C) Incorrect (would benefit) — A 60 GB array exceeding one socket's DRAM capacity must span both nodes. Interleaving is not just beneficial but necessary to fit the data, and it ensures all 32 cores access both halves at equal average latency.
+- D) Incorrect (would benefit) — A 40 GB shared array across 32 workers is the CelebA-like scenario directly taught in the lecture. Without interleaving the socket 1 workers pay full remote latency; with interleaving all workers get balanced access.

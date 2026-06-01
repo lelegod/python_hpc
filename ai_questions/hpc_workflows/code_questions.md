@@ -24,6 +24,17 @@
 - [Q16 — Diagnosing a Stuck Pipeline](#q16-diagnosing-a-stuck-pipeline)
 - [Q17 — Constructing the Output Filename](#q17-constructing-the-output-filename)
 - [Q18 — Combining Array Index With Python Logic](#q18-combining-array-index-with-python-logic)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q19 — Explicit Index List: Which Elements Run?](#q19--explicit-index-list-which-elements-run)
+- [Q20 — Per-Core Memory Trap With -n 4](#q20--per-core-memory-trap-with--n-4)
+- [Q21 — Fan-Out Script: Correct Output Filename](#q21--fan-out-script-correct-output-filename)
+- [Q22 — done(subhist) Without Quotes: Valid or Not?](#q22--donesubhist-without-quotes-valid-or-not)
+- [Q23 — LSB_DJOB_NUMPROC Fix in Pool()](#q23--lsb_djob_numproc-fix-in-pool)
+- [Q24 — Element-Level Dependency Script Trace](#q24--element-level-dependency-script-trace)
+- [Q25 — Fan-In: Loading All Partial Results](#q25--fan-in-loading-all-partial-results)
+- [Q26 — Reading Index With Fallback Default](#q26--reading-index-with-fallback-default)
+- [Q27 — ended() With Numeric ID: When Does It Trigger?](#q27--ended-with-numeric-id-when-does-it-trigger)
+- [Q28 — Diagnosing Oversubscription From Pool() Output](#q28--diagnosing-oversubscription-from-pool-output)
 
 ---
 
@@ -643,5 +654,372 @@ Which assignment correctly gives each element a non-overlapping 250-row chunk?
 - B) Correct — subtracting 1 converts the 1-based index to 0-based chunk numbering. `idx=1` → `start=0, end=250`; `idx=2` → `start=250, end=500`; ...; `idx=4` → `start=750, end=1000`. All 1000 rows are covered exactly once.
 - C) Incorrect — `idx=1` gives `start=249`, which is inside the first chunk and causes overlap with the first element.
 - D) Incorrect — `idx=1` gives `start=1`, skipping row 0. Each chunk is also offset by 1, introducing gaps between chunks.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets explicit index lists, per-core memory, fan-out/fan-in file naming, LSB_DJOB_NUMPROC, element-level dependencies, glob-based reduce, and ended() with numeric IDs.
+
+---
+
+## Q19 — Explicit Index List: Which Elements Run?
+
+> **Week reference:** Week 11
+
+A developer submits this job array to rerun failed elements:
+
+```bash
+#!/bin/bash
+#BSUB -J "proc[2,29,71,73,127]"
+#BSUB -q hpc
+#BSUB -n 1
+#BSUB -R "span[hosts=1]"
+#BSUB -W 00:10
+#BSUB -o proc_%J_%I.out
+
+python process.py $LSB_JOBINDEX
+```
+
+Which values does `$LSB_JOBINDEX` take across all elements, and how many elements are created?
+
+**A)** 1, 2, 3, 4, 5 — LSF ignores the explicit list and uses sequential 1-based indices; 5 elements  
+**B)** 2, 29, 71, 73, 127 — LSF creates exactly those indices; 5 elements  
+**C)** 2, 3, 4, ..., 127 — LSF expands the list to the full range; 126 elements  
+**D)** 2, 29, 71, 73, 127 — LSF creates those indices but `$LSB_JOBINDEX` is set to 1, 2, 3, 4, 5 internally; 5 elements
+
+**Answer: B**
+
+- A) Incorrect — LSF does not substitute sequential indices for an explicit list. When a comma-separated list is given, `$LSB_JOBINDEX` takes exactly the listed values, preserving their meaning for the script.
+- B) Correct — a comma-separated index list creates one element per listed value, with `$LSB_JOBINDEX` set to the exact value for each. The script receives `2`, `29`, `71`, `73`, or `127` directly without any remapping.
+- C) Incorrect — LSF does not expand a comma-separated list into a range. Only the five listed values are created; indices in between (3, 4, ..., 28, 30, ...) are not scheduled.
+- D) Incorrect — LSF does not renumber the indices internally. The whole point of using an explicit list is that `$LSB_JOBINDEX` matches the listed values exactly, so `process.py` receives the real data indices without needing a separate lookup table.
+
+---
+
+## Q20 — Per-Core Memory Trap With -n 4
+
+> **Week reference:** Week 11
+
+A student writes this job script for a simulation that needs 100 GB RAM total:
+
+```bash
+#!/bin/bash
+#BSUB -J simulate
+#BSUB -q hpc
+#BSUB -W 10:00
+#BSUB -R "rusage[mem=100GB]"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -o sim_%J.out
+
+python simulate.py initconds.npy
+```
+
+How much total memory does LSF reserve for this job, and is there a problem?
+
+**A)** 100 GB total — `rusage[mem=100GB]` is the total job memory; no problem  
+**B)** 400 GB total — `rusage[mem=X]` is per core; with 4 cores the job reserves 400 GB, massively over-requesting  
+**C)** 25 GB total — LSF divides the requested memory by the core count automatically  
+**D)** 100 GB total — LSF only allocates what the process actually uses, so the directive is a ceiling, not a reservation
+
+**Answer: B**
+
+- A) Incorrect — `rusage[mem=X]` is a per-slot (per-core) value in LSF. With 4 cores, the total reservation is 4 × 100 GB = 400 GB, not 100 GB.
+- B) Correct — the directive `rusage[mem=100GB]` requests 100 GB per core. With `#BSUB -n 4`, LSF reserves 400 GB total. The script may run fine if the node has that much RAM, but it wastes 300 GB of allocation. The correct value to achieve 100 GB total is `rusage[mem=25GB]`.
+- C) Incorrect — LSF does not auto-divide your memory request by the core count. It multiplies the per-core request by the number of cores. The student must do the division manually.
+- D) Incorrect — `rusage[mem=X]` is a hard reservation in LSF, not a soft ceiling. The scheduler uses it to decide whether a node has enough free memory to accept the job. The actual process may use less, but the full amount is reserved and unavailable to other jobs.
+
+---
+
+## Q21 — Fan-Out Script: Correct Output Filename
+
+> **Week reference:** Week 11
+
+The solution script for the CelebA hue histogram exercise saves partial results like this:
+
+```python
+import os
+import sys
+import numpy as np
+
+if __name__ == '__main__':
+    idx = int(sys.argv[1]) - 1   # 0-based index
+    # ... load images, compute hist ...
+    np.save(f"subhist_{idx}.npy", hist)
+```
+
+The job array directive is `#BSUB -J "subhist[1-203]"`. What filename does element 5 save to?
+
+**A)** `subhist_5.npy`  
+**B)** `subhist_4.npy`  
+**C)** `subhist_05.npy`  
+**D)** `subhist_1.npy` — all elements produce the same filename because `idx` is always 1 after subtraction
+
+**Answer: B**
+
+- A) Incorrect — the script subtracts 1 from the LSF index before saving. Element 5 receives `sys.argv[1] = "5"`, so `idx = 5 - 1 = 4`. The filename is `subhist_4.npy`, not `subhist_5.npy`.
+- B) Correct — `$LSB_JOBINDEX` for element 5 is `5`. After `int(sys.argv[1]) - 1`, `idx = 4`. The f-string produces `subhist_4.npy`.
+- C) Incorrect — the f-string `f"subhist_{idx}.npy"` does not zero-pad integers; it would produce `4`, not `04`. Zero-padding would require `f"subhist_{idx:02d}.npy"`.
+- D) Incorrect — `idx` is computed from `sys.argv[1]`, which is the `$LSB_JOBINDEX` value passed from the job script. Each element receives a different index value, so `idx` is different for every element. Only if `sys.argv[1]` were hard-coded would all elements produce the same filename.
+
+---
+
+## Q22 — done(subhist) Without Quotes: Valid or Not?
+
+> **Week reference:** Week 11
+
+A student writes the fan-in (reduce) job script as follows:
+
+```bash
+#!/bin/bash
+#BSUB -J plothist
+#BSUB -q hpc
+#BSUB -W 5
+#BSUB -n 1
+#BSUB -w done(subhist)
+#BSUB -R "span[hosts=1]"
+#BSUB -o plothist_%J.out
+
+python plothuehist.py
+```
+
+The fan-out array was submitted with `#BSUB -J "subhist[1-203]"`. Is the dependency directive correct, and will the job behave as expected?
+
+**A)** No — `done(subhist)` must be quoted: `#BSUB -w "done(subhist)"`, otherwise parentheses are interpreted by the shell  
+**B)** Yes — `done(subhist)` without quotes is valid in a BSUB script header because BSUB directives are not parsed by the shell  
+**C)** No — the directive must reference the full array: `#BSUB -w "done(subhist[1-203])"` to wait for all elements  
+**D)** No — `done()` cannot reference a job array by name; it requires the numeric job ID
+
+**Answer: B**
+
+- A) Incorrect — `#BSUB` directives in a batch script are read by LSF directly from the file, not executed as shell commands. Parentheses in a `#BSUB` directive are not subject to shell expansion or interpretation. Both quoted and unquoted forms work in a script file.
+- B) Correct — inside a batch script, `#BSUB` lines are parsed by LSF, not by bash. The parentheses in `done(subhist)` are part of the LSF dependency syntax and are passed directly to the scheduler. Quotes are optional in script files (though conventional for clarity). This is exactly the pattern shown in the official week 11 solution.
+- C) Incorrect — `done(subhist)` without a subscript already waits for ALL elements of the named array to reach DONE. Adding `[1-203]` inside the dependency expression is not standard LSF syntax and would likely cause an error.
+- D) Incorrect — `done()` accepts both job names and numeric job IDs. Using the job name `subhist` is standard practice and often more readable than using a numeric ID that changes each submission.
+
+---
+
+## Q23 — LSB_DJOB_NUMPROC Fix in Pool()
+
+> **Week reference:** Week 11
+
+A job requests 8 cores. The original buggy script uses `Pool()` with no argument. The fix reads the LSF allocation:
+
+```bash
+#!/bin/bash
+#BSUB -J mp_job
+#BSUB -n 8
+#BSUB -R "span[hosts=1]"
+
+python script.py
+```
+
+```python
+import os
+from multiprocessing import Pool
+
+n_workers = int(os.environ.get("LSB_DJOB_NUMPROC", os.cpu_count()))
+
+def work(x):
+    return x ** 2
+
+with Pool(processes=n_workers) as pool:
+    results = pool.map(work, range(10000))
+```
+
+The job runs on a 32-core node. How many worker processes does `Pool()` create?
+
+**A)** 32 — `LSB_DJOB_NUMPROC` is not set in the environment so the fallback `os.cpu_count()` runs  
+**B)** 8 — `LSB_DJOB_NUMPROC` is set by LSF to the allocated core count (8), which is used as `n_workers`  
+**C)** 1 — `os.environ.get()` with a default returns `None` when the variable is missing, and `int(None)` gives 1  
+**D)** 8 — but only by coincidence; `LSB_DJOB_NUMPROC` is not a real LSF variable
+
+**Answer: B**
+
+- A) Incorrect — `LSB_DJOB_NUMPROC` is a genuine LSF environment variable that LSF sets in the job's environment to the number of allocated CPU slots. On a job submitted with `#BSUB -n 8`, it is set to `"8"`. The fallback is not reached.
+- B) Correct — LSF sets `LSB_DJOB_NUMPROC=8` in the job environment. `os.environ.get("LSB_DJOB_NUMPROC", os.cpu_count())` returns `"8"`, and `int("8")` gives `n_workers=8`. The pool is created with exactly the allocated count, eliminating oversubscription.
+- C) Incorrect — `os.environ.get(key, default)` returns the `default` argument (not `None`) when the key is absent. In this case the default is `os.cpu_count()`, not `None`, so `int(None)` is never called.
+- D) Incorrect — `LSB_DJOB_NUMPROC` is a real, documented LSF environment variable. It is not coincidental; LSF explicitly sets it to match the `-n` allocation, making it the canonical way to read the allocated core count from Python.
+
+---
+
+## Q24 — Element-Level Dependency Script Trace
+
+> **Week reference:** Week 11
+
+Two arrays are submitted:
+
+```bash
+# First submission (already running):
+# Job ID 21241475, array name "array", elements [1-5]
+
+# Second submission:
+#!/bin/bash
+#BSUB -J "jobname[1-5]"
+#BSUB -q hpc
+#BSUB -W 5
+#BSUB -n 1
+#BSUB -R "span[hosts=1]"
+#BSUB -w "done(array[*])"
+#BSUB -o jobname_%J.out
+```
+
+Element 3 of `array` finishes with exit code 0 (DONE). Elements 1, 2, 4, 5 are still running. What is the state of element 3 of `jobname`?
+
+**A)** Element 3 of `jobname` immediately moves from PEND to RUN, because its matching `array[3]` is DONE  
+**B)** All 5 elements of `jobname` remain in PEND until ALL elements of `array` are DONE  
+**C)** Element 3 of `jobname` moves to RUN; the other 4 stay in PEND until their matching elements finish  
+**D)** Element 3 of `jobname` moves to RUN; the other 4 are cancelled because `done(array[*])` is partially satisfied
+
+**Answer: C**
+
+- A) Incorrect — `done(array[*])` with the `[*]` wildcard is an element-wise dependency, not an all-or-nothing condition. But element 3 of `jobname` waits for `array[3]` specifically, not for all of `array`. A is partially right but misses that the other elements also proceed element-wise, not all at once.
+- B) Incorrect — that would be the behaviour of `done(array)` without any subscript. The `[*]` wildcard changes the semantics to element-level chaining: each element waits only for its own counterpart.
+- C) Correct — `done(array[*])` creates a per-element dependency. When `array[3]` reaches DONE, `jobname[3]` can start. Elements 1, 2, 4, 5 of `jobname` remain in PEND until their respective counterparts in `array` reach DONE.
+- D) Incorrect — LSF never cancels array elements because a sibling's dependency was satisfied. Each element is independent; satisfying one element's dependency has no effect on the scheduling state of the other elements.
+
+---
+
+## Q25 — Fan-In: Loading All Partial Results
+
+> **Week reference:** Week 11
+
+The reduce step of the CelebA hue histogram exercise looks like this:
+
+```python
+from glob import glob
+import numpy as np
+import matplotlib.pyplot as plt
+
+if __name__ == '__main__':
+    histfiles = glob('subhist_*.npy')
+    hist = 0
+    for hf in histfiles:
+        hist += np.load(hf)
+    plt.bar(np.linspace(0, 255, 64), hist, width=4)
+    plt.savefig('histogram.png')
+```
+
+The fan-out array saved files named `subhist_0.npy` through `subhist_202.npy`. What does `hist` equal after the loop if all 203 files are found?
+
+**A)** A list of 203 NumPy arrays, one per file  
+**B)** The element-wise sum of all 203 histogram arrays — a single NumPy array of shape (64,)  
+**C)** The integer 0, because `hist = 0` is not overwritten when adding NumPy arrays  
+**D)** The last loaded histogram array, because each `+=` overwrites the previous value
+
+**Answer: B**
+
+- A) Incorrect — `+=` on a NumPy array performs element-wise addition in-place, not list appending. `hist` is never converted to a list.
+- B) Correct — starting with `hist = 0` and then doing `hist += np.load(hf)` on the first iteration uses NumPy broadcasting: `0 + array` produces a new array. Subsequent iterations add element-wise into that array. The result is the element-wise sum of all 203 arrays, giving a single shape-(64,) array representing the combined histogram across the entire dataset.
+- C) Incorrect — Python's `+=` operator on a NumPy array does not no-op when the left side starts as an integer. The first `hist += np.load(hf)` evaluates `0 + array`, which returns a NumPy array. From that point, `hist` is a NumPy array and subsequent `+=` calls accumulate correctly.
+- D) Incorrect — `+=` is accumulation, not overwrite. Each iteration adds the new histogram values into `hist` without discarding previous contributions. Overwrite would require `hist = np.load(hf)` (plain assignment).
+
+---
+
+## Q26 — Reading Index With Fallback Default
+
+> **Week reference:** Week 11
+
+A Python script is designed to run both inside an LSF job array and interactively during development. It uses a fallback:
+
+```python
+import os
+
+idx = int(os.environ.get("LSB_JOBINDEX", "1"))
+folders = sorted(os.listdir("/data/images"))
+target = folders[idx - 1]
+print(f"Processing folder: {target}")
+```
+
+A developer runs this script interactively on their laptop (no LSF environment). There are 10 folders. What does the script print?
+
+**A)** A `KeyError` — `LSB_JOBINDEX` does not exist in the environment and `get()` raises an exception  
+**B)** `Processing folder: <second folder>` — the default `"1"` gives `idx=1`, and `idx - 1 = 0` selects the first folder, printing the first folder name  
+**C)** `Processing folder: <first folder>` — with `idx=1` and `idx-1=0`, `folders[0]` is the first (alphabetically sorted) folder  
+**D)** `Processing folder: <last folder>` — `os.environ.get()` returns `None` when the key is missing, and `int(None)` wraps to the last index
+
+**Answer: C**
+
+- A) Incorrect — `os.environ.get(key, default)` never raises `KeyError`. When the key is absent, it returns the `default` argument (`"1"` here). `KeyError` would only occur with `os.environ[key]` (square bracket access).
+- B) Incorrect — the answer correctly computes `idx=1` and `idx-1=0`, then selects `folders[0]`. The label says "second folder" but the index 0 is the first element. This option has the right computation but the wrong description.
+- C) Correct — `LSB_JOBINDEX` is absent, so `get()` returns `"1"`. `int("1") = 1`. `idx - 1 = 0`. `folders[0]` is the first element in the sorted list. The script prints the name of the first folder alphabetically.
+- D) Incorrect — `os.environ.get(key, "1")` returns the string `"1"`, not `None`. `int("1")` is `1`, not any wrap-around value. The last folder would require `idx = len(folders)`.
+
+---
+
+## Q27 — ended() With Numeric ID: When Does It Trigger?
+
+> **Week reference:** Week 11
+
+A cleanup job depends on a previously submitted array (job ID 21241475):
+
+```bash
+#!/bin/bash
+#BSUB -J cleanup
+#BSUB -q hpc
+#BSUB -W 00:10
+#BSUB -n 1
+#BSUB -w "ended(21241475)"
+#BSUB -o cleanup_%J.out
+
+python cleanup.py
+```
+
+During the run, 3 out of 5 elements of job 21241475 reach DONE and 2 reach EXIT. When does `cleanup` start?
+
+**A)** Only after all 5 elements reach DONE (success required)  
+**B)** After the first element finishes in any state (DONE or EXIT)  
+**C)** After all 5 elements have left the RUN state in any terminal state (DONE or EXIT)  
+**D)** Never — `ended()` with a numeric ID is not valid LSF syntax; only job names are supported
+
+**Answer: C**
+
+- A) Incorrect — that describes `done(21241475)`. `done()` requires all elements to reach DONE. `ended()` is satisfied by any terminal state including EXIT.
+- B) Incorrect — `ended()` waits for all specified jobs to end, not just the first one. A single element finishing does not satisfy the condition; all must reach a terminal state.
+- C) Correct — `ended(21241475)` is satisfied when every element of job array 21241475 has left the RUN state in any terminal condition (DONE, EXIT, or even ZOMBI/UNKWN resolved). With 3 DONE and 2 EXIT, all 5 elements are terminal, so `ended()` becomes true and `cleanup` can start.
+- D) Incorrect — `ended()` (and `done()`) both accept numeric job IDs as well as job names. Using the numeric ID `21241475` is valid LSF dependency syntax, as shown in the course's `job_dependencies_2.sh` example file.
+
+---
+
+## Q28 — Diagnosing Oversubscription From Pool() Output
+
+> **Week reference:** Week 11
+
+A job is submitted with `#BSUB -n 4` on a 16-core node. The script contains:
+
+```python
+import os
+from multiprocessing import Pool
+
+print(f"LSF allocation: {os.environ.get('LSB_DJOB_NUMPROC', 'NOT SET')}")
+print(f"os.cpu_count(): {os.cpu_count()}")
+
+with Pool() as pool:
+    print(f"Pool workers: {pool._processes}")
+    results = pool.map(lambda x: x**2, range(100))
+```
+
+The job prints:
+
+```
+LSF allocation: 4
+os.cpu_count(): 16
+Pool workers: 16
+```
+
+What is the problem and what single-line fix corrects it?
+
+**A)** No problem — `Pool()` uses 16 workers but LSF caps CPU usage to 4 cores automatically  
+**B)** The pool spawns 16 workers on a 4-core allocation. Fix: change `Pool()` to `Pool(processes=int(os.environ["LSB_DJOB_NUMPROC"]))`  
+**C)** The pool spawns 16 workers. Fix: set `OMP_NUM_THREADS=4` in the job script before calling Python  
+**D)** The pool spawns 16 workers. Fix: change `Pool()` to `Pool(processes=4)` hardcoded
+
+**Answer: B**
+
+- A) Incorrect — LSF does not automatically cap CPU usage to the allocated core count. It only reserves the allocation in the scheduler; actual CPU usage enforcement depends on cgroup configuration, and processes can still run on more cores than allocated, causing oversubscription.
+- B) Correct — `Pool()` with no argument calls `os.cpu_count()` (16), creating 16 workers for a 4-core job. The fix reads the actual LSF allocation via `LSB_DJOB_NUMPROC` at runtime, making the pool size always match the allocation regardless of node hardware.
+- C) Incorrect — `OMP_NUM_THREADS` controls OpenMP thread count and has no effect on Python's `multiprocessing.Pool` worker count. `Pool()` does not read `OMP_NUM_THREADS`.
+- D) Incorrect — hard-coding `Pool(processes=4)` fixes this specific job but is brittle. If `#BSUB -n` is later changed to 8, the hard-coded 4 causes underutilization. Reading `LSB_DJOB_NUMPROC` dynamically is the robust solution.
 
 ---

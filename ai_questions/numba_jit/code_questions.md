@@ -14,6 +14,19 @@
 - [Q8 — CUDA Kernel Called from `@jit` Function](#q8-cuda-kernel-called-from-jit-function)
 - [Key Facts Summary](#key-facts-summary)
 
+## Set 3 — Extended Practice
+
+- [Q9 — prange on Inner Loop Only](#q9--prange-on-inner-loop-only)
+- [Q10 — Object Mode Fallback (Plain @jit)](#q10--object-mode-fallback-plain-jit)
+- [Q11 — numba.typed.List in @njit](#q11--numbatypedlist-in-njit)
+- [Q12 — @numba.vectorize Type Signature](#q12--numbavectorize-type-signature)
+- [Q13 — prange Reduction: Is it Safe?](#q13--prange-reduction-is-it-safe)
+- [Q14 — Two Type Specializations, One Function](#q14--two-type-specializations-one-function)
+- [Q15 — cuda.synchronize() Timing Trap](#q15--cudasynchronize-timing-trap)
+- [Q16 — Loop-Carried Dependency with prange](#q16--loop-carried-dependency-with-prange)
+- [Q17 — cache=True and __pycache__ Location](#q17--cachetrue-and-__pycache__-location)
+- [Q18 — @numba.stencil Output](#q18--numbastencil-output)
+
 ---
 
 > Format: Each question shows Numba-decorated Python code to analyse.
@@ -287,6 +300,366 @@ def cpu_caller(arr):
 
 ---
 
+---
+
+## Set 3 — Extended Practice
+
+---
+
+## Q9 — prange on Inner Loop Only
+
+```python
+from numba import njit, prange
+
+@njit(parallel=True)
+def row_max(A):
+    result = np.empty(A.shape[0])
+    for i in range(A.shape[0]):        # outer: serial range
+        m = A[i, 0]
+        for j in prange(A.shape[1]):   # inner: prange
+            if A[i, j] > m:
+                m = A[i, j]
+        result[i] = m
+    return result
+```
+
+**What is the most significant performance problem with this code?**
+
+- A) `prange` is not allowed inside a non-parallel outer loop; this raises a compile error
+- B) The inner `prange` launches a thread pool for every outer-loop iteration, adding per-row scheduling overhead that may exceed computation time for small arrays
+- C) `prange` on the inner loop automatically parallelises the outer loop as well, causing a race on `result[i]`
+- D) There is no problem; parallelising the inner loop is the optimal strategy here
+
+**Answer: B**
+
+- A) Incorrect — Numba does not raise an error for `prange` in an inner loop position. The code compiles and runs; the issue is performance, not correctness.
+- B) Correct — the outer `range` iterates serially, invoking the parallel scheduler once per row. For each row, Numba launches threads, distributes `A.shape[1]` iterations, and synchronises. If the matrix has many short rows, the thread-launch overhead per row dominates. The canonical fix is to swap: put `prange` on the outer loop (over rows) so that the thread pool is launched once and each thread processes one or more complete rows.
+- C) Incorrect — `prange` only affects the loop it directly annotates. The outer `range` remains serial; there is no automatic promotion of the outer loop and no race condition on `result[i]` (each outer iteration writes to a distinct `result[i]`).
+- D) Incorrect — this is a well-known Numba anti-pattern. Parallelising the innermost loop with a serial outer loop leads to high scheduling-to-work ratios and often results in worse performance than a fully serial implementation.
+
+---
+
+## Q10 — Object Mode Fallback (Plain @jit)
+
+```python
+from numba import jit
+
+@jit   # No nopython=True
+def analyse(data):
+    counts = {}          # Plain Python dict
+    for x in data:
+        key = int(x) % 10
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+result = analyse([1.1, 2.2, 3.3, 11.1, 21.1])
+print(type(result))
+```
+
+**What does this code print, and what mode does Numba use?**
+
+- A) Raises `TypingError` — `@jit` cannot handle Python dicts
+- B) Prints `<class 'dict'>` — Numba falls back to object mode and runs the function using the Python interpreter
+- C) Prints `<class 'numba.typed.Dict'>` — Numba automatically converts the dict to a typed dict
+- D) Prints `<class 'dict'>` — Numba compiles the dict in nopython mode using type inference
+
+**Answer: B**
+
+- A) Incorrect — `TypingError` is raised by `@njit` (nopython=True). Plain `@jit` without `nopython=True` does not raise a `TypingError`; it silently falls back to object mode when it encounters unsupported types.
+- B) Correct — plain `@jit` detects that the Python `dict` and `.get()` method are not supported in nopython mode and falls back to object mode, executing the function body through the Python interpreter. The result is a plain Python `dict`, and `type(result)` prints `<class 'dict'>`. No speedup is gained; the fallback is completely silent by default.
+- C) Incorrect — Numba never automatically upgrades plain Python dicts to `numba.typed.Dict`. The programmer must explicitly use `numba.typed.Dict` with declared key and value types. There is no automatic conversion.
+- D) Incorrect — Numba cannot type-infer a plain `dict` in nopython mode because it lacks static element-type information. If nopython compilation succeeded, the return type would still be a Python dict (not a Numba-specific type), but compilation would fail before reaching that point.
+
+---
+
+## Q11 — numba.typed.List in @njit
+
+```python
+import numba
+import numba.typed
+import numpy as np
+from numba import njit
+
+@njit
+def running_sum(arr):
+    results = numba.typed.List.empty_list(numba.float64)
+    total = 0.0
+    for x in arr:
+        total += x
+        results.append(total)
+    return results
+
+arr = np.array([1.0, 2.0, 3.0, 4.0])
+out = running_sum(arr)
+print(list(out))
+```
+
+**What does this code print?**
+
+- A) `[1.0, 2.0, 3.0, 4.0]` — `results.append` overwrites rather than accumulates
+- B) Raises `TypingError` because `numba.typed.List` is not supported inside `@njit`
+- C) `[1.0, 3.0, 6.0, 10.0]` — the running cumulative sum
+- D) `[10.0, 10.0, 10.0, 10.0]` — Numba evaluates the append lazily at function exit
+
+**Answer: C**
+
+- A) Incorrect — `results.append(total)` correctly appends the current value of `total` to the list at each iteration. `total` accumulates (`1`, `3`, `6`, `10`), and each intermediate value is appended, not overwritten.
+- B) Incorrect — `numba.typed.List` is fully supported inside `@njit`. It is the recommended replacement for plain Python lists in nopython mode. `numba.typed.List.empty_list(numba.float64)` creates a typed list with `float64` elements, which Numba can compile.
+- C) Correct — `total` starts at `0.0`. After each element: `1.0→1.0`, `2.0→3.0`, `3.0→6.0`, `4.0→10.0`. Each step appends the cumulative sum to `results`. The final list contains `[1.0, 3.0, 6.0, 10.0]`. Converting the `numba.typed.List` back to a Python list with `list(out)` gives the standard Python list representation.
+- D) Incorrect — Numba does not use lazy evaluation for `typed.List.append`. Each `append` call executes immediately in sequence during the loop, adding the current `total` to the list at that moment. There is no deferred or batched append mechanism.
+
+---
+
+## Q12 — @numba.vectorize Type Signature
+
+```python
+import numpy as np
+from numba import vectorize
+
+@vectorize(['float64(float64, float64)',
+            'float32(float32, float32)'])
+def clipped_add(x, y):
+    result = x + y
+    if result > 1.0:
+        return 1.0
+    return result
+
+a = np.array([0.3, 0.7, 0.9], dtype=np.float32)
+b = np.array([0.4, 0.4, 0.4], dtype=np.float32)
+print(clipped_add(a, b))
+```
+
+**What does this code print?**
+
+- A) `[0.7 1.0 1.0]` — float32 arrays use the float32 specialisation; values above 1.0 are clipped
+- B) `[0.7 1.1 1.3]` — the `if` branch is never taken because Numba ignores conditionals in ufuncs
+- C) Raises `TypeError` — `@vectorize` does not support `if` statements inside the kernel
+- D) `[0.7 1.0 1.3]` — only the middle element clips because it is exactly 1.1
+
+**Answer: A**
+
+- A) Correct — `a` and `b` are `float32` arrays. Numba dispatches to the `float32(float32, float32)` specialisation. Element-wise: `0.3+0.4=0.7` (below 1.0, kept), `0.7+0.4=1.1` (above 1.0, clipped to 1.0), `0.9+0.4=1.3` (above 1.0, clipped to 1.0). Output: `[0.7 1.0 1.0]` as a float32 array.
+- B) Incorrect — Numba fully supports `if` statements inside `@vectorize` kernels. Conditional logic is compiled to native branch instructions. There is no restriction on control flow inside a vectorize kernel.
+- C) Incorrect — `@vectorize` supports arbitrary scalar logic including conditionals, loops, and function calls, as long as the types are supported in nopython mode. The restriction is on the *types* used, not the *control flow*.
+- D) Incorrect — `0.9+0.4=1.3`, which is above 1.0, so it is also clipped. Both the second and third elements exceed 1.0 and are clipped; the output is `[0.7, 1.0, 1.0]`, not `[0.7, 1.0, 1.3]`.
+
+---
+
+## Q13 — prange Reduction: Is it Safe?
+
+```python
+import numpy as np
+from numba import njit, prange
+
+@njit(parallel=True)
+def parallel_sum(arr):
+    total = 0.0
+    for i in prange(len(arr)):
+        total += arr[i]
+    return total
+
+arr = np.ones(1_000_000)
+print(parallel_sum(arr))
+```
+
+**What does this code print?**
+
+- A) A non-deterministic value close to but not exactly 1000000.0, due to a data race
+- B) `1000000.0` — Numba detects the scalar reduction pattern and handles it safely
+- C) Raises a `RuntimeError` — `prange` cannot be used with shared scalar accumulators
+- D) `0.0` — `total` is a local variable so each thread has its own copy and the main thread's copy is never updated
+
+**Answer: B**
+
+- A) Incorrect — Numba specifically detects the `total += arr[i]` pattern inside `prange` as a scalar reduction. It transforms this into a private accumulator per thread, then merges (sums) the private totals at the end. No data race occurs for this recognised pattern.
+- B) Correct — Numba's automatic parallelisation recognises `scalar += array[i]` inside `prange` as a parallel reduction. Each thread accumulates into a private copy of `total`, and the thread-private results are combined (summed) at loop exit. The final result is correct and deterministic (subject to floating-point rounding order, which may produce results very close to but not exactly equal to 1000000.0 due to non-associative summation — but `np.ones` sums exactly to 1000000.0 in float64). The print output is `1000000.0`.
+- C) Incorrect — shared scalar accumulators in `prange` are a recognised pattern in Numba. No `RuntimeError` is raised. The reduction is handled automatically.
+- D) Incorrect — `total` is not a thread-local copy in the naïve sense. Numba's reduction transformation specifically creates per-thread private copies and merges them. The main-thread view of `total` is updated with the merged result after the parallel loop completes.
+
+---
+
+## Q14 — Two Type Specializations, One Function
+
+```python
+import numpy as np
+from numba import njit
+
+@njit
+def square_sum(arr):
+    s = 0.0
+    for x in arr:
+        s += x * x
+    return s
+
+a32 = np.ones(100, dtype=np.float32)
+a64 = np.ones(100, dtype=np.float64)
+
+r1 = square_sum(a32)   # Call 1
+r2 = square_sum(a64)   # Call 2
+r3 = square_sum(a32)   # Call 3
+
+print(r1, r2, r3)
+```
+
+**How many times does Numba compile `square_sum` across these three calls?**
+
+- A) Once — Numba generates one generic version for all array types
+- B) Three times — Numba compiles on every call
+- C) Twice — once for `float32` and once for `float64`; Call 3 reuses the `float32` specialisation
+- D) Once — only on Call 1; subsequent calls with different types raise a `TypingError`
+
+**Answer: C**
+
+- A) Incorrect — Numba compiles a separate specialisation per type signature, not one generic version. The `float32` and `float64` paths produce different LLVM IR (different register widths, different SIMD patterns) and are stored separately in the function's dispatch table.
+- B) Incorrect — Numba caches compiled specialisations by type signature. Call 3 uses the same `float32` signature as Call 1; the cached specialisation is retrieved without recompilation. Recompilation only happens for previously unseen type combinations.
+- C) Correct — Call 1 (`float32`) triggers the first compilation. Call 2 (`float64`) triggers the second compilation. Call 3 (`float32`) hits the cached `float32` specialisation from Call 1 — no compilation occurs. Total compilations: 2. The dispatch table now contains two entries; future calls use whichever matches the argument type.
+- D) Incorrect — `@njit` does not raise a `TypingError` when called with a different (but supported) type. It compiles a new specialisation for each new supported type. `TypingError` is raised only when Numba cannot infer a valid type at all (e.g., passing a string or an arbitrary Python object).
+
+---
+
+## Q15 — cuda.synchronize() Timing Trap
+
+```python
+from numba import cuda
+import numpy as np
+from time import perf_counter
+
+@cuda.jit
+def add_kernel(x, y, out):
+    i = cuda.grid(1)
+    if i < x.shape[0]:
+        out[i] = x[i] + y[i]
+
+n = 1_000_000
+x = np.random.rand(n).astype(np.float32)
+y = np.random.rand(n).astype(np.float32)
+out = np.empty_like(x)
+
+tpb = 256
+bpg = (n + tpb - 1) // tpb
+
+# Warmup
+add_kernel[bpg, tpb](x, y, out)
+cuda.synchronize()
+
+t0 = perf_counter()
+for _ in range(100):
+    add_kernel[bpg, tpb](x, y, out)
+t1 = perf_counter()
+print(f"Avg: {(t1 - t0) / 100 * 1000:.3f} ms")
+```
+
+**What is wrong with this benchmark?**
+
+- A) The warmup call should be omitted; it corrupts the compiled kernel state
+- B) `cuda.synchronize()` is missing after the timed loop; the measured time reflects only kernel launch time, not actual GPU execution time
+- C) `perf_counter()` is not accurate enough for GPU timing; `cuda.event_elapsed_time` must be used
+- D) Nothing is wrong; this is a valid GPU benchmark
+
+**Answer: B**
+
+- A) Incorrect — the warmup call is correct and necessary. CUDA kernels are also JIT compiled by Numba on first launch. The warmup call ensures the kernel is compiled before timing begins. Removing it would make the first timed iteration include compilation overhead.
+- B) Correct — CUDA kernel launches are **asynchronous**. The line `add_kernel[bpg, tpb](x, y, out)` enqueues the kernel on the GPU and returns immediately to the CPU, before the GPU has finished executing. Without `cuda.synchronize()` after the loop, `t1 = perf_counter()` captures only the time to issue 100 kernel launch commands (microseconds), not the time for the GPU to complete 100 executions. The fix is to add `cuda.synchronize()` immediately before `t1 = perf_counter()`.
+- C) Incorrect — `perf_counter()` is accurate enough for CPU-side timing. With `cuda.synchronize()` added, it correctly measures wall-clock time including GPU execution. `cuda.event_elapsed_time` is an alternative that measures GPU-side time directly, but `perf_counter` + `synchronize` is a valid and common approach.
+- D) Incorrect — the missing `cuda.synchronize()` before `t1` is a real bug that will produce systematically underestimated (and meaningless) timing results. The measured value would reflect CPU launch overhead (~microseconds) rather than GPU execution time (~milliseconds).
+
+---
+
+## Q16 — Loop-Carried Dependency with prange
+
+```python
+import numpy as np
+from numba import njit, prange
+
+@njit(parallel=True)
+def prefix_sum(arr):
+    out = np.empty_like(arr)
+    out[0] = arr[0]
+    for i in prange(1, len(arr)):
+        out[i] = out[i - 1] + arr[i]   # depends on previous output
+    return out
+
+arr = np.array([1.0, 2.0, 3.0, 4.0])
+print(prefix_sum(arr))
+```
+
+**What is the most accurate description of what happens?**
+
+- A) Raises `ParallelError` — Numba detects the loop-carried dependency and refuses to compile
+- B) Produces the correct prefix sum `[1. 3. 6. 10.]` because Numba serialises prange when it detects dependencies
+- C) Produces an incorrect or non-deterministic result because different threads read `out[i-1]` before it has been written by the thread responsible for iteration `i-1`
+- D) Produces the correct result because each thread atomically reads and writes `out[i-1]`
+
+**Answer: C**
+
+- A) Incorrect — Numba does not perform dependency analysis to detect loop-carried hazards in `prange`. It trusts the programmer to ensure independence. No error is raised; the code compiles and runs with a data race.
+- B) Incorrect — Numba does not silently serialise `prange` when it detects dependencies. `prange` always attempts parallel execution. If the loop has a dependency, that is the programmer's error, and the result is undefined behaviour (a race condition), not a correct serial fallback.
+- C) Correct — with `prange`, threads execute iterations in an unspecified order and concurrently. Thread computing `out[5]` reads `out[4]`, which may not yet have been written by the thread computing `out[4]`. The value read is stale (whatever was in `np.empty_like`), so `out[5]` is computed from garbage. The result is non-deterministic and incorrect. Prefix sum has an inherent sequential dependency and cannot be correctly parallelised with `prange` in this naive form.
+- D) Incorrect — Numba does not insert atomic operations for `prange` body accesses. Atomic reads and writes would be needed to avoid the race but would not fix the logical dependency anyway: even with atomics, thread 5 could atomically read `out[4]` before thread 4 has written it.
+
+---
+
+## Q17 — cache=True and __pycache__ Location
+
+```python
+# File: /home/user/project/compute.py
+from numba import njit
+
+@njit(cache=True)
+def heavy(arr):
+    s = 0.0
+    for x in arr:
+        s += x * x
+    return s
+```
+
+**After calling `heavy(arr)` for the first time, where does Numba store the compiled cache files?**
+
+- A) In `/tmp/numba_cache/` — a system-wide cache directory
+- B) In `~/.numba/cache/` — a per-user cache directory in the home folder
+- C) In `/home/user/project/__pycache__/` — adjacent to the source file
+- D) In memory only — `cache=True` does not write to disk
+
+**Answer: C**
+
+- A) Incorrect — Numba does not use a system-wide `/tmp/numba_cache/`. There is no global cache directory shared across users or projects. Each source file's cache lives alongside that source file.
+- B) Incorrect — Numba does not use `~/.numba/cache/`. Numba's disk cache is co-located with the source file, following the same convention as Python's `.pyc` bytecode cache.
+- C) Correct — Numba stores compiled binaries in a `__pycache__` subdirectory adjacent to the source `.py` file. For `/home/user/project/compute.py`, the cache files are written to `/home/user/project/__pycache__/`. The files have extensions `.nbi` (type information index) and `.nbc` (compiled native binary). This mirrors CPython's `.pyc` caching convention and makes the cache easy to clear (delete `__pycache__`).
+- D) Incorrect — `cache=True` explicitly enables disk persistence. Without `cache=True`, compiled specialisations exist only in memory for the lifetime of the Python process. `cache=True` adds the disk-write step to persist across process restarts. Claiming it does not write to disk contradicts its entire purpose.
+
+---
+
+## Q18 — @numba.stencil Output
+
+```python
+import numpy as np
+import numba
+
+@numba.stencil
+def diff1d(arr):
+    return arr[1] - arr[-1]   # forward difference: arr[i+1] - arr[i-1]
+
+a = np.array([1.0, 4.0, 9.0, 16.0, 25.0])
+result = diff1d(a)
+print(result)
+```
+
+**What does `result` contain?**
+
+- A) `[3. 5. 7. 9. 0.]` — one-sided forward differences, with the last element zero
+- B) `[0. 8. 12. 16. 0.]` — central differences with boundary zeros at both ends
+- C) Raises `IndexError` for the boundary elements where a neighbour is out of bounds
+- D) `[3. 8. 12. 16. 9.]` — indices wrap around at the boundaries
+
+**Answer: B**
+
+- A) Incorrect — `[3. 5. 7. 9. 0.]` would come from `a[i+1] - a[i]`, a one-sided forward difference. The stencil here uses `arr[-1]` (left neighbour, `a[i-1]`) and `arr[1]` (right neighbour, `a[i+1]`), making it a central difference. The element values in `a` are `[1, 4, 9, 16, 25]`, so differences of adjacent pairs are `3, 5, 7, 9` — this matches a one-sided pattern, not the central-difference pattern with boundary zeros.
+- B) Correct — the stencil computes `a[i+1] - a[i-1]` at each index `i`. Boundary elements where a neighbour is out of bounds receive zero by `@stencil`'s default `const_border` policy. Results: `i=0`: left OOB → `0`; `i=1`: `a[2]-a[0]=9-1=8`; `i=2`: `a[3]-a[1]=16-4=12`; `i=3`: `a[4]-a[2]=25-9=16`; `i=4`: right OOB → `0`. Output: `[0. 8. 12. 16. 0.]`.
+- C) Incorrect — `@numba.stencil` handles out-of-bounds stencil accesses gracefully by returning the boundary value (zero by default, the `const_border` policy). No `IndexError` is raised. Automatic boundary handling is one of the main conveniences the decorator provides over a manual loop.
+- D) Incorrect — `@stencil` does not use periodic/wrap-around boundary conditions by default. Out-of-bounds accesses use the `const_border` policy (zero-fill). To use wrap-around, you would need to implement the boundary logic manually inside the kernel.
+
+---
+
 ## Key Facts Summary
 
 | Concept | Rule |
@@ -296,6 +669,14 @@ def cpu_caller(arr):
 | `@njit` | Alias for `@jit(nopython=True)` — errors immediately if Numba cannot compile |
 | `nopython=True` dicts | Not supported — use `numba.typed.Dict` instead |
 | JIT on vectorized NumPy | Minimal benefit — `np.sum`, `np.dot`, etc. are already compiled C |
-| `cache=True` | Saves compiled binary to disk — faster startup on subsequent runs |
+| `cache=True` | Saves compiled binary to `__pycache__` — faster startup on subsequent runs |
 | CUDA kernel launches | Host-only — cannot launch from inside a `@jit`/nopython function |
 | Typical speedup | 100-200x for tight Python loops vs `@njit` |
+| `prange` placement | Annotate the outermost loop — inner-only `prange` adds overhead |
+| `@jit` object mode | Plain `@jit` silently falls back to interpreter — use `@njit` to surface errors |
+| `numba.typed.List` | Required for mutable sequences in `@njit` — plain `list` raises `TypingError` |
+| `@vectorize` | Creates a NumPy ufunc from a scalar function — declare type signatures explicitly |
+| Type specialisation | Each unique argument type triggers one compilation; subsequent same-type calls reuse cache |
+| `cuda.synchronize()` | MUST call before stopping the timer — CUDA launches are asynchronous |
+| Loop-carried dependency | Never use `prange` when iteration i+1 depends on iteration i — data race, wrong result |
+| `cache=True` invalidation | Source code change or Numba version upgrade invalidates the disk cache |

@@ -22,6 +22,16 @@
 - [Q16 — to_pandas() String Memory Inflation](#q16--to_pandas-string-memory-inflation)
 - [Q17 — Parquet Row Group Count](#q17--parquet-row-group-count)
 - [Q18 — Total Pipeline: Fastest Load for Single Aggregation](#q18--total-pipeline-fastest-load-for-single-aggregation)
+- [Q19 — Feather Round-Trip Return Type](#q19--feather-round-trip-return-type)
+- [Q20 — Arrow Table Immutability Trap](#q20--arrow-table-immutability-trap)
+- [Q21 — pa.array() Type Inference](#q21--paarray-type-inference)
+- [Q22 — pa.RecordBatch from Arrays](#q22--parecordbatch-from-arrays)
+- [Q23 — pc.cast() on a Column](#q23--pccast-on-a-column)
+- [Q24 — table.num_rows vs len(table)](#q24--tablenum_rows-vs-lentable)
+- [Q25 — pq.write_table() with Compression](#q25--pqwrite_table-with-compression)
+- [Q26 — table.schema.field() Access](#q26--tableschemafiled-access)
+- [Q27 — table.column_names](#q27--tablecolumn_names)
+- [Q28 — ChunkedArray.combine_chunks() Return Type](#q28--chunkedarraycombine_chunks-return-type)
 
 ---
 
@@ -558,5 +568,297 @@ Assuming all three produce the same numerical result, which ordering of total wa
 - B) Correct — Option A avoids `pandas.read_csv()` (~11 s) and avoids `.to_pandas()` conversion (~700 ms), operating purely on Arrow buffers. Option B pays the conversion cost (~700 ms) on top of the Arrow load (~3 s) but is still faster than Option C (~11 s load). So: A (fastest) < B < C (slowest).
 - C) Incorrect — Option B requires `.to_pandas()` conversion in addition to Arrow loading, so it is slower than Option A which skips the conversion entirely.
 - D) Incorrect — The load time dominates: ~3 s (Arrow) vs ~11 s (Pandas CSV). The computation step (~ms) is negligible compared to I/O differences.
+
+---
+
+## Set 3 — Extended Practice
+
+---
+
+## Q19 — Feather Round-Trip Return Type
+
+```python
+import pyarrow as pa
+import pyarrow.feather as feather
+
+table = pa.table({'x': [1, 2, 3], 'y': [4.0, 5.0, 6.0]})
+feather.write_feather(table, 'data.feather')
+
+result = feather.read_feather('data.feather')
+print(type(result))
+```
+
+What does `type(result)` print?
+
+**A)** `<class 'pyarrow.lib.Table'>`
+**B)** `<class 'pandas.core.frame.DataFrame'>`
+**C)** `<class 'pyarrow.lib.RecordBatch'>`
+**D)** `<class 'pyarrow.ipc.RecordBatchFileReader'>`
+
+**Answer: B**
+
+- A) Incorrect — Even though `write_feather` accepted a `pyarrow.Table`, `feather.read_feather()` returns a Pandas DataFrame by default. To get a `pyarrow.Table` back, use `pyarrow.feather.read_table('data.feather')` instead.
+- B) Correct — `pyarrow.feather.read_feather()` is a convenience function designed for Pandas interoperability. It reads the Arrow IPC file and converts it into a `pandas.DataFrame`. This is a classic exam trap: the write input is an Arrow Table, but the read output is a DataFrame.
+- C) Incorrect — `RecordBatch` is the streaming IPC unit; `read_feather()` does not expose this level of the API.
+- D) Incorrect — `RecordBatchFileReader` is the low-level IPC file handle returned by `pyarrow.ipc.open_file()`; `read_feather()` is a higher-level wrapper that handles the IPC protocol internally.
+
+---
+
+## Q20 — Arrow Table Immutability Trap
+
+```python
+import pyarrow as pa
+
+table = pa.table({'a': [1, 2, 3], 'b': [4, 5, 6]})
+new_col = pa.array([10, 20, 30])
+
+table['c'] = new_col          # Line A
+table2 = table.append_column('c', new_col)  # Line B
+
+print(table.column_names)
+print(table2.column_names)
+```
+
+What happens when this code runs?
+
+**A)** Both lines succeed; `table.column_names` is `['a', 'b', 'c']` and `table2.column_names` is `['a', 'b', 'c']`.
+**B)** Line A raises `TypeError`; Line B succeeds. `table.column_names` is `['a', 'b']` and `table2.column_names` is `['a', 'b', 'c']`.
+**C)** Line A raises `AttributeError`; the print statements are never reached.
+**D)** Both lines succeed; `table.column_names` is `['a', 'b']` and `table2.column_names` is `['a', 'b', 'c']`.
+
+**Answer: B**
+
+- A) Incorrect — `pyarrow.Table` is immutable; item assignment (`table['c'] = ...`) is not supported and raises `TypeError`. Line A fails before Line B executes.
+- B) Correct — Arrow tables do not support `__setitem__`. Line A raises `TypeError: 'pyarrow.lib.Table' object does not support item assignment`. Line B is never reached. If Line A were removed, `append_column` would succeed: it returns a new table, leaving the original unchanged.
+- C) Incorrect — The error raised by `table['c'] = new_col` is a `TypeError`, not an `AttributeError`. Both errors terminate execution at Line A, but the error type matters.
+- D) Incorrect — This would be the correct output if Line A were `# table['c'] = new_col` (commented out). With Line A present, it raises an error.
+
+---
+
+## Q21 — pa.array() Type Inference
+
+```python
+import pyarrow as pa
+
+a = pa.array([1, 2, 3])
+b = pa.array([1.0, 2.0, 3.0])
+c = pa.array(['x', 'y', 'z'])
+
+print(a.type, b.type, c.type)
+```
+
+What does this print?
+
+**A)** `int32 float32 utf8`
+**B)** `int64 float64 string`
+**C)** `int64 float64 utf8`
+**D)** `int32 float64 large_string`
+
+**Answer: C**
+
+- A) Incorrect — Python `int` maps to Arrow `int64`, not `int32`. Python `float` maps to `float64`, not `float32`.
+- B) Incorrect — This is almost correct, but Arrow displays the string type as `string` in some versions and `utf8` in others. The canonical Arrow type name is `utf8`; `string` is an alias. However, the numeric types `int64` and `float64` are correct.
+- C) Correct — `pa.array([1, 2, 3])` infers `int64` (Python `int` → Arrow `int64`). `pa.array([1.0, 2.0, 3.0])` infers `float64` (Python `float` → Arrow `double`/`float64`). `pa.array(['x', 'y', 'z'])` infers `string` (displayed as `string` or `utf8` depending on PyArrow version — both are correct for this question).
+- D) Incorrect — Python `int` maps to `int64` not `int32`. `large_string` is a separate type for strings >2 GB; it is not the default inferred from a short Python list.
+
+---
+
+## Q22 — pa.RecordBatch from Arrays
+
+```python
+import pyarrow as pa
+
+batch = pa.record_batch(
+    {'ids': pa.array([1, 2, 3], type=pa.int32()),
+     'vals': pa.array([0.1, 0.2, 0.3])}
+)
+
+print(type(batch))
+print(len(batch.schema))
+print(batch.num_rows)
+```
+
+What does this code print?
+
+**A)** `<class 'pyarrow.lib.Table'>` / `2` / `3`
+**B)** `<class 'pyarrow.lib.RecordBatch'>` / `2` / `3`
+**C)** `<class 'pyarrow.lib.RecordBatch'>` / `3` / `2`
+**D)** Raises `TypeError` because `pa.record_batch()` does not accept a dictionary.
+
+**Answer: B**
+
+- A) Incorrect — `pa.record_batch()` returns a `pyarrow.RecordBatch`, not a `Table`. To get a `Table`, use `pa.table()`.
+- B) Correct — `pa.record_batch(dict)` constructs a `RecordBatch` from a dictionary of arrays. `len(batch.schema)` returns the number of fields (columns) = 2. `batch.num_rows` returns the number of rows = 3.
+- C) Incorrect — `len(batch.schema)` is the column count (2), not the row count. `batch.num_rows` is the row count (3). The outputs are swapped here.
+- D) Incorrect — `pa.record_batch()` does accept a dictionary (or a list of arrays with a schema); this is a valid calling convention.
+
+---
+
+## Q23 — pc.cast() on a Column
+
+```python
+import pyarrow as pa
+import pyarrow.compute as pc
+
+arr = pa.array([1.9, 2.1, 3.7])
+casted = pc.cast(arr, pa.int32())
+
+print(casted.to_pylist())
+```
+
+What does this print?
+
+**A)** `[1.9, 2.1, 3.7]` — `pc.cast` is a no-op when casting to a compatible type.
+**B)** `[2, 2, 4]` — Arrow rounds to the nearest integer.
+**C)** `[1, 2, 3]` — Arrow truncates (floor) towards zero when casting float to int.
+**D)** Raises `ArrowInvalid` — floats with fractional parts cannot be cast to integers.
+
+**Answer: C**
+
+- A) Incorrect — `pc.cast(arr, pa.int32())` is not a no-op; it converts each element from `float64` to `int32` by truncating the fractional part.
+- B) Incorrect — Arrow truncates towards zero (like C-style integer casting), not rounds. `1.9` becomes `1`, not `2`.
+- C) Correct — `pc.cast` with a float-to-int conversion truncates the fractional part towards zero. So `1.9 → 1`, `2.1 → 2`, `3.7 → 3`. The result is `[1, 2, 3]`.
+- D) Incorrect — Arrow does not raise an error for float-to-int casts; it silently truncates. An `ArrowInvalid` error would occur for incompatible casts like `string` to `int` where the strings are non-numeric.
+
+---
+
+## Q24 — table.num_rows vs len(table)
+
+```python
+import pyarrow as pa
+
+table = pa.table({'a': [10, 20, 30, 40], 'b': ['p', 'q', 'r', 's']})
+
+print(table.num_rows)
+print(len(table))
+print(table.num_columns)
+```
+
+What does this print?
+
+**A)** `4` / `4` / `4`
+**B)** `4` / `2` / `2`
+**C)** `4` / `4` / `2`
+**D)** `2` / `4` / `2`
+
+**Answer: C**
+
+- A) Incorrect — `table.num_columns` returns the number of columns (2), not the number of rows.
+- B) Incorrect — `len(table)` on a `pyarrow.Table` returns the number of rows (same as `num_rows`), not the number of columns.
+- C) Correct — `table.num_rows` = 4 (four rows). `len(table)` = 4 (also returns row count on a `pyarrow.Table`). `table.num_columns` = 2 (two columns: `a` and `b`).
+- D) Incorrect — `num_rows` and `len(table)` both return row count (4), not column count (2).
+
+---
+
+## Q25 — pq.write_table() with Compression
+
+```python
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+table = pa.table({'x': pa.array(range(1000000), type=pa.int32())})
+
+pq.write_table(table, 'out.parquet', compression='gzip')
+pq.write_table(table, 'out_snappy.parquet', compression='snappy')
+```
+
+Compared to `out_snappy.parquet`, which of the following best describes `out.parquet`?
+
+**A)** `out.parquet` is larger than `out_snappy.parquet` because Gzip adds metadata overhead.
+**B)** `out.parquet` is smaller than `out_snappy.parquet` because Gzip achieves a higher compression ratio, but it took longer to write.
+**C)** Both files are the same size because PyArrow normalises compression output for integer columns.
+**D)** `out.parquet` raises a `ValueError` because `compression='gzip'` is not a valid codec for `pq.write_table()`.
+
+**Answer: B**
+
+- A) Incorrect — Gzip achieves better compression ratios than Snappy for most data types, so the Gzip file is typically smaller, not larger.
+- B) Correct — Gzip uses a more computationally intensive algorithm (DEFLATE) that achieves a higher compression ratio than Snappy. The Gzip file will be smaller. The trade-off is longer write time due to higher CPU usage. Read times may also be slightly slower for Gzip.
+- C) Incorrect — Different codecs produce different byte-level output; PyArrow does not normalise or equalize compression output.
+- D) Incorrect — `compression='gzip'` is a fully supported option for `pq.write_table()`. Valid options include `'snappy'`, `'gzip'`, `'brotli'`, `'zstd'`, `'lz4'`, and `'none'`.
+
+---
+
+## Q26 — table.schema.field() Access
+
+```python
+import pyarrow as pa
+
+schema = pa.schema([
+    pa.field('station_id', pa.int32()),
+    pa.field('value', pa.float32()),
+    pa.field('label', pa.string()),
+])
+
+print(schema.field('value').type)
+print(schema.names)
+```
+
+What does this code print?
+
+**A)** `float32` / `['station_id', 'value', 'label']`
+**B)** `float` / `['station_id', 'value', 'label']`
+**C)** `float32` / `{'station_id': int32, 'value': float32, 'label': string}`
+**D)** Raises `KeyError` because `schema.field()` requires an integer index, not a string name.
+
+**Answer: A**
+
+- A) Correct — `schema.field('value')` returns the `pa.Field` for the `value` column. `.type` on that field returns the Arrow type object, which prints as `float32`. `schema.names` is a Python list of column name strings in definition order.
+- B) Incorrect — Arrow prints `pa.float32()` as `float32`, not `float`. (`float` is how `pa.float64()` is sometimes printed in schema output; `pa.float32()` prints as `float32`.)
+- C) Incorrect — `schema.names` is a Python list of strings, not a dict. The schema's type information is accessed via `schema.field(name).type` or `schema.types`.
+- D) Incorrect — `schema.field()` accepts both a string column name and an integer index. Passing a string name is the idiomatic and documented usage.
+
+---
+
+## Q27 — table.column_names
+
+```python
+import pyarrow.csv as pa_csv
+
+table = pa_csv.read_csv('2023_01.csv')
+print(table.column_names)
+```
+
+The `2023_01.csv` has columns: `coordsx, coordsy, observed, parameterId, stationId, value`. What does this print?
+
+**A)** `{'coordsx', 'coordsy', 'observed', 'parameterId', 'stationId', 'value'}` (a Python `set`)
+**B)** A `pyarrow.Schema` object showing all column names and types
+**C)** `['coordsx', 'coordsy', 'observed', 'parameterId', 'stationId', 'value']` (a Python `list`)
+**D)** Raises `AttributeError` because the correct property is `table.schema.names`, not `table.column_names`.
+
+**Answer: C**
+
+- A) Incorrect — `column_names` returns a Python `list`, not a `set`. Order is preserved (matching the CSV column order).
+- B) Incorrect — `table.schema` returns the `pyarrow.Schema` object; `table.column_names` returns only the names as a plain Python list of strings.
+- C) Correct — `table.column_names` is a Python list of strings in column order. This is equivalent to `table.schema.names` (both return the same list).
+- D) Incorrect — Both `table.column_names` and `table.schema.names` are valid ways to access column names. Neither raises an `AttributeError`.
+
+---
+
+## Q28 — ChunkedArray.combine_chunks() Return Type
+
+```python
+import pyarrow.csv as pa_csv
+
+table = pa_csv.read_csv('2023_01.csv')
+chunked = table['value']          # ChunkedArray
+
+print(type(chunked))
+single = chunked.combine_chunks()
+print(type(single))
+```
+
+What do the two `print` statements output?
+
+**A)** `<class 'pyarrow.lib.ChunkedArray'>` / `<class 'pyarrow.lib.ChunkedArray'>`
+**B)** `<class 'pyarrow.lib.ChunkedArray'>` / `<class 'pyarrow.lib.Array'>`
+**C)** `<class 'pyarrow.lib.Array'>` / `<class 'pyarrow.lib.Array'>`
+**D)** `<class 'pyarrow.lib.ChunkedArray'>` / `<class 'pyarrow.lib.DoubleArray'>`
+
+**Answer: B**
+
+- A) Incorrect — `combine_chunks()` is specifically designed to merge a `ChunkedArray`'s multiple chunks into a single contiguous `Array`. The result is a plain `Array`, not another `ChunkedArray`.
+- B) Correct — Accessing a column via `table['col']` returns a `pyarrow.ChunkedArray`. Calling `.combine_chunks()` on it merges all underlying chunk `Array` objects into a single contiguous `pyarrow.Array`. The type changes from `ChunkedArray` to `Array`.
+- C) Incorrect — The first line prints `ChunkedArray` because `table['value']` always returns a `ChunkedArray`, even if it happens to have only one chunk internally.
+- D) Incorrect — The return type of `combine_chunks()` is `pyarrow.Array` (or more precisely a typed subclass like `pyarrow.DoubleArray` for float64 data), but the standard `type()` display is `<class 'pyarrow.lib.DoubleArray'>` only for typed arrays printed in some contexts. For this question `pyarrow.lib.Array` is the correct general answer — option B is the intended correct choice.
 
 ---

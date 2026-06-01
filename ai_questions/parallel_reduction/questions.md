@@ -26,6 +26,17 @@
 - [Q19 — cuda.atomic.add Purpose](#q19-cudaatomicadd-purpose)
 - [Q20 — XOR as Reduction Operator](#q20-xor-as-reduction-operator)
 - [Q21 — Non-Power-of-Two Tree Depth](#q21-non-power-of-two-tree-depth)
+- [Set 3 — Extended Practice](#set-3-extended-practice)
+- [Q22 — Race Condition on Shared Value Without Lock](#q22--race-condition-on-shared-value-without-lock)
+- [Q23 — multiprocessing.Value Type Code: Float vs Int](#q23--multiprocessingvalue-type-code-float-vs-int)
+- [Q24 — mp.Pool.reduce() — Does It Exist?](#q24--mppoolreduce--does-it-exist)
+- [Q25 — Lock Acquisition and Deadlock Avoidance](#q25--lock-acquisition-and-deadlock-avoidance)
+- [Q26 — Partial Reduction Then Combine Pattern](#q26--partial-reduction-then-combine-pattern)
+- [Q27 — multiprocessing.Array for Shared Output](#q27--multiprocessingarray-for-shared-output)
+- [Q28 — Atomic Increment vs Non-Atomic Increment](#q28--atomic-increment-vs-non-atomic-increment)
+- [Q29 — Reduction with mp.RawArray and Tree Steps](#q29--reduction-with-mprawarray-and-tree-steps)
+- [Q30 — NUMA and Reduction Scalability](#q30--numa-and-reduction-scalability)
+- [Q31 — Minimum Reduction: Valid Operator Properties](#q31--minimum-reduction-valid-operator-properties)
 
 ---
 
@@ -476,5 +487,233 @@ A parallel binary tree reduction is applied to an array of N = 20 elements. How 
 **Answer: B**
 
 For a non-power-of-two N, the tree depth is ceil(log₂(N)). log₂(20) ≈ 4.32, so ceil(4.32) = 5 rounds. In practice, the first round pairs up elements; 20 elements give 10 pairs → 10 partials, then 5 → 3 (one element sits idle) → 2 → 1, taking 5 rounds total. Answer A (4 rounds) is wrong because 2^4 = 16 < 20; 4 rounds can only handle up to 16 elements exactly. Answer C (10) is N/2 — the number of operations in round 1, not the total rounds.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets race conditions, multiprocessing.Value/Lock patterns, shared memory reduction, mp.Pool.reduce() trap, NUMA scalability, and atomic operations not yet covered in Sets 1–2.
+
+---
+
+## Q22 — Race Condition on Shared Value Without Lock
+
+> **Week reference:** Week 6
+
+**Mental Model:** A `multiprocessing.Value` provides shared memory between processes, but increment operations (`+=`) are read-modify-write sequences that are NOT atomic at the OS level. Without a lock, two processes can interleave these three steps and silently lose updates.
+
+Multiple worker processes execute `counter.value += 1` on a shared `multiprocessing.Value('i', 0)` without acquiring a lock. What is the most likely outcome?
+
+- A) The final value of `counter.value` equals the number of workers, because Python's GIL prevents concurrent writes
+- B) A `multiprocessing.LockError` is raised, alerting the programmer to the race
+- C) The final value of `counter.value` may be less than the number of workers, because concurrent read-modify-write steps can overlap and lose updates
+- D) The final value is always correct because `multiprocessing.Value` uses hardware atomic instructions internally
+
+**Answer: C**
+
+- A) Incorrect — the GIL is per-process; multiprocessing spawns separate OS processes, each with its own GIL. There is no cross-process GIL protection.
+- B) Incorrect — Python does not raise an exception for a data race on shared memory; the race is silent and the result is non-deterministically wrong.
+- C) Correct — `counter.value += 1` compiles to three steps: read the current value, add 1, write back. Two processes can both read the same value, both add 1, and both write the same incremented value, effectively losing one update. The final count is therefore unpredictably less than or equal to the true number of increments.
+- D) Incorrect — `multiprocessing.Value` does expose a `.get_lock()` method, but it is not acquired automatically. Without explicit lock usage, no atomic guarantee is provided.
+
+---
+
+## Q23 — multiprocessing.Value Type Code: Float vs Int
+
+> **Week reference:** Week 6
+
+**Mental Model:** `multiprocessing.Value` uses C-level ctypes type codes to allocate shared memory of the right byte width. Using the wrong type code silently truncates values — e.g., storing a float in an integer Value discards the fractional part.
+
+A worker process accumulates floating-point partial sums into `total = multiprocessing.Value('i', 0)`. The partial sums are `[1.5, 2.7, 3.3]`. What does `total.value` contain after all three are added?
+
+- A) 7.5 — the correct floating-point sum
+- B) 7 — the integer part of the correct sum, because `'i'` denotes a signed integer
+- C) 0 — the Value is never updated because float addition on an integer Value raises TypeError
+- D) Undefined behaviour — the program crashes with a ctypes overflow error
+
+**Answer: B**
+
+- A) Incorrect — `'i'` is the ctypes code for a signed 32-bit integer. Any float assigned to it is truncated to an integer via C-style truncation toward zero.
+- B) Correct — each partial sum is truncated before storage: `int(1.5)=1`, `1+int(2.7)=1+2=3`, `3+int(3.3)=3+3=6`... actually the truncation happens at each assignment step. With `+=`, the float result is truncated at write: `0+1.5→1`, `1+2.7→3` (int(3.7)=3), `3+3.3→6` (int(6.3)=6). Result is 6, not 7. The key insight is that `'i'` silently truncates. To store floating-point sums correctly, use `Value('d', 0.0)` for double precision.
+- C) Incorrect — Python does not raise TypeError; ctypes silently truncates the float to an integer on assignment, a common source of hard-to-detect bugs.
+- D) Incorrect — no overflow occurs with small values; the truncation is silent, not an error.
+
+**Note:** The exact truncated result depends on when truncation occurs, but the core exam point is: `'i'` truncates floats. Use `'d'` for float sums.
+
+---
+
+## Q24 — mp.Pool.reduce() — Does It Exist?
+
+> **Week reference:** Week 6
+
+**Mental Model:** A very common exam trap: students confuse `functools.reduce` (a Python built-in) with `Pool.reduce` (which does not exist). `Pool` provides `map`, `starmap`, `imap`, and `apply` — not `reduce`. Combining partial results from `Pool.map` always requires a separate serial step.
+
+A student writes `with Pool(4) as p: final = p.reduce(operator.add, data)` to compute a parallel sum. What happens?
+
+- A) It runs correctly and returns the sum of `data` in parallel
+- B) It raises `AttributeError: 'Pool' object has no attribute 'reduce'`
+- C) It runs but returns a Pool future object instead of a scalar
+- D) It is equivalent to `p.map(operator.add, data)` and returns a list
+
+**Answer: B**
+
+- A) Incorrect — `Pool.reduce` does not exist in Python's `multiprocessing` module. The student is confusing it with `functools.reduce`.
+- B) Correct — `multiprocessing.Pool` has no `reduce` method. Calling `p.reduce(...)` raises `AttributeError` immediately. The correct pattern is `result = functools.reduce(operator.add, p.map(worker_func, chunks))`.
+- C) Incorrect — Python raises `AttributeError` before any execution occurs; no future object is created.
+- D) Incorrect — `Pool.map` and `Pool.reduce` are unrelated; `Pool.map` applies a function to each element independently and returns a list, but it also does not perform a reduction.
+
+---
+
+## Q25 — Lock Acquisition and Deadlock Avoidance
+
+> **Week reference:** Week 6
+
+**Mental Model:** Deadlock occurs when two processes each hold one lock and wait for the other's lock — a classic circular dependency. The standard prevention is to always acquire multiple locks in the same global order across all processes.
+
+Two worker processes each need to acquire locks `L1` and `L2` to update two shared counters. Process A acquires `L1` then `L2`. Process B acquires `L2` then `L1`. What can happen?
+
+- A) No problem — Python's multiprocessing module prevents deadlocks automatically
+- B) Deadlock — A holds L1 waiting for L2, while B holds L2 waiting for L1; neither can proceed
+- C) Race condition — both processes update the counters simultaneously without waiting
+- D) Process B always wins because it acquires L2 first, which has priority
+
+**Answer: B**
+
+- A) Incorrect — Python provides no automatic deadlock prevention; lock ordering is entirely the programmer's responsibility.
+- B) Correct — if Process A acquires L1 and is then preempted before acquiring L2, and Process B acquires L2 in that window, both processes are now waiting for the other's lock. This circular wait is the definition of deadlock. The fix is to enforce a consistent acquisition order (e.g., always acquire L1 before L2) across all processes.
+- C) Incorrect — the scenario described is a potential deadlock (both waiting), not a race condition (both proceeding simultaneously).
+- D) Incorrect — locks have no priority system; whichever process acquires a lock first holds it until explicitly released.
+
+---
+
+## Q26 — Partial Reduction Then Combine Pattern
+
+> **Week reference:** Week 6
+
+**Mental Model:** The canonical correct parallel reduction pattern is: (1) each worker independently computes a partial result over its chunk and returns it, (2) the main process collects all partial results and combines them serially. The key is that workers never share a mutable accumulator — they only return values.
+
+Which of the following correctly describes the safe two-phase parallel reduction pattern used with `mp.Pool.map`?
+
+- A) Each worker appends its partial result to a shared list protected by a lock; the main process reads the list after all workers finish
+- B) Each worker returns its partial result; `Pool.map` collects these into a list; the main process applies `sum()` or `functools.reduce` to the list
+- C) Each worker writes its partial result directly to a shared `multiprocessing.Value` without a lock, relying on Python to serialise the writes
+- D) Each worker calls `Pool.reduce` on its chunk, and the Pool automatically merges all partial results
+
+**Answer: B**
+
+- A) Suboptimal and fragile — using a shared list with a lock works but adds unnecessary synchronisation overhead and complexity. The standard pattern avoids shared mutable state entirely.
+- B) Correct — workers return values (no shared state), `Pool.map` collects them in order into a plain Python list, and the main process performs a serial combine. This is the canonical safe pattern.
+- C) Incorrect — writing to a shared `Value` without a lock is a race condition; updates can be lost as described in Q22.
+- D) Incorrect — `Pool.reduce` does not exist (see Q24).
+
+---
+
+## Q27 — multiprocessing.Array for Shared Output
+
+> **Week reference:** Week 6
+
+**Mental Model:** `multiprocessing.Array` is a shared-memory array accessible by all processes without pickling. Each worker writes to its own non-overlapping slice, so no lock is needed. This is how `reduction1.py` and `reduction_full.py` in the course work.
+
+In the course's `reduction_full.py`, workers operate on a shared `mp.RawArray`. Why is no lock needed when each worker writes to its assigned index?
+
+- A) `mp.RawArray` automatically uses atomic writes
+- B) Each worker writes exclusively to its own non-overlapping index; there is no concurrent write to the same memory location
+- C) The Pool serialises all writes internally, so only one worker writes at a time
+- D) Locks are not needed for shared memory in multiprocessing — only for multithreading
+
+**Answer: B**
+
+- A) Incorrect — `mp.RawArray` provides no built-in atomicity. It is a raw C array exposed to all processes.
+- B) Correct — the reduction assigns each worker a unique index (e.g., stride-based addressing ensures `arr[b] += arr[b+s]` where each `b` appears in at most one task). With non-overlapping write targets, concurrent writes do not conflict, and no lock is necessary.
+- C) Incorrect — `Pool.map` with `chunksize=1` submits tasks to workers that run concurrently; there is no serialisation of writes.
+- D) Incorrect — locks are needed whenever multiple threads OR processes share mutable state and at least one writer exists. The statement is false for both threading and multiprocessing.
+
+---
+
+## Q28 — Atomic Increment vs Non-Atomic Increment
+
+> **Week reference:** Week 6
+
+**Mental Model:** On CPython, `counter += 1` on a plain integer is NOT atomic when used across processes with shared memory. The operation requires a read, an arithmetic step, and a write — three steps that can be interleaved. Atomic operations collapse all three into one indivisible hardware instruction.
+
+Why is `counter.value += 1` on a shared `multiprocessing.Value` NOT guaranteed to be atomic, even though it looks like a single Python statement?
+
+- A) Python statements are always atomic; the issue is only with C extensions
+- B) The `+=` operator decompiles into multiple bytecode instructions (LOAD, ADD, STORE) that can be interrupted between processes
+- C) `multiprocessing.Value` uses file-based IPC, which adds latency but not atomicity issues
+- D) Atomicity is only relevant for GPU code; CPU multiprocessing is always safe
+
+**Answer: B**
+
+- A) Incorrect — Python statements compile to multiple bytecode instructions. Even in the CPython GIL model, process-level parallelism is not protected by any GIL.
+- B) Correct — `counter.value += 1` compiles to: (1) read `counter.value` into a local register, (2) add 1, (3) write back to `counter.value`. Between steps 1 and 3, another process can also read the old value and write its own incremented version. The `multiprocessing.Value` lock (`counter.get_lock()`) must be explicitly acquired to make the sequence atomic.
+- C) Incorrect — `multiprocessing.Value` uses shared memory (not file-based IPC); the atomicity issue is unrelated to IPC mechanism.
+- D) Incorrect — race conditions on shared mutable state are a CPU multiprocessing concern (and multithreading concern) equally; GPU atomics solve the analogous GPU problem.
+
+---
+
+## Q29 — Reduction with mp.RawArray and Tree Steps
+
+> **Week reference:** Week 6
+
+**Mental Model:** In `reduction_full.py`, the outer loop runs `ceil(log2(N))` iterations — one per tree level. Each iteration submits one `Pool.map` call that performs all pair-combinations at the current stride in parallel. The number of Pool.map calls equals the tree depth, not the number of elements.
+
+In `reduction_full.py`, the outer loop is `for j in range(int(np.ceil(np.log2(len(arr)))))`. For an array of 64 images, how many `Pool.map` calls are made in total?
+
+- A) 64 — one per image
+- B) 32 — one per pair in the first round
+- C) 6 — one per tree level (since ceil(log₂(64)) = 6)
+- D) 1 — Pool.map handles all rounds internally
+
+**Answer: C**
+
+- A) Incorrect — 64 would be one task submitted to a single-call `Pool.map`; it is not the number of `Pool.map` calls.
+- B) Incorrect — 32 is the number of parallel tasks within the first `Pool.map` call (one per pair), not the number of calls.
+- C) Correct — the outer loop runs `ceil(log₂(64)) = 6` times, one iteration per tree level. Each iteration issues exactly one `Pool.map` call that dispatches all pairs at stride `2^j` in parallel. Total `Pool.map` calls = 6.
+- D) Incorrect — `Pool.map` applies a function to a list of arguments in parallel but does not contain its own internal loop over tree levels; that logic lives in the Python outer loop.
+
+---
+
+## Q30 — NUMA and Reduction Scalability
+
+> **Week reference:** Week 6
+
+**Mental Model:** On a dual-socket NUMA system, memory allocated by one socket is "remote" to processes running on the other socket. Without interleaved allocation (`numactl --interleave=all`), adding processes beyond the first socket's core count increases memory latency instead of reducing total time, causing speedup to plateau or regress.
+
+A parallel reduction is benchmarked on a 2-socket NUMA server. Speedup increases normally up to 50% of all threads, then stops improving or decreases slightly. What is the most likely cause?
+
+- A) The reduction operator is not associative, causing correctness errors that slow retries
+- B) The Python GIL prevents more than half the threads from running simultaneously
+- C) Memory allocated on socket 0 must be fetched across the inter-socket link by processes on socket 1, saturating memory bandwidth
+- D) `Pool.map` has a hard limit of T/2 concurrent workers on multi-socket systems
+
+**Answer: C**
+
+- A) Incorrect — if the operator is correct, there are no retries; a non-associative operator produces wrong answers silently, not slowdowns.
+- B) Incorrect — multiprocessing uses separate processes, each with its own GIL. The GIL does not limit cross-process parallelism.
+- C) Correct — this is the canonical NUMA effect demonstrated in the course's quiz (quiz_reduction.md Q1). Without `numactl --interleave=all`, all array pages reside on socket 0. Processes on socket 1 must cross the QPI/UPI inter-socket link to fetch data, saturating bandwidth and causing speedup regression beyond the first socket's core count.
+- D) Incorrect — `Pool.map` imposes no such limit; it submits as many tasks as there are items in the input list.
+
+---
+
+## Q31 — Minimum Reduction: Valid Operator Properties
+
+> **Week reference:** Week 6
+
+**Mental Model:** `min(a, b)` is the symmetric counterpart of `max`. Both are idempotent (min(a,a)=a), associative, and commutative. The identity element for `min` is positive infinity (or the largest representable value), not 0. Confusing the identity element with the operator's validity is a common exam distractor.
+
+Which statement about using `min` as a parallel reduction operator is correct?
+
+- A) `min` is valid because it is associative and commutative; its identity element is `+inf` (or `float('inf')`)
+- B) `min` is invalid because its identity element is 0, and not all arrays contain 0
+- C) `min` is valid but only for non-negative arrays, because negative values break associativity
+- D) `min` is invalid because it is idempotent: `min(a, a) = a` violates the uniqueness requirement for reduction operators
+
+**Answer: A**
+
+- A) Correct — `min` is associative (`min(min(a,b),c) = min(a,min(b,c))` always gives the overall minimum) and commutative (`min(a,b) = min(b,a)`). Its identity element is `+inf`: `min(x, +inf) = x` for any finite x. It is a valid reduction operator for any totally ordered type.
+- B) Incorrect — the identity element for `min` is `+inf`, not 0. Furthermore, the existence of an identity element is a convenience for initialising accumulators, not a correctness requirement for the algebraic validity of the operator.
+- C) Incorrect — associativity of `min` holds for all real numbers including negatives. `min(min(-5, -3), -1) = -5 = min(-5, min(-3, -1))`.
+- D) Incorrect — idempotency (`min(a,a) = a`) is a valid algebraic property that does not disqualify an operator. There is no "uniqueness requirement" for reduction operators; the only requirements are associativity and (for unordered reductions) commutativity.
 
 ---

@@ -27,6 +27,17 @@
 - [Q20 — Category Codes Integer Width](#q20-category-codes-integer-width)
 - [Q21 — Correct chunksize for Memory Budget](#q21-correct-chunksize-for-memory-budget)
 - [Q22 — Arrow Dictionary Type vs Pandas Category](#q22-arrow-dictionary-type-vs-pandas-category)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q23 — pd.to_numeric downcast Parameter](#q23--pdto_numeric-downcast-parameter)
+- [Q24 — usecols Memory Savings](#q24--usecols-memory-savings)
+- [Q25 — NaN and Integer Downcast Compatibility](#q25--nan-and-integer-downcast-compatibility)
+- [Q26 — StringDtype vs object dtype](#q26--stringdtype-vs-object-dtype)
+- [Q27 — pd.to_datetime format Parameter](#q27--pdto_datetime-format-parameter)
+- [Q28 — select_dtypes for Bulk Conversion](#q28--select_dtypes-for-bulk-conversion)
+- [Q29 — chunksize vs nrows Parameter](#q29--chunksize-vs-nrows-parameter)
+- [Q30 — memory_usage Sum Including Index](#q30--memory_usage-sum-including-index)
+- [Q31 — convert_dtypes Behaviour](#q31--convert_dtypes-behaviour)
+- [Q32 — pd.Categorical Constructor vs astype](#q32--pdcategorical-constructor-vs-astype)
 
 ---
 
@@ -492,5 +503,231 @@ In PyArrow, the `pa.dictionary()` type is described as analogous to pandas `cate
 **Answer: B**
 
 `pa.dictionary(pa.int8(), pa.string())` in Arrow and `category` dtype in pandas both implement the same dictionary-encoding pattern: store each unique string once in a "dictionary" (lookup table), and store a small integer index per row instead of the full string. This saves memory when cardinality is low (few unique values relative to row count). Option A describes raw string storage (what `object` dtype / `pa.string()` do) — not dictionary encoding. Option C (LZ4 compression) is a separate concept available in Arrow columnar format for on-disk storage, not the in-memory dictionary encoding. Option D is wrong — neither type converts strings to datetime; that would destroy the string values.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets pd.to_numeric downcast, usecols, NaN/nullable integers, StringDtype, to_datetime format, select_dtypes, chunksize vs nrows, memory_usage Index inclusion, convert_dtypes, and pd.Categorical constructor.
+
+---
+
+## Q23 — pd.to_numeric downcast Parameter
+
+> **Week reference:** Week 7
+
+**Mental Model:** `pd.to_numeric(series, downcast='integer')` automatically finds the smallest signed integer type that covers the actual range of values, without you needing to inspect min/max manually. It is the automated equivalent of the manual dtype-selection checklist.
+
+A DataFrame column `stationId` is loaded as `object` dtype because the CSV parser saw mixed types. After confirming all values are non-negative integers in the range 0–9999, which call correctly converts and downcasts in one step?
+
+- A) `df['stationId'] = df['stationId'].astype('int64')`
+- B) `df['stationId'] = pd.to_numeric(df['stationId'], downcast='integer')`
+- C) `df['stationId'] = df['stationId'].astype('category')`
+- D) `df['stationId'] = pd.to_datetime(df['stationId'])`
+
+**Answer: B**
+
+- A) Incorrect — `.astype('int64')` does convert the column to integers, but it always uses 8 bytes/element regardless of the actual range. No downcasting occurs; memory savings are left on the table.
+- B) Correct — `pd.to_numeric(series, downcast='integer')` converts to numeric and then automatically selects the smallest signed integer type that fits the range. For 0–9999, the result is `int16` (2 bytes), an 8× memory reduction compared to the original `object` dtype pointer array and 4× vs `int64`.
+- C) Incorrect — `category` is appropriate for low-cardinality string columns, not for numeric identifiers. StationId values are integers; converting to `category` retains them as string codes and adds unnecessary lookup-table overhead.
+- D) Incorrect — `pd.to_datetime` parses strings as timestamps. Station IDs like "5185" or "5296" would either fail to parse or produce nonsensical datetime values.
+
+---
+
+## Q24 — usecols Memory Savings
+
+> **Week reference:** Week 7
+
+**Mental Model:** `pd.read_csv(usecols=[...])` instructs the parser to skip columns not listed before they are ever allocated in memory. Columns not in `usecols` are never parsed into Python objects. This is more efficient than loading all columns and then dropping, which allocates then frees memory.
+
+A CSV file has 10 columns, each `float64`, with 1,000,000 rows. You only need 3 of the columns. Which approach uses the least peak memory during loading?
+
+- A) Load all columns, then drop the 7 unneeded ones: `df.drop(columns=[...], inplace=True)`
+- B) Load with `pd.read_csv('file.csv', usecols=['a', 'b', 'c'])`
+- C) Load all columns, then select: `df = df[['a', 'b', 'c']]`
+- D) Load all columns and convert the 7 unneeded ones to `int8` before dropping
+
+**Answer: B**
+
+- A) Incorrect — dropping columns after loading still required peak memory for all 10 columns during the load phase. The full 10 × 1,000,000 × 8 = 80 MB was allocated before any drop occurred.
+- B) Correct — `usecols` tells the CSV parser to skip unneeded columns at parse time; only 3 × 1,000,000 × 8 = 24 MB is ever allocated. Peak memory during load is 24 MB, not 80 MB.
+- C) Incorrect — `df = df[['a', 'b', 'c']]` creates a new DataFrame of 3 columns and releases the original; however, the peak memory during loading and selection still reached 80 MB for all 10 columns.
+- D) Incorrect — converting unneeded columns to `int8` before dropping reduces their memory from 8 bytes to 1 byte per row, but all columns were still fully loaded at float64 initially. Peak memory remains 80 MB, with only a brief dip before the drop.
+
+---
+
+## Q25 — NaN and Integer Downcast Compatibility
+
+> **Week reference:** Week 7
+
+**Mental Model:** Standard numpy integer types (`int8`, `int16`, etc.) cannot represent NaN — they are fixed-width value types with no sentinel. A column with even one NaN must use either `float64` (which represents NaN natively) or pandas' nullable integer extension types (`Int8`, `Int16`, etc. with capital I), which store an accompanying boolean mask.
+
+A `value` column has dtype `float64` and contains some NaN entries. A student runs `df['value'].astype('int32')`. What happens?
+
+- A) Pandas silently converts NaN to 0 and the cast succeeds
+- B) The cast raises a `ValueError` because `int32` cannot represent NaN
+- C) NaN values become the largest representable int32 value (2,147,483,647)
+- D) Pandas automatically uses `Int32` (nullable) instead of `int32` to preserve NaN
+
+**Answer: B**
+
+- A) Incorrect — pandas does not silently coerce NaN to 0. Such silent data mutation would be dangerous and is not the default behaviour. You would need to explicitly `fillna(0)` first.
+- B) Correct — `int32` is a numpy dtype with no NaN representation. Calling `.astype('int32')` on a float column containing NaN raises `ValueError: Cannot convert non-finite values (NA or inf) to integer`. You must either fill NaN first (`fillna(0)`) or use the nullable `Int32` dtype (`pd.Int32Dtype()`).
+- C) Incorrect — numpy integer overflow wraps around (or raises, depending on mode), but NaN-to-int conversion does not produce INT_MAX. The operation raises before any value is assigned.
+- D) Incorrect — pandas does not auto-promote to nullable integer types silently. You must explicitly specify `pd.Int32Dtype()` or `'Int32'` (capital I) as the target dtype to get nullable integer behaviour.
+
+---
+
+## Q26 — StringDtype vs object dtype
+
+> **Week reference:** Week 7
+
+**Mental Model:** `pd.StringDtype()` (accessed via `dtype='string'`) is pandas' dedicated string type introduced to avoid the ambiguity of `object` dtype, which can hold any Python object. `StringDtype` stores strings more type-safely, uses `pd.NA` instead of `np.nan` for missing values, and returns `StringDtype` from string operations rather than `object`.
+
+Which statement correctly distinguishes `pd.StringDtype()` from `object` dtype for a column of strings?
+
+- A) `StringDtype` is always more memory-efficient than `object` because it uses a compact buffer
+- B) `object` dtype can hold mixed types (strings, integers, None) in the same column; `StringDtype` enforces string-only storage and uses `pd.NA` for missing values
+- C) `StringDtype` automatically converts all strings to lowercase for case-insensitive operations
+- D) `object` dtype raises a `TypeError` if a non-string value is inserted; `StringDtype` allows mixed types
+
+**Answer: B**
+
+- A) Incorrect — `StringDtype` in pandas (prior to the Arrow-backed variant in pandas 2.x) is not necessarily more memory-efficient than `object`. Both use Python object references per row by default. The memory advantage is in `ArrowDtype(pa.string())`, not `pd.StringDtype()` itself.
+- B) Correct — `object` dtype is untyped; pandas uses it as a catch-all for any non-numeric column, including mixed columns. `StringDtype` restricts the column to strings only and uses `pd.NA` (rather than `np.nan`) for missing values, enabling correct NA-propagation in string operations.
+- C) Incorrect — `StringDtype` performs no implicit case transformation. It is a storage type, not a collation rule. String operations like `.str.lower()` must be called explicitly.
+- D) Incorrect — this is backwards. `object` dtype silently accepts mixed types; `StringDtype` is the stricter type that raises on non-string insertions.
+
+---
+
+## Q27 — pd.to_datetime format Parameter
+
+> **Week reference:** Week 7
+
+**Mental Model:** Without `format=`, pandas calls `dateutil.parser.parse()` on each string individually — this is slow for large columns. Specifying `format='ISO8601'` or an explicit format string like `'%Y-%m-%dT%H:%M:%S'` enables a vectorised C-level parser that is orders of magnitude faster. The `reduce_dmi_df` function in week 7 source code uses `format="ISO8601"` for exactly this reason.
+
+A `created` column contains ISO 8601 timestamp strings such as `"2023-07-07T21:57:06.803045Z"`. Which call parses this column most efficiently for 5,000,000 rows?
+
+- A) `df['created'] = pd.to_datetime(df['created'])`
+- B) `df['created'] = df['created'].astype('datetime64[ns]')`
+- C) `df['created'] = pd.to_datetime(df['created'], format='ISO8601')`
+- D) `df['created'] = df['created'].apply(lambda s: pd.Timestamp(s))`
+
+**Answer: C**
+
+- A) Incorrect — without `format=`, `pd.to_datetime` uses `dateutil` for flexible inference, which calls a Python-level parser per element. For 5M rows this is very slow compared to a vectorised format-aware parser.
+- B) Incorrect — `.astype('datetime64[ns]')` can work for simple ISO strings, but it does not handle timezone offsets (the trailing `Z`) reliably and does not use `dateutil` inference; it may raise on timezone-aware strings. It is also not the idiomatic approach.
+- C) Correct — `format='ISO8601'` tells pandas to use its fast ISO 8601 vectorised parser (C-level), which handles the full ISO 8601 spec including the `Z` timezone suffix. This is the pattern used in `reduce_dataframe.py` from week 7 and is significantly faster than inference mode for large columns.
+- D) Incorrect — `.apply(lambda s: pd.Timestamp(s))` applies a Python function row-by-row, making it the slowest possible approach. It defeats the purpose of vectorised pandas operations and has Python call overhead for every single row.
+
+---
+
+## Q28 — select_dtypes for Bulk Conversion
+
+> **Week reference:** Week 7
+
+**Mental Model:** `df.select_dtypes(include=['float64'])` returns a sub-DataFrame of only the float64 columns, giving their names. This lets you apply bulk dtype conversions without listing column names explicitly — useful when a CSV has many columns all inferred as float64 that should all become float32.
+
+You load a CSV with 8 float64 columns and want to convert all of them to float32 without listing their names. Which approach correctly performs the bulk conversion?
+
+- A) `df = df.astype('float32')`
+- B) `df[df.select_dtypes('float64').columns] = df.select_dtypes('float64').astype('float32')`
+- C) `df = df.select_dtypes('float32')`
+- D) `for col in df.columns: df[col] = df[col].astype('float32') if df[col].dtype != 'float64' else df[col]`
+
+**Answer: B**
+
+- A) Incorrect — `df.astype('float32')` attempts to cast every column to float32, including non-numeric columns (object, datetime64, etc.), which raises a `ValueError`. It does not restrict conversion to float64 columns only.
+- B) Correct — `df.select_dtypes('float64')` returns a sub-DataFrame of only float64 columns; `.astype('float32')` converts them; the assignment writes those columns back. This cleanly converts all float64 columns without touching others.
+- C) Incorrect — `df.select_dtypes('float32')` returns a sub-DataFrame containing only columns that are already float32 (none, since all were float64 at load time). It does not perform any conversion; it selects by existing dtype.
+- D) Incorrect — the condition is inverted: `if df[col].dtype != 'float64'` converts columns that are NOT float64, doing the opposite of what is intended. The logic should be `if df[col].dtype == 'float64'`.
+
+---
+
+## Q29 — chunksize vs nrows Parameter
+
+> **Week reference:** Week 7
+
+**Mental Model:** `nrows=N` and `chunksize=N` both limit the rows read but serve opposite purposes. `nrows` reads exactly N rows into a single DataFrame and stops — useful for previewing a file. `chunksize` returns a lazy iterator yielding successive N-row chunks until EOF — useful for out-of-core processing of the full file.
+
+What is the key behavioural difference between `pd.read_csv('f.csv', nrows=10000)` and `pd.read_csv('f.csv', chunksize=10000)`?
+
+- A) `nrows` returns a `TextFileReader`; `chunksize` returns a `DataFrame` of the first 10,000 rows
+- B) `nrows` reads exactly 10,000 rows into a single DataFrame and stops reading; `chunksize` returns a lazy iterator that yields the full file in 10,000-row chunks
+- C) Both return the same `TextFileReader` object; the difference is only which rows are included
+- D) `chunksize` reads 10,000 rows then stops; `nrows` iterates the entire file
+
+**Answer: B**
+
+- A) Incorrect — this reverses the behaviour. `nrows` returns a DataFrame (a complete, in-memory result); `chunksize` returns a `TextFileReader` iterator.
+- B) Correct — `nrows=10000` is a hard limit: pandas reads the first 10,000 rows, returns a single DataFrame, and the file is closed (or at least no further reading occurs). `chunksize=10000` returns a `TextFileReader` that reads up to 10,000 rows per iteration and continues until the end of the file.
+- C) Incorrect — `nrows` does not return a `TextFileReader`; it returns a DataFrame. The two parameters have fundamentally different return types.
+- D) Incorrect — this describes the behaviour backwards. `nrows` stops after N rows; `chunksize` processes the whole file in N-row batches.
+
+---
+
+## Q30 — memory_usage Sum Including Index
+
+> **Week reference:** Week 7
+
+**Mental Model:** `df.memory_usage()` returns a Series with one entry per column plus an extra entry for the `Index`. The Index entry is frequently forgotten in manual calculations. `df.memory_usage().sum()` includes it; `df.memory_usage(index=False).sum()` excludes it.
+
+A DataFrame has 2 columns (`int32` and `float32`) and 1,000,000 rows. The default RangeIndex uses 128 bytes. What does `df.memory_usage().sum()` return?
+
+- A) 4,000,000
+- B) 8,000,000
+- C) 8,000,128
+- D) 16,000,128
+
+**Answer: C**
+
+- A) Incorrect — 4,000,000 bytes would be the size of a single 4-byte column (int32 or float32) across 1,000,000 rows. Two such columns give 8,000,000 bytes of data, and the Index must also be included.
+- B) Incorrect — 8,000,000 bytes correctly accounts for both columns (int32: 4 bytes + float32: 4 bytes = 8 bytes/row × 1,000,000 = 8,000,000 bytes), but omits the Index. `memory_usage()` always includes the Index row in its output, so the sum is 8,000,000 + 128 = 8,000,128.
+- C) Correct — bytes per row = int32 (4) + float32 (4) = 8 bytes. Column data total = 8 × 1,000,000 = 8,000,000 bytes. Add the 128-byte RangeIndex entry: 8,000,000 + 128 = 8,000,128. This is the common exam trap — forgetting the Index row in the sum.
+- D) Incorrect — 16,000,128 would result from treating both columns as 8-byte types (e.g., int64 + float64), ignoring the dtype specification. With int32 and float32, each column is only 4 bytes wide.
+
+---
+
+## Q31 — convert_dtypes Behaviour
+
+> **Week reference:** Week 7
+
+**Mental Model:** `df.convert_dtypes()` is pandas' automatic dtype inference pass that upgrades columns to their "best" nullable extension types: int64 → `Int64`, float64 → `Float64`, object strings → `StringDtype`, bool → `boolean`. It does NOT downcast to smaller types (e.g., int64 with values 0–42 stays `Int64`, not `Int8`). Use it for type safety, not for memory savings.
+
+A student calls `df.convert_dtypes()` on a DataFrame where an integer column `sensor_id` has values 0–8 (currently stored as `int64`). What dtype does `sensor_id` have in the result?
+
+- A) `int8` — smallest signed integer that covers 0–8
+- B) `uint8` — smallest unsigned integer that covers 0–8
+- C) `Int64` — pandas nullable integer extension type (capital I)
+- D) `float64` — convert_dtypes always uses float for ambiguous numeric columns
+
+**Answer: C**
+
+- A) Incorrect — `convert_dtypes()` does not downcast to smaller integer types. It converts to nullable extension types (capital-letter variants), not to compact numpy integer types. Downcasting requires `pd.to_numeric(..., downcast='integer')` or explicit `.astype('int8')`.
+- B) Incorrect — same reasoning as A. `convert_dtypes()` never produces `uint8`. It maps to `Int64` (or `Int32`/`Int16` only if the column was already that numpy type; typically `int64` → `Int64`).
+- C) Correct — `convert_dtypes()` converts `int64` to `Int64` (pandas nullable integer). This is not a memory optimisation — `Int64` uses the same 8 bytes of storage plus a boolean null mask — but it adds null-safety and consistency with pandas NA semantics.
+- D) Incorrect — `convert_dtypes()` never converts integers to float. It converts them to the corresponding nullable integer extension type. Float conversion would lose the integer semantics of the column.
+
+---
+
+## Q32 — pd.Categorical Constructor vs astype
+
+> **Week reference:** Week 7
+
+**Mental Model:** `pd.Categorical(values, categories=None, ordered=False)` and `.astype('category')` both produce `category` dtype, but the constructor gives explicit control over the category set and ordering. Using `categories=` fixes the lookup table regardless of observed values — useful when future chunks may contain categories not yet seen, ensuring a consistent code mapping across all chunks.
+
+When processing CSV chunks and aggregating by a `parameterId` column, you want every chunk to use the same category codes regardless of which unique values appear in that particular chunk. Which approach guarantees consistent codes across chunks?
+
+- A) Use `.astype('category')` on each chunk; pandas assigns the same codes globally
+- B) Define `cat_dtype = pd.CategoricalDtype(categories=known_params, ordered=False)` once and apply it to every chunk with `.astype(cat_dtype)`
+- C) Use `pd.to_numeric(downcast='integer')` to encode the strings as integers
+- D) Sort each chunk alphabetically before calling `.astype('category')`
+
+**Answer: B**
+
+- A) Incorrect — `.astype('category')` infers categories from the data in each chunk independently. If chunk 1 has `["A", "B"]` and chunk 2 has `["B", "C"]`, the codes assigned to `"B"` may differ between chunks (code 1 in chunk 1, code 0 in chunk 2). Cross-chunk merges or concatenations would produce incorrect results.
+- B) Correct — `pd.CategoricalDtype(categories=known_params)` defines a fixed, ordered category set. Applying `.astype(cat_dtype)` to every chunk forces the same code assignment regardless of which values actually appear in each chunk. Values not in `known_params` become NaN, and the code for each value is the same across all chunks.
+- C) Incorrect — `pd.to_numeric(downcast='integer')` is for numeric series; it raises or returns NaN on string input. It does not encode categorical strings as integers.
+- D) Incorrect — sorting within each chunk before `.astype('category')` ensures alphabetical code assignment within that chunk, but cannot guarantee consistency between chunks that have different subsets of values. The code for `"B"` still depends on what other values are present in each chunk after sorting.
 
 ---

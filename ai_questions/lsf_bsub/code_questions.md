@@ -27,6 +27,17 @@
 - [Q20 — Per-Core Memory in MB vs GB](#q20-per-core-memory-in-mb-vs-gb)
 - [Q21 — Combining rusage and span in -R](#q21-combining-rusage-and-span-in-r)
 - [Q22 — bkill on a Running vs Pending Job](#q22-bkill-on-a-running-vs-pending-job)
+- [Set 3 — Extended Practice](#set-3-extended-practice)
+- [Q23 — OMP_NUM_THREADS Not Set: Thread Over-Subscription](#q23--omp_num_threads-not-set-thread-over-subscription)
+- [Q24 — Non-Contiguous Array: Which Elements Run?](#q24--non-contiguous-array-which-elements-run)
+- [Q25 — Dependency by Numeric Job ID](#q25--dependency-by-numeric-job-id)
+- [Q26 — bsub Without Redirection](#q26--bsub-without-redirection)
+- [Q27 — Memory Reserved vs Memory Used](#q27--memory-reserved-vs-memory-used)
+- [Q28 — Spot the USUSP State](#q28--spot-the-ususp-state)
+- [Q29 — Three -R Lines: What Gets Enforced?](#q29--three--r-lines-what-gets-enforced)
+- [Q30 — Wrong GPU Queue for VRAM Requirement](#q30--wrong-gpu-queue-for-vram-requirement)
+- [Q31 — stderr Missing from Output File](#q31--stderr-missing-from-output-file)
+- [Q32 — Wall Time Minutes-Only with Zero Padding](#q32--wall-time-minutes-only-with-zero-padding)
 
 ---
 
@@ -789,5 +800,382 @@ bjobs -kill 55001 55002
 **Answer: A**
 
 `bkill` works on jobs in any state — RUN, PEND, USUSP, etc. You can pass multiple job IDs in one command. `bstop` suspends a running job (sets it to USUSP) rather than killing it. `bdel` is not a standard LSF command. `bkill -pend` and `bkill -run` are not valid flag forms. `bjobs -kill` does not exist. Option A is the simplest and correct approach.
+
+---
+
+## Set 3 — Extended Practice
+
+- [Q23 — OMP_NUM_THREADS Not Set: Thread Over-Subscription](#q23--omp_num_threads-not-set-thread-over-subscription)
+- [Q24 — Non-Contiguous Array: Which Elements Run?](#q24--non-contiguous-array-which-elements-run)
+- [Q25 — Dependency by Numeric Job ID](#q25--dependency-by-numeric-job-id)
+- [Q26 — bsub Without Redirection](#q26--bsub-without-redirection)
+- [Q27 — Memory Reserved vs Memory Used](#q27--memory-reserved-vs-memory-used)
+- [Q28 — Spot the USUSP State](#q28--spot-the-ususp-state)
+- [Q29 — Three -R Lines: What Gets Enforced?](#q29--three--r-lines-what-gets-enforced)
+- [Q30 — Wrong GPU Queue for VRAM Requirement](#q30--wrong-gpu-queue-for-vram-requirement)
+- [Q31 — stderr Missing from Output File](#q31--stderr-missing-from-output-file)
+- [Q32 — Wall Time Minutes-Only with Zero Padding](#q32--wall-time-minutes-only-with-zero-padding)
+
+---
+
+## Q23 — OMP_NUM_THREADS Not Set: Thread Over-Subscription
+
+> **Week reference:** Week 1
+
+**Mental Model:** `-n` reserves slots from LSF but does not constrain the threads a program creates at runtime — without `OMP_NUM_THREADS` matching `-n`, a multi-threaded library may use all physical cores on the node regardless of what was requested.
+
+Consider this job script:
+
+```bash
+#!/bin/bash
+#BSUB -J omp_job
+#BSUB -q hpc
+#BSUB -n 4
+#BSUB -R "rusage[mem=2GB]"
+#BSUB -R "span[hosts=1]"
+#BSUB -W 0:30
+#BSUB -o omp_%J.out
+
+python numpy_heavy.py  # uses scipy.linalg which calls MKL internally
+```
+
+The node has 40 physical cores. What is the likely thread count used by MKL during `numpy_heavy.py`, and why is this a problem?
+
+- A) 4 threads — MKL reads LSF's `-n 4` and limits itself accordingly
+- B) 40 threads — MKL detects the node's physical core count and spawns a thread per core, over-subscribing the 4 reserved slots by 10×
+- C) 1 thread — without `OMP_NUM_THREADS`, MKL defaults to single-threaded mode for safety
+- D) 2 threads — MKL uses half the physical cores as a conservative default
+
+**Answer: B**
+
+- A) Incorrect — MKL has no awareness of LSF job slots. It does not read `-n` or any LSF environment variable to learn how many cores were reserved.
+- B) Correct — Without `OMP_NUM_THREADS` (or `MKL_NUM_THREADS`) set, MKL queries the hardware and spawns one thread per physical core — 40 threads on a 40-core node. This consumes CPU time from all 40 cores, effectively stealing resources from other users' jobs sharing the same node. The fix is to add `export OMP_NUM_THREADS=4` before the Python call.
+- C) Incorrect — Defaulting to 1 thread is not MKL or OpenMP behavior. They default to hardware concurrency, not safe single-threaded operation.
+- D) Incorrect — There is no "half cores" default in MKL or OpenMP. Half-core defaults are not documented behavior for any common HPC math library.
+
+---
+
+## Q24 — Non-Contiguous Array: Which Elements Run?
+
+> **Week reference:** Week 11
+
+**Mental Model:** A comma-separated index list in a job array creates exactly the listed indices as `$LSB_JOBINDEX` values — no elements between them are created, and the count is exactly the number of items in the list.
+
+A student submits this script:
+
+```bash
+#!/bin/bash
+#BSUB -J rerun[2,29,71,127]
+#BSUB -q hpc
+#BSUB -n 1
+#BSUB -R "rusage[mem=1GB]"
+#BSUB -o rerun_%J_%I.out
+
+echo "Index: $LSB_JOBINDEX"
+```
+
+How many jobs are submitted, and what values does `$LSB_JOBINDEX` take?
+
+- A) 126 jobs with indices 2 through 127 (a full contiguous range)
+- B) 4 jobs with `$LSB_JOBINDEX` = 2, 29, 71, 127
+- C) 4 jobs with `$LSB_JOBINDEX` = 1, 2, 3, 4 (re-mapped to sequential order)
+- D) 1 job with `$LSB_JOBINDEX` = "2,29,71,127" as a string
+
+**Answer: B**
+
+- A) Incorrect — Comma syntax does not create a range. To get a range you would use `[2-127]`. The comma list creates exactly the enumerated indices.
+- B) Correct — `[2,29,71,127]` creates precisely 4 array elements. Each element's `$LSB_JOBINDEX` is the literal value from the list: the first element has index 2, the second has 29, the third 71, the fourth 127. This is ideal for re-running a specific subset of a failed array.
+- C) Incorrect — LSF does not re-map non-contiguous indices to sequential integers. The actual listed values are used directly as `$LSB_JOBINDEX`.
+- D) Incorrect — `$LSB_JOBINDEX` is always a single integer per element. It is never a string containing the full list.
+
+---
+
+## Q25 — Dependency by Numeric Job ID
+
+> **Week reference:** Week 11
+
+**Mental Model:** Using a numeric job ID in a dependency expression (`done(12345678)`) creates a point-in-time dependency on exactly one specific submission — unlike name-based dependencies, it is immune to other jobs that happen to share the same name.
+
+You have this dependency setup:
+
+```bash
+# Step 1 — submitted first, gets job ID 21241475
+#BSUB -J preprocess
+...
+
+# Step 2 — uses numeric ID from step 1
+#BSUB -J analyze
+#BSUB -w "done(21241475)"
+...
+```
+
+A colleague also submits a job named `preprocess` (job ID 21241600) after your step 1 is running. How does `analyze` behave?
+
+- A) `analyze` waits for both `preprocess` jobs (21241475 and 21241600) because the name matches
+- B) `analyze` waits only for job 21241475 to reach DONE, regardless of job 21241600
+- C) The dependency becomes invalid because another job with the same name exists
+- D) `analyze` starts immediately because the numeric ID is treated as a timestamp, not a job reference
+
+**Answer: B**
+
+- A) Incorrect — The dependency uses the numeric job ID `21241475`, not the name `preprocess`. Numeric ID dependencies are fully independent of job names and unaffected by other jobs.
+- B) Correct — `done(21241475)` pins the dependency to exactly one job: the specific submission with that ID. Your colleague's job 21241600 is completely irrelevant. This is the key advantage of ID-based over name-based dependencies in shared cluster environments.
+- C) Incorrect — The existence of other jobs with matching names has no effect on numeric-ID-based dependencies.
+- D) Incorrect — Job IDs are unique sequential numbers assigned by the LSF scheduler, not timestamps. `done(21241475)` is a legitimate job reference, not a time-based condition.
+
+---
+
+## Q26 — bsub Without Redirection
+
+> **Week reference:** Week 1
+
+**Mental Model:** `bsub < script.sh` reads the script as stdin so LSF parses `#BSUB` directives; `bsub script.sh` passes the filename as a positional argument and `#BSUB` lines inside the file are not parsed as directives.
+
+A student runs:
+
+```bash
+bsub submit.sh
+```
+
+instead of:
+
+```bash
+bsub < submit.sh
+```
+
+The `submit.sh` file contains:
+
+```bash
+#!/bin/bash
+#BSUB -J myjob
+#BSUB -q hpc
+#BSUB -n 8
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -W 2:00
+python heavy.py
+```
+
+What resources does the submitted job actually get?
+
+- A) Exactly the resources specified in the `#BSUB` lines: 8 cores, 32 GB, 2-hour wall time
+- B) LSF default resources (typically 1 core, small memory, short wall time) because the `#BSUB` directives inside the file are not parsed
+- C) The job is rejected with a "missing queue" error because `-q` was not passed on the command line
+- D) The job runs with 8 cores but uses the default wall time because only `-n` is recognized without `<`
+
+**Answer: B**
+
+- A) Incorrect — `#BSUB` directives inside a file are only parsed when the file is fed as stdin via `<`. Passing the filename as a positional argument does not trigger directive parsing.
+- B) Correct — Without `<`, LSF treats `submit.sh` as the command to execute and uses all default resource values: typically 1 core, minimal memory, and the queue's default wall time. The `#BSUB` lines are just comments to the shell; they are never seen by the LSF parser in this invocation mode.
+- C) Incorrect — LSF does not require `-q` on the command line; it falls back to a default queue. The job submits without error but with wrong resources.
+- D) Incorrect — There is no selective parsing; either all `#BSUB` directives are parsed (via `<`) or none of them are (positional argument mode).
+
+---
+
+## Q27 — Memory Reserved vs Memory Used
+
+> **Week reference:** Week 1
+
+**Mental Model:** LSF's memory accounting is based on the requested reservation, not runtime usage — a job that requests excess cores locks up proportionally more memory on the cluster even if the program never touches it.
+
+A job script contains:
+
+```bash
+#!/bin/bash
+#BSUB -J singlecore
+#BSUB -q hpc
+#BSUB -n 16
+#BSUB -R "rusage[mem=2GB]"
+#BSUB -R "span[hosts=1]"
+#BSUB -W 1:00
+#BSUB -o single_%J.out
+
+python single_threaded_analysis.py  # uses exactly 1 core and ~1.5 GB RAM
+```
+
+How much memory is charged to this job by LSF, and is the job a good cluster citizen?
+
+- A) 1.5 GB — LSF monitors actual usage and charges accordingly; the job is efficient
+- B) 32 GB is reserved (16 × 2 GB); the program uses ~1.5 GB — 30.5 GB is blocked for the job's duration and unavailable to others; the script wastes cluster resources
+- C) 2 GB is reserved because `span[hosts=1]` limits memory to the per-core value
+- D) 32 GB is reserved, but this is correct because span[hosts=1] requires reserving memory for all 16 potential cores
+
+**Answer: B**
+
+- A) Incorrect — LSF charges based on the static reservation at job submission, not on runtime measurement of actual memory use. Monitoring tools (like `bjobs -l`) can show peak memory, but billing is based on reserved slots.
+- B) Correct — With `-n 16` and `rusage[mem=2GB]`, LSF reserves 16 × 2 = 32 GB for the entire wall-time duration. The single-threaded program only uses ~1.5 GB. The remaining ~30.5 GB reservation prevents other jobs from using those memory slots, reducing cluster throughput. The correct script should use `-n 1`.
+- C) Incorrect — `span[hosts=1]` constrains node topology, not the number of cores or the total memory reservation. It has no effect on how `rusage[mem=X]` is multiplied.
+- D) Incorrect — `span[hosts=1]` means all 16 cores must be on one node; it does not justify requesting 16 cores for a single-threaded program. The `-n` value should match the program's actual parallelism.
+
+---
+
+## Q28 — Spot the USUSP State
+
+> **Week reference:** Week 1
+
+**Mental Model:** `bstop <jobid>` transitions a running job to USUSP; the job holds its nodes but stops executing; `bresume <jobid>` is the only way to restart it — killing it with `bkill` is permanent.
+
+You run `bjobs` and see this output:
+
+```
+JOBID   USER    STAT   QUEUE   FROM_HOST   EXEC_HOST   JOB_NAME
+66100   s252786 RUN    hpc     login1      n-62-05-3   crunch
+66101   s252786 USUSP  hpc     login1      n-62-07-1   longrun
+66102   s252786 PEND   hpc     login1      -           next_step
+```
+
+Which of the following accurately describes the situation?
+
+- A) `longrun` (USUSP) has crashed and its node n-62-07-1 has been freed for reuse
+- B) `longrun` (USUSP) is paused and still occupying node n-62-07-1; it can be resumed with `bresume 66101`
+- C) `next_step` (PEND) cannot start because `longrun` is in USUSP — PEND always means waiting for a suspended job to finish
+- D) `crunch` (RUN) and `longrun` (USUSP) are sharing node n-62-07-1 because USUSP frees half its cores
+
+**Answer: B**
+
+- A) Incorrect — USUSP does not free the node. The job retains its allocation on n-62-07-1 while suspended. The node's cores and memory remain reserved for `longrun`.
+- B) Correct — USUSP means the job is suspended (likely by the user via `bstop 66101`). It holds node n-62-07-1 but is not consuming CPU. `bresume 66101` restarts execution. Note: `next_step` is PEND likely due to a resource wait, not because of `longrun`'s USUSP state specifically.
+- C) Incorrect — PEND means waiting for resources or a dependency, but it is not automatically caused by another job being in USUSP. Unless `next_step` has an explicit dependency on `longrun`, its PEND state is independent.
+- D) Incorrect — USUSP does not release or share cores. The suspended job retains its full allocation; no resource sharing occurs during suspension.
+
+---
+
+## Q29 — Three -R Lines: What Gets Enforced?
+
+> **Week reference:** Week 1
+
+**Mental Model:** Every `#BSUB -R` line adds a constraint that is ANDed with all others — a node must satisfy all constraints simultaneously to be eligible for the job.
+
+A job script has these directives:
+
+```bash
+#BSUB -n 4
+#BSUB -R "rusage[mem=8GB]"
+#BSUB -R "span[hosts=1]"
+#BSUB -R "select[model==XeonGold6226R]"
+```
+
+Which of the following correctly describes what LSF enforces?
+
+- A) Only the last `-R` line (`select[model==XeonGold6226R]`) applies; the others are overridden
+- B) All three `-R` constraints apply simultaneously: 8 GB per core (32 GB total), all 4 cores on one node, and only on XeonGold6226R nodes
+- C) `rusage` and `span` apply, but `select` is ignored because model selection requires a separate `-select` flag
+- D) The three `-R` lines conflict with each other; LSF will reject the submission
+
+**Answer: B**
+
+- A) Incorrect — LSF accumulates all `-R` lines. There is no override behavior; each line adds a requirement.
+- B) Correct — All three constraints apply simultaneously. `rusage[mem=8GB]` reserves 8 GB per core (4 cores × 8 = 32 GB total). `span[hosts=1]` forces all 4 cores onto a single physical node. `select[model==XeonGold6226R]` restricts eligible nodes to those with that specific CPU model. A node must satisfy all three to host this job.
+- C) Incorrect — `select[]` is a fully supported clause inside a `-R` string. There is no separate `-select` flag; it belongs in `-R "select[...]"` exactly as shown.
+- D) Incorrect — Multiple `-R` lines with different clause types do not conflict. LSF is designed to combine them; this pattern appears in the course's own `submit.sh` examples.
+
+---
+
+## Q30 — Wrong GPU Queue for VRAM Requirement
+
+> **Week reference:** Week 1 / Week 9
+
+**Mental Model:** Each DTU HPC GPU queue maps to specific hardware with fixed VRAM — submitting to a queue whose GPUs have less VRAM than the model requires produces a runtime OOM error, not a submission error.
+
+A student submits this script to train a large transformer model that requires ~20 GB of GPU memory:
+
+```bash
+#!/bin/bash
+#BSUB -J transformer
+#BSUB -q gpuv100
+#BSUB -n 4
+#BSUB -R "rusage[mem=8GB]"
+#BSUB -gpu "num=1:mode=exclusive_process"
+#BSUB -W 4:00
+#BSUB -o transformer_%J.out
+
+python train_transformer.py
+```
+
+The job submits without error, starts running, then crashes after a few minutes. What is the most likely cause?
+
+- A) `-n 4` is incompatible with `-gpu "num=1"` — GPU jobs must use `-n 1`
+- B) The V100 GPU has only 16 GB of VRAM; the model requires ~20 GB and triggers an out-of-memory error during training
+- C) `rusage[mem=8GB]` is too low for the CPU memory and causes a CPU OOM kill
+- D) The `gpuv100` queue has a maximum wall time of 1 hour; `-W 4:00` causes an immediate kill
+
+**Answer: B**
+
+- A) Incorrect — GPU jobs can use multiple CPU cores (`-n 4` is fine). The CPU cores handle data loading and preprocessing while the GPU handles model computation.
+- B) Correct — `gpuv100` nodes have V100 GPUs with **16 GB** of VRAM. A model requiring ~20 GB exceeds this and causes a CUDA out-of-memory error at runtime (e.g., `RuntimeError: CUDA out of memory`). The fix is to use `#BSUB -q gpu32` which provides GPUs with 32 GB VRAM, or to reduce the model size/batch size.
+- C) Incorrect — `rusage[mem=8GB]` per core × 4 cores = 32 GB CPU RAM, which is more than adequate for typical transformer training CPU memory overhead.
+- D) Incorrect — The `gpuv100` queue's wall time limits are measured in hours, not imposed as a 1-hour cap. A 4-hour request is within normal range.
+
+---
+
+## Q31 — stderr Missing from Output File
+
+> **Week reference:** Week 1
+
+**Mental Model:** Without `-e`, LSF writes both stdout and stderr to the `-o` file; with `-e`, they go to separate files — a Python exception traceback going to stderr will only appear in the `-e` file if one is specified, and will be silently absent from the `-o` file only if `-e` is set to `/dev/null`.
+
+A student runs a job with this script:
+
+```bash
+#!/bin/bash
+#BSUB -J debug_job
+#BSUB -q hpc
+#BSUB -n 2
+#BSUB -R "rusage[mem=2GB]"
+#BSUB -W 0:10
+#BSUB -o debug_%J.out
+#BSUB -e debug_%J.err
+
+python buggy_script.py
+```
+
+`buggy_script.py` crashes immediately with a `ValueError` traceback. The student opens `debug_12345.out` after the job ends and finds it completely empty. Where is the traceback?
+
+- A) It was lost — LSF discards stderr when `-e` is specified
+- B) It is in `debug_12345.err` — the `-e` flag redirects stderr to a separate file, and Python tracebacks go to stderr
+- C) It is in `debug_12345.out` — Python always writes tracebacks to stdout
+- D) It was emailed to the student because the job exited with a non-zero code
+
+**Answer: B**
+
+- A) Incorrect — LSF does not discard stderr when `-e` is given. It redirects it to the specified file. `-e /dev/null` would discard it, but `-e debug_%J.err` saves it.
+- B) Correct — Python prints exception tracebacks to `sys.stderr`, not `sys.stdout`. With `#BSUB -e debug_%J.err`, LSF captures stderr into `debug_12345.err`. The `-o` file (`debug_12345.out`) only receives stdout, which is empty if the script crashes before any `print()` call.
+- C) Incorrect — Python tracebacks go to stderr by default. Only explicit `print()` statements (or `sys.stdout.write()`) appear in stdout/the `-o` file.
+- D) Incorrect — LSF's email notification (`-N`/`-B`) sends job status information, not program output. Tracebacks are never emailed automatically.
+
+---
+
+## Q32 — Wall Time Minutes-Only with Zero Padding
+
+> **Week reference:** Week 1
+
+**Mental Model:** The `#BSUB -W` directive accepts either `HH:MM` or a plain integer (minutes) — zero-padded hours like `00:10` are valid HH:MM format meaning 0 hours 10 minutes, which is exactly 10 minutes.
+
+Consider these two job scripts:
+
+**Script A:**
+```bash
+#BSUB -W 00:10
+python quick_test.py
+```
+
+**Script B:**
+```bash
+#BSUB -W 10
+python quick_test.py
+```
+
+What wall time does each script request, and are they equivalent?
+
+- A) Script A requests 10 minutes; Script B requests 10 hours — they are not equivalent
+- B) Script A requests 0 minutes (the `00` is parsed as zero, discarding `:10`); Script B requests 10 minutes
+- C) Both request exactly 10 minutes and are equivalent
+- D) Script A requests 1 hour (LSF ignores the `00:` prefix); Script B requests 10 minutes — they differ
+
+**Answer: C**
+
+- A) Incorrect — `HH:MM` format with `00:10` means 0 hours and 10 minutes = 10 minutes. The plain integer `10` also means 10 minutes. Both are 10 minutes.
+- B) Incorrect — LSF parses `00:10` as the standard HH:MM format: 00 hours + 10 minutes. It does not discard the minutes portion. Zero-padding in the hours position is valid and common in course job scripts.
+- C) Correct — `00:10` in HH:MM format is 0 hours + 10 minutes = 10 minutes. The plain integer `10` is also 10 minutes. The two forms are fully equivalent. This pattern is seen in the course's `job_arrays_1.sh` (`-W 00:10`), confirming zero-padded format is the standard style used at DTU HPC.
+- D) Incorrect — LSF has no behavior that ignores the `00:` prefix or interprets it as 1 hour. HH:MM is always parsed as hours:minutes.
 
 ---

@@ -26,6 +26,17 @@
 - [Q19 — What happens when this script runs twice?](#q19-what-happens-when-this-script-runs-twice)
 - [Q20 — Which mode prevents overwriting an existing result?](#q20-which-mode-prevents-overwriting-an-existing-result)
 - [Q21 — zarr mode 'r+' on a missing store](#q21-zarr-mode-r-on-a-missing-store)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q22 — What does isinstance check return?](#q22--what-does-isinstance-check-return)
+- [Q23 — What does this offset memmap print?](#q23--what-does-this-offset-memmap-print)
+- [Q24 — Which line raises a ValueError for size mismatch?](#q24--which-line-raises-a-valueerror-for-size-mismatch)
+- [Q25 — How many files does this Zarr write create?](#q25--how-many-files-does-this-zarr-write-create)
+- [Q26 — What does nchunks_initialized return?](#q26--what-does-nchunks_initialized-return)
+- [Q27 — What does this SharedMemory code print?](#q27--what-does-this-sharedmemory-code-print)
+- [Q28 — What is the on-disk size ordering?](#q28--what-is-the-on-disk-size-ordering)
+- [Q29 — What does this zarr.zeros call do to existing data?](#q29--what-does-this-zarrzeros-call-do-to-existing-data)
+- [Q30 — What does this compressor=None zarr store?](#q30--what-does-this-compressornone-zarr-store)
+- [Q31 — What does reading an unwritten Zarr chunk return?](#q31--what-does-reading-an-unwritten-zarr-chunk-return)
 
 ---
 
@@ -603,5 +614,334 @@ What happens when this code runs?
 - B) Correct — `mode='r+'` requires the store to already exist. On a missing path it raises a `GroupNotFoundError` (or `ArrayNotFoundError`). This mirrors POSIX `open(O_RDWR)` without `O_CREAT`.
 - C) Incorrect — `'r+'` is not read-only; the problem is the missing store, not access permissions.
 - D) Incorrect — zarr does not silently fall back to a different mode; the error propagates to the caller.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets memmap subclass behaviour, offset parameter, shape/size mismatch, SharedMemory, sparse Zarr chunks, compressor=None, and zarr.zeros overwrite semantics.
+
+---
+
+## Q22 — What does isinstance check return?
+
+> **Week reference:** Week 8
+
+```python
+import numpy as np
+
+mm = np.memmap('check.raw', mode='w+', dtype='float32', shape=(10,))
+print(isinstance(mm, np.ndarray))
+print(type(mm) is np.ndarray)
+```
+
+**A)** `True` then `True`
+**B)** `True` then `False`
+**C)** `False` then `False`
+**D)** `False` then `True`
+
+**Answer: B**
+
+- A) Incorrect — `type(mm) is np.ndarray` performs an exact type identity check. Since `mm` is a `numpy.memmap` instance (a subclass), its `type` is `numpy.memmap`, not `numpy.ndarray`. This check returns `False`.
+- B) Correct — `isinstance(mm, np.ndarray)` returns `True` because `numpy.memmap` is a subclass of `numpy.ndarray`, so all `memmap` objects satisfy the `ndarray` isinstance test. However `type(mm) is np.ndarray` is `False` because the exact type is `numpy.memmap`, not `numpy.ndarray`. This is the classic subclass trap.
+- C) Incorrect — `isinstance` with a parent class returns `True` for instances of subclasses; it does not require exact type equality.
+- D) Incorrect — `type(mm) is np.ndarray` is `False`, but `isinstance(mm, np.ndarray)` is `True` — the reverse of this option.
+
+---
+
+## Q23 — What does this offset memmap print?
+
+> **Week reference:** Week 8
+
+```python
+import numpy as np, struct
+
+# Write a 4-byte header then 3 float32 values
+with open('hdr.bin', 'wb') as f:
+    f.write(struct.pack('i', 42))               # 4-byte int header
+    f.write(struct.pack('3f', 1.0, 2.0, 3.0))  # 12 bytes of float32
+
+mm = np.memmap('hdr.bin', dtype='float32', mode='r', offset=4, shape=(3,))
+print(mm[1])
+```
+
+**A)** `42.0`
+**B)** `1.0`
+**C)** `2.0`
+**D)** A large garbage value
+
+**Answer: C**
+
+- A) Incorrect — `42` is the 4-byte integer header at bytes 0–3. With `offset=4`, those bytes are skipped entirely; the mapping starts at the first float32.
+- B) Incorrect — `mm[0]` would be `1.0` (the first float32 starting at byte 4). `mm[1]` is the second float32 starting at byte 8.
+- C) Correct — `offset=4` skips the 4-byte header. The float32 values begin at byte 4: `mm[0]=1.0` (bytes 4–7), `mm[1]=2.0` (bytes 8–11), `mm[2]=3.0` (bytes 12–15). `mm[1]` is therefore `2.0`.
+- D) Incorrect — the offset is correctly specified and aligns perfectly with the float32 data. There is no misalignment or dtype mismatch, so no garbage values appear.
+
+---
+
+## Q24 — Which line raises a ValueError for size mismatch?
+
+> **Week reference:** Week 8
+
+```python
+import numpy as np
+
+# Create a 40-byte file (10 float32 values)
+fp = np.memmap('sized.raw', mode='w+', dtype='float32', shape=(10,))
+del fp
+
+# Line A
+ma = np.memmap('sized.raw', mode='r', dtype='float32', shape=(10,))
+
+# Line B
+mb = np.memmap('sized.raw', mode='r', dtype='float64', shape=(10,))
+
+# Line C
+mc = np.memmap('sized.raw', mode='r', dtype='uint8', shape=(40,))
+
+# Line D
+md = np.memmap('sized.raw', mode='r', dtype='uint8', shape=(39,))
+```
+
+Which line raises a `ValueError`?
+
+**A)** Line A
+**B)** Line B
+**C)** Line C
+**D)** Line D
+
+**Answer: B**
+
+- A) Incorrect — Line A: `float32` × 10 elements = 40 bytes = exact file size. This mapping is valid.
+- B) Correct — Line B: `float64` × 10 elements = 80 bytes, but the file is only 40 bytes. NumPy detects that the requested mapping exceeds the file size and raises `ValueError: mmap length is greater than file size`.
+- C) Incorrect — Line C: `uint8` × 40 elements = 40 bytes = exact file size. This is valid (though the byte values will be the raw float32 bit patterns, not meaningful numbers).
+- D) Incorrect — Line D: `uint8` × 39 elements = 39 bytes ≤ 40 bytes. NumPy allows mappings that are strictly smaller than the file; the last byte is simply not mapped.
+
+---
+
+## Q25 — How many files does this Zarr write create?
+
+> **Week reference:** Week 8
+
+```python
+import zarr, numpy as np
+
+z = zarr.open('sparse.zarr', mode='w', shape=(100, 100),
+              chunks=(10, 10), dtype='float32')
+# Write to exactly 2 non-overlapping chunks
+z[0:10, 0:10] = 1.0
+z[90:100, 90:100] = 2.0
+```
+
+After this code runs, how many chunk files exist inside `sparse.zarr/`? (Ignore `.zarray` and `.zattrs` metadata files.)
+
+**A)** 100 — one per chunk in a 10×10 grid
+**B)** 2 — only the two chunks that were written
+**C)** 0 — chunks are only written when `z.store.flush()` is called
+**D)** 1 — Zarr consolidates all written chunks into a single file
+
+**Answer: B**
+
+- A) Incorrect — Zarr arrays are sparse by default. Chunks that have never been written do not exist as files on disk. A 100-element chunk grid does not mean 100 files are created at open time.
+- B) Correct — each write to a distinct chunk region triggers the compression and storage of exactly that chunk. Two writes to two non-overlapping chunks create exactly 2 chunk files (`0.0` and `9.9` in the default naming scheme).
+- C) Incorrect — Zarr writes chunks to disk synchronously when you assign to the array (e.g., `z[...] = ...`). There is no deferred flush required for `DirectoryStore`.
+- D) Incorrect — Zarr never consolidates chunk data into a single file in `DirectoryStore`. Chunks remain as separate files. (Metadata can be consolidated with `zarr.consolidate_metadata()`, but chunk data is never merged.)
+
+---
+
+## Q26 — What does nchunks_initialized return?
+
+> **Week reference:** Week 8
+
+```python
+import zarr
+
+z = zarr.open('test.zarr', mode='w', shape=(500, 500),
+              chunks=(100, 100), dtype='int32')
+print(z.nchunks)
+print(z.nchunks_initialized)
+
+z[0:100, 0:100] = 7
+z[0:100, 100:200] = 7
+
+print(z.nchunks_initialized)
+```
+
+What are the three printed values, in order?
+
+**A)** `25`, `25`, `25`
+**B)** `25`, `0`, `2`
+**C)** `0`, `0`, `2`
+**D)** `25`, `25`, `2`
+
+**Answer: B**
+
+- A) Incorrect — `nchunks_initialized` starts at 0 immediately after `mode='w'` creation. No chunks are written until data is assigned.
+- B) Correct — `z.nchunks` = (500÷100) × (500÷100) = 5 × 5 = 25 total chunks. Before any writes, `nchunks_initialized` = 0 (no chunk files exist yet). After two writes to two distinct chunks, `nchunks_initialized` = 2.
+- C) Incorrect — `nchunks` is always the total theoretical chunk count (25), regardless of how many have been written. It is a computed property of shape and chunk shape, not a count of stored files.
+- D) Incorrect — the first `nchunks_initialized` is 0 (no writes have occurred yet), not 25. Only writes materialise chunks on disk.
+
+---
+
+## Q27 — What does this SharedMemory code print?
+
+> **Week reference:** Week 8
+
+```python
+from multiprocessing.shared_memory import SharedMemory
+import numpy as np
+
+shm = SharedMemory(create=True, size=4 * 10)  # 10 int32s
+arr = np.ndarray((10,), dtype='int32', buffer=shm.buf)
+arr[:] = np.arange(10, dtype='int32')
+
+shm2 = SharedMemory(name=shm.name, create=False)
+arr2 = np.ndarray((10,), dtype='int32', buffer=shm2.buf)
+print(arr2[5])
+
+shm2.close()
+shm.close()
+shm.unlink()
+```
+
+**A)** `0`
+**B)** `5`
+**C)** `NameError` — `shm.name` is not accessible before `shm.close()`
+**D)** `ValueError` — you cannot create two numpy arrays backed by the same SharedMemory
+
+**Answer: B**
+
+- A) Incorrect — `arr[:]` was set to `np.arange(10)`, so index 5 holds the value 5. The shared memory block is not zeroed between the two attachments.
+- B) Correct — `arr` writes `[0,1,2,3,4,5,6,7,8,9]` into the shared block via `shm.buf`. `shm2` attaches to the same physical pages by name. `arr2` wraps the same bytes as a second numpy array, so `arr2[5]` reads the value 5 written by `arr[5] = 5`.
+- C) Incorrect — `shm.name` is available immediately after `SharedMemory(create=True, ...)` returns; it is set before `close()` is called. Closing the shm would remove access to the buffer, but `shm.name` is just a string attribute.
+- D) Incorrect — multiple numpy arrays can safely share the same buffer (shared memory or otherwise) as long as they do not write to overlapping regions simultaneously. Creating two read/write views of the same buffer is valid and is exactly the intended pattern for inter-process shared memory.
+
+---
+
+## Q28 — What is the on-disk size ordering?
+
+> **Week reference:** Week 8
+
+```python
+import zarr, numpy as np
+
+data = np.zeros((1000, 1000), dtype='int32')
+# Mandelbrot-like: most values are uniform (0), boundary values vary
+data[400:600, 400:600] = np.random.randint(1, 100, (200, 200))
+
+for chunk_size in [10, 50, 200]:
+    z = zarr.open(f'arr_{chunk_size}.zarr', mode='w',
+                  shape=(1000, 1000), chunks=(chunk_size, chunk_size),
+                  dtype='int32')
+    z[:] = data
+```
+
+After all three writes, which on-disk size ordering is correct (smallest to largest)?
+
+**A)** `arr_10.zarr` < `arr_50.zarr` < `arr_200.zarr`
+**B)** `arr_200.zarr` < `arr_50.zarr` < `arr_10.zarr`
+**C)** `arr_10.zarr` = `arr_50.zarr` = `arr_200.zarr`
+**D)** `arr_50.zarr` < `arr_10.zarr` < `arr_200.zarr`
+
+**Answer: B**
+
+- A) Incorrect — this is the reverse of the correct order. Larger chunks compress better because they span more of the uniform-zero region in a single compressor call, achieving a higher compression ratio.
+- B) Correct — with mostly-zero data (large uniform regions), larger chunks give Blosc a bigger block of redundant bytes to compress. `arr_200.zarr` uses only 25 chunks (each 200×200×4 = 160 KB before compression) and achieves the highest ratio. `arr_10.zarr` has 10,000 chunks (each only 400 bytes), most of which compress individually to nearly their original size with little benefit. The DTU 02613 Week 8 solutions confirmed this pattern empirically with Mandelbrot data.
+- C) Incorrect — compressed size depends strongly on chunk shape. Uniform regions compress much better in larger chunks, producing dramatically different on-disk sizes.
+- D) Incorrect — there is no reason for the middle chunk size to produce the smallest result when all chunks contain only uniform zeros in the non-random regions.
+
+---
+
+## Q29 — What does this zarr.zeros call do to existing data?
+
+> **Week reference:** Week 8
+
+```python
+import zarr, numpy as np
+
+# First run: write some data
+z = zarr.open('result.zarr', mode='w', shape=(100,), chunks=(10,), dtype='float64')
+z[:] = np.ones(100) * 9.9
+
+# Second run (same script, immediately after)
+z2 = zarr.zeros('result.zarr', chunks=(10,), dtype='float64')
+print(z2[0])
+```
+
+Assume `zarr.zeros` with a path string behaves like `zarr.open(path, mode='w', ...)`.
+
+**A)** `9.9` — `zarr.zeros` opens the existing store without modifying data.
+**B)** `0.0` — `zarr.zeros` overwrites the existing store with a fresh zero-filled array.
+**C)** `ValueError` — `zarr.zeros` raises an error if the store already exists.
+**D)** `9.9` — `zarr.zeros` only zeroes chunks that have not been written yet.
+
+**Answer: B**
+
+- A) Incorrect — `zarr.zeros` uses `mode='w'` internally, which truncates any existing store. The previous 9.9 values are overwritten.
+- B) Correct — `zarr.zeros` is equivalent to `zarr.open(path, mode='w', fill_value=0, ...)`. It creates a fresh store, destroying any existing data. After the call, all chunks return the fill value 0.0. This is a common exam trap: `zarr.zeros` sounds like it might only initialise empty chunks, but it actually replaces the entire store.
+- C) Incorrect — `zarr.zeros` does not raise on a pre-existing store; it silently overwrites it. To get an error on pre-existing data, use `mode='w-'`.
+- D) Incorrect — `zarr.zeros` does not distinguish between written and unwritten chunks. It replaces the entire store unconditionally.
+
+---
+
+## Q30 — What does this compressor=None zarr store?
+
+> **Week reference:** Week 8
+
+```python
+import zarr, numpy as np, os
+
+z = zarr.open('raw.zarr', mode='w', shape=(100,), chunks=(100,),
+              dtype='float32', compressor=None)
+z[:] = np.ones(100, dtype='float32')
+
+chunk_file = 'raw.zarr/0'
+print(os.path.getsize(chunk_file))
+```
+
+What does this print?
+
+**A)** A value smaller than 400 — Blosc compression is applied automatically regardless of `compressor=None`.
+**B)** `400` — the chunk stores 100 float32 values × 4 bytes with no compression.
+**C)** `0` — chunks of all-ones are always compressed to zero bytes.
+**D)** `800` — zarr doubles the storage to maintain a compressed and uncompressed copy.
+
+**Answer: B**
+
+- A) Incorrect — `compressor=None` explicitly disables compression. Zarr respects this setting and writes raw uncompressed bytes to the chunk file.
+- B) Correct — with `compressor=None`, each chunk is stored as raw bytes with no compression overhead. 100 elements × 4 bytes/float32 = 400 bytes. The chunk file `0` (chunk index 0 along axis 0) will be exactly 400 bytes.
+- C) Incorrect — even if the data were highly compressible, `compressor=None` means no compression is applied. The file stores the literal 400 bytes of IEEE 754 float32 `1.0` values.
+- D) Incorrect — Zarr never stores a duplicate copy. With or without compression, each chunk is stored exactly once in the format configured at creation time.
+
+---
+
+## Q31 — What does reading an unwritten Zarr chunk return?
+
+> **Week reference:** Week 8
+
+```python
+import zarr, numpy as np
+
+z = zarr.open('lazy.zarr', mode='w', shape=(200, 200),
+              chunks=(100, 100), dtype='int32', fill_value=-1)
+
+# Only write the top-left chunk
+z[0:100, 0:100] = 99
+
+print(z[150, 150])
+print(z.nchunks_initialized)
+```
+
+**A)** `99` then `4`
+**B)** `0` then `1`
+**C)** `-1` then `1`
+**D)** `KeyError` then `1`
+
+**Answer: C**
+
+- A) Incorrect — element `[150, 150]` falls in the bottom-right chunk `(1, 1)`, which was never written. It returns the fill value, not 99.
+- B) Incorrect — the fill value is `-1`, not `0`. The default fill value is 0, but here `fill_value=-1` was explicitly set. This is the classic trap of assuming fill_value=0.
+- C) Correct — element `[150, 150]` is in chunk `(1, 1)` (rows 100–199, cols 100–199), which has never been written. Zarr returns `fill_value=-1` without reading any chunk file (there is nothing to read). `nchunks_initialized` is 1 because only the top-left chunk `(0, 0)` has been written.
+- D) Incorrect — Zarr never raises `KeyError` for unwritten chunks. Reading an absent chunk is well-defined: it returns the fill value. `KeyError` would occur only if you accessed the raw store dictionary directly with an invalid key.
 
 ---

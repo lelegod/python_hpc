@@ -27,6 +27,17 @@
 - [Q20 — Cache Efficiency of np.sum vs Python Loop](#q20-cache-efficiency-of-npsum-vs-python-loop)
 - [Q21 — Strides After Slicing](#q21-strides-after-slicing)
 - [Q22 — C-Order vs F-Order for Matrix Multiply](#q22-c-order-vs-f-order-for-matrix-multiply)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q23 — When Row and Column Performance Diverge](#q23--when-row-and-column-performance-diverge)
+- [Q24 — L1 Cache Capacity and Working Set](#q24--l1-cache-capacity-and-working-set)
+- [Q25 — C_CONTIGUOUS vs F_CONTIGUOUS for 1D Arrays](#q25--c_contiguous-vs-f_contiguous-for-1d-arrays)
+- [Q26 — np.copy vs np.ascontiguousarray](#q26--npcopy-vs-npascontiguousarray)
+- [Q27 — Cache Miss Penalty for Diagonal Access](#q27--cache-miss-penalty-for-diagonal-access)
+- [Q28 — Effect of np.nditer Order Parameter](#q28--effect-of-npnditer-order-parameter)
+- [Q29 — False Sharing in Shared-Memory Parallelism](#q29--false-sharing-in-shared-memory-parallelism)
+- [Q30 — Identifying Non-Contiguous Arrays from Flags](#q30--identifying-non-contiguous-arrays-from-flags)
+- [Q31 — Strided View vs Copy After Fancy Indexing](#q31--strided-view-vs-copy-after-fancy-indexing)
+- [Q32 — Cache Hierarchy and the Performance Staircase Timing](#q32--cache-hierarchy-and-the-performance-staircase-timing)
 
 ---
 
@@ -558,5 +569,231 @@ This is actually the one case where mixed C/F order produces good cache behavior
 - B) Incorrect phrasing — this describes the same result as C but imprecisely. "Row-wise" for B is wrong; B[k,j] with varying k accesses a column of B, not a row.
 - C) Correct — `A[i,k]` varying k is a row of C-order A (stride 8). `B[k,j]` varying k is a column of F-order B, which in F-order is physically contiguous (stride 8). Both are cache-friendly.
 - D) Incorrect — mixed order does not always cause thrashing. Here the access pattern happens to align perfectly with each array's layout: C-order A accessed row-wise, F-order B accessed column-wise.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets cache-level boundaries, contiguity flags, false sharing, fancy indexing, and exam-style edge cases not covered in Sets 1–2.
+
+---
+
+## Q23 — When Row and Column Performance Diverge
+
+> **Week reference:** Week 3
+
+**Mental Model:** The performance gap between row and column access only becomes visible once the array exceeds L1 cache capacity — below that threshold, the entire array fits in L1 and both patterns are equally fast regardless of stride.
+
+For a C-order float64 2D array, at what point do row-access and column-access performance start to visibly diverge (as seen in the `cache.py` benchmark)?
+
+- A) Immediately — column access is always slower than row access regardless of array size
+- B) After the array no longer fits in the L1 cache
+- C) After the array no longer fits in the L3 cache
+- D) After the array exceeds DRAM bandwidth limits
+
+**Answer: B**
+
+- A) Incorrect — when the entire array fits in L1 cache, all data is already in the fastest tier. Even strided column accesses hit L1, so there is no measurable penalty versus sequential row access. The gap only opens when strided access is forced to fetch from a slower tier.
+- B) Correct — once the array exceeds L1 capacity (~32–64 KB on typical CPUs), row access still benefits from cache line prefetching (8 float64 elements per line), while column access strides over elements in different cache lines that have been evicted. The divergence in MFLOP/s becomes visible exactly at the L1 boundary. The `cache.py` benchmark code marks this threshold with `plt.axvline(L1, ...)`.
+- C) Incorrect — the divergence appears at the L1 boundary, not L3. By L3, the row/column gap is already large and stable. Waiting until L3 to look for divergence would miss the critical first transition.
+- D) Incorrect — DRAM bandwidth saturation causes a performance plateau for both access patterns, not a divergence between them. The row vs. column gap is a cache-utilization effect, not a bandwidth effect.
+
+---
+
+## Q24 — L1 Cache Capacity and Working Set
+
+> **Week reference:** Week 3
+
+**Mental Model:** A working set that fits entirely inside L1 cache eliminates DRAM latency for all accesses — the performance staircase flattens into a near-constant peak, because every access (regardless of stride) is served at L1 speed.
+
+A float64 array of shape `(64, 64)` has a memory footprint of `64 × 64 × 8 = 32 768 bytes = 32 KB`. Assuming an L1 cache of 32 KB, what performance behavior do you expect for both row-major and column-major iteration over this array?
+
+- A) Row-major is fast; column-major is slow — the L1 size is irrelevant here
+- B) Both are roughly equally fast, because the entire array fits in L1 and all accesses hit the cache
+- C) Column-major is faster because small arrays fit contiguously in any layout
+- D) Both are slow because 32 KB arrays saturate the L1 bandwidth
+
+**Answer: B**
+
+- A) Incorrect — the L1 size is directly relevant. When the working set fits in L1, all data is hot in cache. Strided column access loads a new cache line per element, but that cache line is served from L1 (not L2/DRAM), so the penalty is minimal and both patterns run at near-peak throughput.
+- B) Correct — a 32 KB array in a 32 KB L1 cache means the entire working set is cached on the first pass. On subsequent accesses, all elements are already in L1 regardless of access pattern. The row vs. column performance gap is essentially zero at this working set size.
+- C) Incorrect — "contiguously in any layout" is not a meaningful concept for a 2D array. The memory layout (row-major vs. column-major) still affects stride, but when the whole array fits in L1, the stride no longer matters because no cache line is evicted between accesses.
+- D) Incorrect — 32 KB is the designed working set for L1 cache. Accessing a 32 KB array through L1 is the ideal scenario, delivering peak throughput. L1 bandwidth is typically 1–4 TB/s, far exceeding what a single-threaded loop can consume.
+
+---
+
+## Q25 — C_CONTIGUOUS vs F_CONTIGUOUS for 1D Arrays
+
+> **Week reference:** Week 3
+
+**Mental Model:** A 1D array is both C-contiguous and F-contiguous simultaneously, because there is only one axis — "row-major" and "column-major" are identical concepts for 1D data. This is a common exam trap when students expect exclusive flags.
+
+For a standard 1D float64 NumPy array `a = np.zeros(100)`, which statement about the contiguity flags is correct?
+
+- A) `a.flags['C_CONTIGUOUS']` is `True` and `a.flags['F_CONTIGUOUS']` is `False`
+- B) `a.flags['C_CONTIGUOUS']` is `False` and `a.flags['F_CONTIGUOUS']` is `True`
+- C) Both `C_CONTIGUOUS` and `F_CONTIGUOUS` are `True`
+- D) Both `C_CONTIGUOUS` and `F_CONTIGUOUS` are `False` because 1D arrays have no defined order
+
+**Answer: C**
+
+- A) Incorrect — for a 1D array there is no distinction between C-order and F-order. Both flags reflect the same underlying property (elements are contiguous), so they are not mutually exclusive.
+- B) Incorrect — same reasoning as A. Neither flag is uniquely `True` for 1D arrays while the other is `False`. They agree.
+- C) Correct — in NumPy, a 1D contiguous array satisfies both definitions simultaneously. C-order and F-order both require elements to be stored contiguously along the only existing axis, which is trivially satisfied. NumPy's internal check confirms both flags as `True` for all 1D contiguous arrays.
+- D) Incorrect — 1D arrays absolutely have a defined memory order (elements are stored end-to-end). Both flags are `True`, not `False`. `False` for both would indicate a non-contiguous array (e.g., a strided slice like `a[::2]`).
+
+---
+
+## Q26 — np.copy vs np.ascontiguousarray
+
+> **Week reference:** Week 3
+
+**Mental Model:** `np.ascontiguousarray` is a conditional copy — it only copies if the array is not already C-contiguous, returning the original if it already is. `np.copy` always creates a new allocation regardless. Knowing which function avoids a redundant copy matters for memory-constrained code.
+
+For a C-contiguous float64 array `a`, which statement correctly distinguishes `np.copy(a)` from `np.ascontiguousarray(a)`?
+
+- A) Both always return a new array with a separate memory buffer
+- B) `np.copy(a)` always creates a new array; `np.ascontiguousarray(a)` returns `a` itself if it is already C-contiguous
+- C) `np.ascontiguousarray(a)` always creates a new array; `np.copy(a)` returns `a` itself if already contiguous
+- D) Both return views of `a` if it is already C-contiguous
+
+**Answer: B**
+
+- A) Incorrect — `np.ascontiguousarray` does not always allocate new memory. Its contract is: "return a C-contiguous array with this data." If the input is already C-contiguous, it returns the original object unchanged (no new buffer). Only `np.copy` guarantees a new allocation every time.
+- B) Correct — `np.copy(a)` unconditionally allocates a new buffer and copies all data, even if `a` is already C-contiguous. `np.ascontiguousarray(a)` checks `a.flags['C_CONTIGUOUS']`; if `True`, it returns `a` itself (same object, no copy). You can verify with `np.ascontiguousarray(a) is a` — this evaluates to `True` for any C-contiguous input.
+- C) Incorrect — this swaps the behaviors. It is `np.copy` that always allocates, not `np.ascontiguousarray`.
+- D) Incorrect — neither function returns a view. `np.copy` always returns a copy; `np.ascontiguousarray` returns the original object (not a view) when already contiguous, or a copy otherwise. Views have modified stride/shape metadata pointing to the same buffer — that is not what either function does.
+
+---
+
+## Q27 — Cache Miss Penalty for Diagonal Access
+
+> **Week reference:** Week 3
+
+**Mental Model:** Diagonal access `a[i, i]` advances one step along both axes simultaneously — the combined stride is `row_stride + col_stride`. For a large square C-order array this is just over one row width in bytes, meaning each diagonal step crosses into a different cache line region with essentially zero reuse.
+
+For a C-order float64 array of shape `(N, N)` with strides `(N×8, 8)`, each consecutive diagonal step `a[i,i] → a[i+1,i+1]` advances by how many bytes?
+
+- A) 8 bytes — diagonal elements are one element apart
+- B) `N × 8` bytes — the row stride dominates
+- C) `(N+1) × 8` bytes — one row stride plus one column stride
+- D) `2 × N × 8` bytes — two separate row advances are required
+
+**Answer: C**
+
+- A) Incorrect — 8 bytes would mean consecutive diagonal elements are physically adjacent. That is only true for a 1×1 or fully degenerate array. In a 2D array, advancing the row index by 1 and the column index by 1 always adds both strides.
+- B) Incorrect — `N × 8` bytes is the row stride alone, which corresponds to moving one row down while staying in the same column. The diagonal move also advances one column (+8 bytes), giving `N×8 + 8 = (N+1)×8` total.
+- C) Correct — moving from `a[i,i]` to `a[i+1,i+1]` advances axis 0 by 1 (cost: `N×8` bytes) and axis 1 by 1 (cost: `8` bytes). Total: `(N+1) × 8` bytes. For N=1000 that is 8008 bytes — 125 cache lines between consecutive accesses. Every diagonal access is a guaranteed cache miss.
+- D) Incorrect — `2 × N × 8` would be the cost of two row advances with no column movement, which is not how diagonal indexing works. The diagonal advances once along each axis, not twice along one.
+
+---
+
+## Q28 — Effect of np.nditer Order Parameter
+
+> **Week reference:** Week 3
+
+**Mental Model:** `np.nditer` with `order='C'` iterates in row-major order (last axis changes fastest); `order='F'` iterates in column-major order (first axis changes fastest). For a C-order array, `order='C'` is cache-friendly; `order='F'` causes strided column access. The `order` parameter controls traversal order, not the array's memory layout.
+
+For a C-order float64 array `a` of shape `(1000, 1000)`, which `np.nditer` call is more cache-efficient?
+
+- A) `np.nditer(a, order='F')` — Fortran order traversal is always faster
+- B) `np.nditer(a, order='C')` — C order traversal matches the array's row-major memory layout
+- C) Both are equally fast because `np.nditer` uses vectorised C code internally
+- D) `np.nditer(a, order='F')` — because nditer buffers data, making memory layout irrelevant
+
+**Answer: B**
+
+- A) Incorrect — Fortran-order traversal on a C-order array iterates down columns (axis 0 varies fastest). Each step jumps `1000 × 8 = 8000` bytes, producing a cache miss on every element. This is the worst possible traversal order for a C-order array.
+- B) Correct — C-order traversal on a C-order array iterates along rows (axis 1 varies fastest). Each step advances 8 bytes, loading 8 elements per 64-byte cache line with full spatial reuse. The traversal order matches the physical layout.
+- C) Incorrect — `np.nditer` does use C code, but the underlying memory access pattern still determines cache behavior. The `order` parameter controls which axis varies fastest during iteration, and a strided traversal causes cache misses in C code just as in Python.
+- D) Incorrect — `np.nditer` has an optional buffering feature (`flags=['buffered']`), but this is not enabled by default. Even with buffering, the buffer must still be filled from the source array using the specified traversal order; cache-unfriendly access is moved one level higher but not eliminated.
+
+---
+
+## Q29 — False Sharing in Shared-Memory Parallelism
+
+> **Week reference:** Week 6
+
+**Mental Model:** False sharing occurs when two cores write to different variables that happen to reside on the same 64-byte cache line — each write invalidates the other core's copy of that line, causing a coherence traffic storm even though no logical data sharing occurs. It is distinct from true data races but produces a similar performance collapse.
+
+In a multi-core program using shared memory (e.g., `multiprocessing.Array`), two threads each write to adjacent float64 elements of the same array: thread 0 writes `a[0]` and thread 1 writes `a[1]`. Which statement correctly describes what happens?
+
+- A) No problem — they write to different elements, so there is no cache interaction
+- B) False sharing — both elements reside on the same 64-byte cache line, so each write invalidates the other thread's cached copy, causing repeated cache-line transfers between cores
+- C) True data race — both threads are modifying overlapping memory regions
+- D) No problem — cache coherence protocols ensure both writes are applied correctly and efficiently
+
+**Answer: B**
+
+- A) Incorrect — even though the elements are logically separate, they share a physical cache line (64 bytes holds 8 float64 values). The cache coherence protocol operates at cache-line granularity, not element granularity. Writing to `a[0]` marks the entire line as modified in core 0's L1 cache, which invalidates the copy held by core 1.
+- B) Correct — `a[0]` and `a[1]` are 8 bytes apart and both fit within the same 64-byte cache line. When core 0 writes to `a[0]`, the hardware marks that line as exclusively owned by core 0's cache and broadcasts an invalidation to core 1. Next time core 1 writes to `a[1]`, it must re-acquire the line. This ping-pong effect (one line bouncing between cores on every write) can reduce performance to near-serial levels despite true parallelism in the algorithm.
+- C) Incorrect — the elements are distinct (`a[0]` vs `a[1]`). A true data race requires both threads to access the exact same memory location with at least one write. Here the logical accesses are non-overlapping; the problem is purely at the hardware cache-coherence level.
+- D) Incorrect — the cache coherence protocol does ensure correctness (writes are visible and consistent), but "efficiently" is wrong. The coherence protocol creates a performance problem (false sharing traffic) precisely because it must invalidate cache lines that contain the modified element, even though no logical sharing is required.
+
+---
+
+## Q30 — Identifying Non-Contiguous Arrays from Flags
+
+> **Week reference:** Week 3
+
+**Mental Model:** An array produced by a stride-modifying slice (e.g., `[::2]`) is non-contiguous in that dimension — neither C-contiguous nor F-contiguous for a 2D array. The `flags` attribute exposes this and is the most reliable way to check before passing an array to a C extension or BLAS routine that requires contiguous input.
+
+After `b = a[::2, :]` where `a` is a C-order float64 array of shape `(100, 50)`, which flags does `b` have?
+
+- A) `C_CONTIGUOUS = True`, `F_CONTIGUOUS = False`
+- B) `C_CONTIGUOUS = False`, `F_CONTIGUOUS = True`
+- C) `C_CONTIGUOUS = False`, `F_CONTIGUOUS = False`
+- D) `C_CONTIGUOUS = True`, `F_CONTIGUOUS = True`
+
+**Answer: C**
+
+- A) Incorrect — `b` is not C-contiguous. C-contiguity requires that the row stride equals `ncols × element_size = 50 × 8 = 400` bytes. After `[::2]`, the row stride is `2 × 50 × 8 = 800` bytes (every other row skipped), which violates the C-contiguous requirement (stride must equal the product of all subsequent dimension sizes times element size). The gap between rows in `b` is larger than a single row of data.
+- B) Incorrect — `b` is also not F-contiguous. F-contiguity requires that the column stride equals `nrows_b × element_size`. After slicing, `b` has 50 rows, so F-contiguous column stride would be `50 × 8 = 400` bytes. But `b`'s column stride remains the original 8 bytes, and its row stride (800 bytes) does not match the F-contiguous requirement either. A non-square strided 2D view is generally neither.
+- C) Correct — `a[::2, :]` produces a view with row stride 800 bytes and column stride 8 bytes, shape (50, 50). It is not C-contiguous (row stride 800 ≠ 50×8=400) and not F-contiguous (column stride 8 ≠ 50×8=400). The array is genuinely non-contiguous in both orderings.
+- D) Incorrect — simultaneous C and F contiguity is only possible for 1D arrays or arrays with at most one non-unit dimension. A 2D array with shape (50, 50) cannot be both unless it is 1-element wide in one dimension.
+
+---
+
+## Q31 — Strided View vs Copy After Fancy Indexing
+
+> **Week reference:** Week 3
+
+**Mental Model:** Basic slicing with integers and `slice` objects always returns a view (same buffer, modified strides/offset). Fancy indexing with arrays of indices always returns a copy — you cannot express arbitrary index lists as a stride. This distinction is fundamental: views are zero-copy but require contiguous-like access patterns; fancy-indexed results always allocate new memory.
+
+Which indexing operation on a NumPy array returns a **copy** rather than a view?
+
+- A) `a[2:8]` — basic integer slice of a 1D array
+- B) `a[::3]` — every third element of a 1D array
+- C) `a[[0, 5, 3, 1]]` — elements at indices 0, 5, 3, 1 (fancy indexing)
+- D) `a[:, 1:4]` — columns 1 through 3 of a 2D array
+
+**Answer: C**
+
+- A) Incorrect — `a[2:8]` is basic slicing, which returns a view. The result shares memory with `a` and has offset `2 × element_size` and the same stride. No data is copied.
+- B) Incorrect — `a[::3]` is also basic slicing (a step slice). It returns a view with stride `3 × element_size`. The original buffer is shared; only the stride metadata changes.
+- C) Correct — `a[[0, 5, 3, 1]]` is fancy indexing (indexing with an integer array). NumPy cannot represent this as a stride-offset view because the indices are arbitrary and non-uniform. It must allocate a new buffer and copy the four elements in the specified order. `np.shares_memory(a, a[[0, 5, 3, 1]])` is `False`.
+- D) Incorrect — `a[:, 1:4]` is basic slicing along both axes. It returns a 2D view with the same row stride as `a` and column offset `1 × element_size`. No copy is made; the result shares the buffer with `a`.
+
+---
+
+## Q32 — Cache Hierarchy and the Performance Staircase Timing
+
+> **Week reference:** Week 3
+
+**Mental Model:** Each tier in the cache hierarchy has a different latency and capacity. When the working set crosses a tier boundary, latency jumps by a fixed multiplier — this produces the characteristic staircase shape when plotting throughput vs. working set size on a log-log scale.
+
+The `cache.py` benchmark uses cache sizes `L1 = 512 KB`, `L2 = 16 MB`, `L3 = 22 MB` from the specific machine it was run on. On a machine with `L1 = 32 KB`, `L2 = 256 KB`, `L3 = 8 MB`, at approximately what working set sizes would you expect performance drop-offs when running a sequential memory access loop?
+
+- A) At 32 KB, 256 KB, and 8 MB
+- B) At 512 KB, 16 MB, and 22 MB (the values hard-coded in cache.py)
+- C) At 64 KB, 512 KB, and 16 MB (double the cache sizes for safety margin)
+- D) At 1 MB, 8 MB, and 64 MB regardless of hardware — these are fixed CPU constants
+
+**Answer: A**
+
+- A) Correct — cache performance drop-offs occur when the working set size exceeds each successive cache level. On this specific machine (L1=32 KB, L2=256 KB, L3=8 MB), the three staircase steps appear at exactly those three thresholds. The cache sizes are hardware-specific and must be determined per machine — either from documentation, `/sys/devices/system/cpu/cpu0/cache/`, or profiling.
+- B) Incorrect — the values `L1=512 KB, L2=16 MB, L3=22 MB` in `cache.py` are hard-coded for the DTU HPC cluster node used during development. On a different machine with a 32 KB L1, using these values would mark the wrong boundaries on the plot. Cache sizes vary significantly across CPU families and generations.
+- C) Incorrect — doubling the cache size for a "safety margin" is not standard practice. The drop-off occurs at the actual cache boundary, not at a doubled value. Using 2× the size would systematically misattribute the performance staircase to the wrong tier.
+- D) Incorrect — there are no fixed CPU cache size constants. L1 caches range from 16 KB to 512 KB depending on the CPU; L2 from 128 KB to 4 MB; L3 from 2 MB to 64 MB or more. These values vary by microarchitecture, generation, and manufacturer (Intel vs AMD vs ARM). Any code that hard-codes specific sizes must be re-calibrated per target machine.
 
 ---

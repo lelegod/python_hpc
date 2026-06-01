@@ -27,13 +27,24 @@
 - [Q20 — Compression Level 0 Meaning](#q20--compression-level-0-meaning)
 - [Q21 — lz4hc Codec Purpose](#q21--lz4hc-codec-purpose)
 - [Q22 — Blosc2 vs Blosc1 API Compatibility](#q22--blosc2-vs-blosc1-api-compatibility)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q23 — typesize Parameter Role](#q23--typesize-parameter-role)
+- [Q24 — zstd Write Speed vs lz4 Tradeoff (Course Quiz Fact)](#q24--zstd-write-speed-vs-lz4-tradeoff-course-quiz-fact)
+- [Q25 — Blosc Internal Chunk Default Size](#q25--blosc-internal-chunk-default-size)
+- [Q26 — SHUFFLE Filter Integer Benefit](#q26--shuffle-filter-integer-benefit)
+- [Q27 — blosc.compress shuffle Parameter Default](#q27--blosccompress-shuffle-parameter-default)
+- [Q28 — Effect of clevel on Decompression Speed](#q28--effect-of-clevel-on-decompression-speed)
+- [Q29 — snappy Codec Availability](#q29--snappy-codec-availability)
+- [Q30 — Blosc Thread Safety in Multiprocessing](#q30--blosc-thread-safety-in-multiprocessing)
+- [Q31 — Reading Back with Wrong Function](#q31--reading-back-with-wrong-function)
+- [Q32 — Compressibility and Data Entropy Relationship](#q32--compressibility-and-data-entropy-relationship)
 
 ---
 
 > Topics: Blosc codecs, shuffle filters, chunk sizing, compression ratio vs speed, nthreads.
 > Exam frequency: **Week 3 topic**.
 
-**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--when-blosc-helps-vs-hurts)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#q1--when-blosc-helps-vs-hurts)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 3 — Extended Practice](#set-3--extended-practice)
 
 ---
 
@@ -526,5 +537,229 @@ Which statement about using `import blosc2` vs `import blosc` in the course exer
 - B) Correct — `blosc2` is a drop-in replacement for most `blosc` usage, but it extends the API with new abstractions: `SChunk` (super-chunks supporting multiple compression levels), native N-dimensional array support, and improved codec selection. The basic `compress`/`decompress` interface is compatible.
 - C) Incorrect — `blosc2` supports all the same codecs as `blosc` (`blosclz`, `lz4`, `lz4hc`, `zstd`, `zlib`) and adds new ones. It does not restrict codec availability.
 - D) Incorrect — `blosc2` retains and improves Blosc's internal parallelism. Multi-threading is still controlled via `blosc2.set_nthreads` (or equivalents) and is a core feature of the library.
+
+---
+
+## Set 3 — Extended Practice
+
+---
+
+## Q23 — typesize Parameter Role
+
+> **Week reference:** Week 3
+
+**Mental Model:** The `typesize` parameter in `blosc.compress` tells the SHUFFLE filter how many bytes make up one element. SHUFFLE needs this to know the stride at which to reorder bytes. Passing the wrong `typesize` causes the shuffle to be applied incorrectly, degrading compression ratio.
+
+Which value should `typesize` be set to when compressing the raw bytes of a `float64` array?
+
+- A) 1 — because `tobytes()` produces a flat `bytes` object of individual bytes
+- B) 4 — because Blosc internally converts float64 to float32 before shuffling
+- C) 8 — because each `float64` element occupies 8 bytes, and SHUFFLE uses this stride to group bytes by significance
+- D) 64 — because `typesize` is the total size of the array's dtype in bits
+
+**Answer: C**
+
+- A) Incorrect — `tobytes()` does produce a flat byte stream, but `typesize` does not describe the output of `tobytes()`; it describes the size of the original element so that SHUFFLE can correctly interleave bytes at 8-byte strides. Passing `typesize=1` tells SHUFFLE there is nothing to interleave and effectively disables it.
+- B) Incorrect — Blosc never converts dtype silently. The caller controls dtype entirely. `float64` stays `float64` throughout; `typesize=4` would mis-stride the shuffle and corrupt the grouping.
+- C) Correct — `float64` is 8 bytes per element (`np.dtype('float64').itemsize == 8`). Setting `typesize=8` tells the SHUFFLE filter to treat every 8 consecutive bytes as one logical element and transpose bytes at that granularity, grouping all sign/exponent bytes together for maximum compressibility.
+- D) Incorrect — `typesize` is measured in bytes, not bits. A 64-bit float is 8 bytes; passing `typesize=64` would tell Blosc each element is 64 bytes wide, which is nonsensical and would disable effective shuffling.
+
+---
+
+## Q24 — zstd Write Speed vs lz4 Tradeoff (Course Quiz Fact)
+
+> **Week reference:** Week 3
+
+**Mental Model:** The Week 3 quiz result confirms: switching from lz4 to zstd makes writing (compression) slower but reading (decompression) roughly the same speed, while producing smaller files. This is the canonical tradeoff to know for the exam.
+
+According to the Week 3 exercise results, what changes when switching from `cname="lz4"` to `cname="zstd"` for zeros and tiled data?
+
+- A) Both reading and writing are faster, and file size is smaller
+- B) Reading is slower, writing is the same speed, file size is smaller
+- C) Reading is about the same speed, writing is slower, and file size is smaller
+- D) Reading is faster, writing is slower, and file size is larger
+
+**Answer: C**
+
+- A) Incorrect — writing (compression) is not faster with zstd; it is slower because zstd performs more exhaustive pattern matching. Reading is not faster either — decompression speeds for lz4 and zstd are comparable.
+- B) Incorrect — reading speed is similar between lz4 and zstd for decompression. The bottleneck difference is at the compression (write) stage, not decompression (read).
+- C) Correct — this is the documented quiz answer for the course exercise. ZSTD's more thorough encoding takes longer to compress (slower writes) but decompresses at a similar speed to LZ4 (same reads). The payoff is smaller files on disk.
+- D) Incorrect — zstd produces smaller files than lz4, not larger. That smaller size is the entire motivation for accepting the slower write speed.
+
+---
+
+## Q25 — Blosc Internal Chunk Default Size
+
+> **Week reference:** Week 3
+
+**Mental Model:** Blosc splits input data into chunks before compressing them in parallel. The default chunk size is chosen to fit in the CPU's L2/L3 cache — typically around 256 KB to 1 MB. Chunks that fit in cache allow the codec to run at near-memory-bandwidth speeds.
+
+What is the rationale behind Blosc's default chunk size being in the range of hundreds of kilobytes?
+
+- A) The chunk size must equal the POSIX page size (4 KiB) for alignment with OS memory management
+- B) Chunks are sized to fit in CPU L2/L3 cache, so that each chunk can be compressed/decompressed entirely in fast cache memory without hitting RAM bandwidth
+- C) The chunk size must be at least 1 GiB so that Blosc's thread pool can process the entire array in one pass
+- D) Chunks must be a power of two in bytes because the SHUFFLE filter requires power-of-two strides
+
+**Answer: B**
+
+- A) Incorrect — 4 KiB chunks would be far too small for efficient Blosc operation. While 4 KiB is the OS page size, Blosc's design goal is cache residency at the L2/L3 level, not page alignment.
+- B) Correct — Blosc is designed as a "blocker, shuffler, and compressor." The blocking step (chunking) is specifically sized so each chunk fits in L2 or L3 cache. When the compressor operates on cache-resident data, it runs at cache bandwidth (~100–500 GB/s) rather than RAM bandwidth (~20–50 GB/s), making compression fast enough to exceed disk bandwidth.
+- C) Incorrect — 1 GiB chunks would defeat the purpose of chunking: they would not fit in cache, and the entire benefit of chunk-level cache residency would be lost. Smaller chunks are better for cache utilisation.
+- D) Incorrect — the SHUFFLE filter does not require power-of-two chunk sizes. It requires only that `typesize` is specified correctly. Chunk size is a separate parameter.
+
+---
+
+## Q26 — SHUFFLE Filter Integer Benefit
+
+> **Week reference:** Week 3
+
+**Mental Model:** SHUFFLE is most beneficial for multi-byte types where upper bytes (more significant) are nearly constant across elements. For wide integer types like `int32` or `int64` storing small values (e.g., counts or IDs), the upper bytes are all zeros, creating long runs after shuffling.
+
+For which `int32` array does the SHUFFLE filter provide the most compression benefit?
+
+- A) An array of values drawn from `np.random.randint(0, 2**31)`
+- B) An array of consecutive small integers `[0, 1, 2, 3, ..., N]` where N < 65536
+- C) An array where each element equals `2**31 - 1` (max int32 value)
+- D) An array of values drawn from a uniform distribution over the full int32 range
+
+**Answer: B**
+
+- A) Incorrect — values spread uniformly across the full int32 range use all 4 bytes heavily and randomly. After SHUFFLE, the byte streams are still random with no long runs. SHUFFLE provides minimal benefit.
+- B) Correct — for small consecutive integers (N < 65536), the upper 2 bytes of each int32 element are all zeros. After SHUFFLE groups the upper bytes together, the codec sees a long run of 0x00 bytes followed by the slowly-varying lower bytes. This is highly compressible.
+- C) Incorrect — an array of all identical values (all `2**31 - 1`) is compressible with or without SHUFFLE — the entire array is the same repeated bytes. SHUFFLE does not provide additional benefit over NOSHUFFLE for constant data.
+- D) Incorrect — a full-range uniform distribution produces high-entropy bytes in all 4 positions. After SHUFFLE, each byte stream is still random. The same outcome as option A: minimal benefit from SHUFFLE.
+
+---
+
+## Q27 — blosc.compress shuffle Parameter Default
+
+> **Week reference:** Week 3
+
+**Mental Model:** The default shuffle mode in `blosc.compress` is `blosc.SHUFFLE` (value=1) when `typesize > 1`, and `blosc.NOSHUFFLE` (value=0) when `typesize=1`. Knowing defaults matters for predicting behaviour when arguments are omitted.
+
+What shuffle mode does `blosc.compress(data, typesize=8, cname='lz4')` use if `shuffle` is not specified?
+
+- A) `blosc.NOSHUFFLE` — the safe default is no filtering
+- B) `blosc.BITSHUFFLE` — bit-level shuffling is the default for all dtypes
+- C) `blosc.SHUFFLE` — byte-level shuffling is the default when `typesize > 1`
+- D) No shuffling at any level, because `shuffle` is a required argument
+
+**Answer: C**
+
+- A) Incorrect — `NOSHUFFLE` is not the default for `typesize > 1`. Blosc defaults to SHUFFLE when the element size is more than 1 byte because it almost always improves compression for scientific data without significant overhead.
+- B) Incorrect — BITSHUFFLE is not the default. It must be explicitly requested with `shuffle=blosc.BITSHUFFLE`. BITSHUFFLE has higher CPU cost and is not the safe default.
+- C) Correct — when `typesize > 1`, `blosc.compress` defaults to `shuffle=blosc.SHUFFLE`. For `typesize=1`, the default is `blosc.NOSHUFFLE` (since there is nothing to shuffle at the byte level). This behaviour is consistent with the Blosc C library defaults.
+- D) Incorrect — `shuffle` is an optional keyword argument with a sensible default. Omitting it does not raise an error.
+
+---
+
+## Q28 — Effect of clevel on Decompression Speed
+
+> **Week reference:** Week 3
+
+**Mental Model:** Compression level (clevel) controls how hard the codec searches during compression. Decompression always reads the exact format written by the compressor — it does not re-search. Therefore, clevel has a negligible effect on decompression speed.
+
+How does increasing `clevel` from 1 to 9 affect decompression speed for `cname="lz4"`?
+
+- A) Decompression is significantly slower at clevel=9 because LZ4 must reverse the more complex encoding
+- B) Decompression is significantly faster at clevel=9 because the smaller compressed file requires less data to read from disk
+- C) Decompression speed is nearly unchanged by clevel; only compression (write) speed is affected
+- D) clevel=9 disables multi-threaded decompression to ensure correctness at high compression levels
+
+**Answer: C**
+
+- A) Incorrect — the LZ4 decompressor always reads the same binary frame format regardless of how hard the compressor worked. The decompressor's job is to follow back-references and literal copies, which is the same cost no matter how many passes the compressor made to find those references.
+- B) Partially true reasoning but wrong framing — a smaller file does read faster from disk (fewer bytes), but that is an indirect I/O effect, not a change in decompression throughput. The question asks about decompression speed, and the CPU decompression speed itself is unaffected by clevel.
+- C) Correct — clevel only affects the compression path (encoder). The decoder always performs the same operation: read the Blosc frame, decompress each block using the codec's fixed decompression algorithm. Decompression speed is determined by data size and codec, not by what clevel was used during compression.
+- D) Incorrect — clevel has no interaction with thread count. Multi-threaded decompression works at any clevel. Thread count is controlled solely by `blosc.set_nthreads`.
+
+---
+
+## Q29 — snappy Codec Availability
+
+> **Week reference:** Week 3
+
+**Mental Model:** Blosc bundles `blosclz`, `lz4`, `lz4hc`, `zstd`, and `zlib` as built-in codecs. `snappy` is an optional codec that requires a separate C library and may not be available in all installations. Calling `blosc.compress` with `cname="snappy"` on an installation without it raises an error.
+
+Which of the following codecs is NOT guaranteed to be available in a standard `blosc` Python package installation?
+
+- A) `lz4`
+- B) `zstd`
+- C) `snappy`
+- D) `blosclz`
+
+**Answer: C**
+
+- A) Incorrect — `lz4` is compiled into the Blosc C library and is always available in the Python `blosc` package.
+- B) Incorrect — `zstd` is also compiled into the Blosc C library as a standard included codec.
+- C) Correct — `snappy` (Google's Snappy codec) is an optional dependency. It is not bundled with the Blosc C library by default. On a standard DTU HPC environment or `pip install blosc` installation, `snappy` may not be available. Using `cname="snappy"` when it is not installed raises a `ValueError`.
+- D) Incorrect — `blosclz` is the original default codec, compiled directly into the Blosc library itself. It is always available.
+
+---
+
+## Q30 — Blosc Thread Safety in Multiprocessing
+
+> **Week reference:** Week 3
+
+**Mental Model:** Blosc uses an internal C-level thread pool. When a Python `multiprocessing` worker process starts, it gets its own copy of the Blosc library with the default thread count (1). Each worker's Blosc state is independent. Setting nthreads in the parent process does not propagate to child processes.
+
+You have a `multiprocessing.Pool` with 4 workers. You call `blosc.set_nthreads(4)` in the main process before creating the pool. How many Blosc threads does each worker process use?
+
+- A) 4 — the pool inherits the parent's Blosc state via fork
+- B) 1 — each worker starts with Blosc's default of 1 thread; the parent's setting is not reliably inherited
+- C) 16 — each worker uses all available cores divided evenly
+- D) 0 — workers cannot use Blosc because the thread pool conflicts with multiprocessing
+
+**Answer: B**
+
+- A) Incorrect — on Linux, `fork()` does copy memory state including the thread count setting, but the Blosc internal thread pool is reinitialised in the child after fork because inheriting a live thread pool across fork is unsafe (POSIX warns against it). On other platforms (spawn-based), no state is copied at all. The safe assumption is that each worker starts at Blosc's default of 1 thread.
+- B) Correct — `multiprocessing` workers (especially with the `spawn` start method used on macOS and Windows by default) start fresh Python processes. Each new process loads Blosc fresh, getting the default of 1 thread. Even on Linux with `fork`, the Blosc thread pool state should not be relied upon. Workers should each call `blosc.set_nthreads` explicitly if multi-threaded Blosc is needed.
+- C) Incorrect — Blosc does not auto-detect or distribute cores across workers. Thread count is only set via `blosc.set_nthreads`. There is no mechanism that divides cores among processes.
+- D) Incorrect — Blosc can be used inside multiprocessing workers. The concern is only about thread count initialisation, not a fundamental incompatibility.
+
+---
+
+## Q31 — Reading Back with Wrong Function
+
+> **Week reference:** Week 3
+
+**Mental Model:** `blosc.pack_array` and `blosc.compress` produce different frame layouts. `pack_array` embeds a pickle payload; `compress` stores raw bytes. The inverse must always match: `unpack_array` for `pack_array`, and `decompress` for `compress`. Mixing them does not crash Blosc but returns wrong data types.
+
+Data was compressed with `blosc.compress(arr.tobytes(), ...)` and saved to disk. You read the file and call `blosc.unpack_array(raw_bytes)`. What happens?
+
+- A) You get back the original NumPy array correctly, because `unpack_array` can handle both frame types
+- B) You get a `ValueError` because the Blosc frame magic number differs between `compress` and `pack_array`
+- C) You get an error or garbled result because `unpack_array` expects a pickle header that `compress` never wrote
+- D) You get back a `bytes` object instead of a NumPy array, which is the same as calling `decompress`
+
+**Answer: C**
+
+- A) Incorrect — `unpack_array` is not polymorphic. It specifically calls `blosc.decompress` and then `pickle.loads` on the result. If the data was written with `blosc.compress` (no pickle header), `pickle.loads` will fail on the raw decompressed bytes.
+- B) Incorrect — both `compress` and `pack_array` write valid Blosc frames with the same magic number. The Blosc frame format is the same at the outer level; the difference is in the decompressed payload (raw bytes vs pickled array).
+- C) Correct — `unpack_array` decompress the Blosc frame to get raw bytes, then calls `pickle.loads` on those bytes to reconstruct the NumPy array. If the original data was written with `blosc.compress`, the decompressed bytes are the raw array data (not a pickle stream). `pickle.loads` will raise an `UnpicklingError` or similar exception.
+- D) Incorrect — `unpack_array` does not return a `bytes` object. It specifically calls `pickle.loads` on the decompressed data, which will either return an ndarray (if the frame was from `pack_array`) or raise an exception (if from `compress`).
+
+---
+
+## Q32 — Compressibility and Data Entropy Relationship
+
+> **Week reference:** Week 3
+
+**Mental Model:** Lossless compression ratio is bounded by data entropy. High-entropy data (random, encrypted, already-compressed) is incompressible. Low-entropy data (zeros, repeated patterns, slowly varying values) compresses well. This is a fundamental information-theoretic limit, not a codec limitation.
+
+Which of the following is the most accurate statement about the theoretical limit of lossless compression?
+
+- A) Any data can be compressed by at least 50% with a sufficiently advanced codec
+- B) The maximum compression ratio achievable is determined by the data's entropy — high-entropy data cannot be significantly compressed regardless of codec
+- C) ZSTD at clevel=9 can always achieve at least 2:1 compression because it uses entropy coding
+- D) Blosc can always compress NumPy arrays to at least 10% of their original size because it knows the dtype
+
+**Answer: B**
+
+- A) Incorrect — Shannon's source coding theorem proves that no lossless code can compress data below its entropy rate. High-entropy data (e.g., uniformly random bytes at ~8 bits/byte) cannot be losslessly compressed at all, let alone by 50%.
+- B) Correct — information theory establishes that the minimum lossless representation of data is its entropy. A uniformly random byte sequence has ~8 bits/byte of entropy — already optimal, nothing to compress. Only data with redundancy (repeated patterns, biased distributions, correlations) can be compressed. This applies universally to all codecs including Blosc's.
+- C) Incorrect — entropy coding (Huffman, ANS) only helps when the input symbol distribution is non-uniform. For uniformly random data, entropy coding produces output the same size as or larger than the input. ZSTD's entropy coder cannot create compression from true randomness.
+- D) Incorrect — knowing the dtype does not help compress high-entropy data. An array of random float64 values has high entropy regardless of dtype annotation. Blosc's knowledge of the dtype only helps the SHUFFLE filter rearrange bytes, but if those bytes are random, shuffling random bytes produces random bytes.
 
 ---

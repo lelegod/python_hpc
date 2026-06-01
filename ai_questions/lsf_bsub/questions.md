@@ -27,6 +27,17 @@
 - [Q20 — -n Flag vs -R Flag: What Each Controls](#q20-n-flag-vs-r-flag-what-each-controls)
 - [Q21 — bkill and Stuck PEND Jobs](#q21-bkill-and-stuck-pend-jobs)
 - [Q22 — Email Notification Flags](#q22-email-notification-flags)
+- [Set 3 — Extended Practice](#set-3-extended-practice)
+- [Q23 — bhist: Inspecting Completed Jobs](#q23--bhist-inspecting-completed-jobs)
+- [Q24 — OMP_NUM_THREADS vs -n Interaction](#q24--omp_num_threads-vs--n-interaction)
+- [Q25 — Dependency by Job ID vs Job Name](#q25--dependency-by-job-id-vs-job-name)
+- [Q26 — Non-Contiguous Job Array Indices](#q26--non-contiguous-job-array-indices)
+- [Q27 — bsub Submission Syntax: < Is Required](#q27--bsub-submission-syntax--is-required)
+- [Q28 — Memory Charged for Unused Cores](#q28--memory-charged-for-unused-cores)
+- [Q29 — USUSP and SSUSP States](#q29--ususp-and-ssusp-states)
+- [Q30 — Multiple -R Strings: AND Semantics](#q30--multiple--r-strings-and-semantics)
+- [Q31 — gpu32 Queue vs gpuv100 Queue](#q31--gpu32-queue-vs-gpuv100-queue)
+- [Q32 — Separating stdout and stderr with -e](#q32--separating-stdout-and-stderr-with--e)
 
 ---
 
@@ -462,5 +473,247 @@ Which pair of `#BSUB` directives together sends an email to `user@dtu.dk` when t
 **Answer: B**
 
 `-N` sends an email notification when the job **ends** (reaches any terminal state). `-u` specifies the email address. Both are needed together: `-N` enables end-of-job notification and `-u` directs it to the right address. `-B` sends notification at job **start**, not end. `-mail` is not a valid BSUB flag. While `-N` alone might default to the submitter's system account on some clusters, DTU HPC requires `-u` to specify an actual email address.
+
+---
+
+## Set 3 — Extended Practice
+
+- [Q23 — bhist: Inspecting Completed Jobs](#q23--bhist-inspecting-completed-jobs)
+- [Q24 — OMP_NUM_THREADS vs -n Interaction](#q24--omp_num_threads-vs--n-interaction)
+- [Q25 — Dependency by Job ID vs Job Name](#q25--dependency-by-job-id-vs-job-name)
+- [Q26 — Non-Contiguous Job Array Indices](#q26--non-contiguous-job-array-indices)
+- [Q27 — bsub Submission Syntax: < Is Required](#q27--bsub-submission-syntax--is-required)
+- [Q28 — Memory Charged for Unused Cores](#q28--memory-charged-for-unused-cores)
+- [Q29 — USUSP and SSUSP States](#q29--ususp-and-ssusp-states)
+- [Q30 — Multiple -R Strings: AND Semantics](#q30--multiple--r-strings-and-semantics)
+- [Q31 — gpu32 Queue vs gpuv100 Queue](#q31--gpu32-queue-vs-gpuv100-queue)
+- [Q32 — Separating stdout and stderr with -e](#q32--separating-stdout-and-stderr-with--e)
+
+---
+
+## Q23 — bhist: Inspecting Completed Jobs
+
+> **Week reference:** Week 1
+
+**Mental Model:** `bjobs` only shows active jobs (PEND/RUN/USUSP); once a job reaches DONE or EXIT it disappears from `bjobs` output — `bhist` is the dedicated command for querying the historical record of completed jobs.
+
+A job finished an hour ago and is no longer visible in `bjobs`. You need to check whether it completed successfully and how long it ran. Which command retrieves this information?
+
+- A) `bjobs -a`
+- B) `bhist <jobid>`
+- C) `bpeek <jobid>`
+- D) `bjobs -hist <jobid>`
+
+**Answer: B**
+
+- A) Incorrect — `-a` shows all jobs including recently finished ones within the current session window, but once the job has cleared LSF's active record, even `bjobs -a` will not find it. `bhist` queries the persistent accounting log.
+- B) Correct — `bhist <jobid>` queries the LSF accounting database and reports the full lifecycle of a completed job: submission time, start time, end time, exit status, and resources consumed. It works for jobs that finished long ago.
+- C) Incorrect — `bpeek` is used to preview the live stdout/stderr of a currently running job. It has no meaning for completed jobs and will return an error.
+- D) Incorrect — `-hist` is not a valid `bjobs` flag. The correct tool for historical data is the separate `bhist` command.
+
+---
+
+## Q24 — OMP_NUM_THREADS vs -n Interaction
+
+> **Week reference:** Week 1
+
+**Mental Model:** `-n` tells LSF how many CPU slots to reserve; `OMP_NUM_THREADS` tells OpenMP (and similar threading libraries) how many threads to spawn at runtime — they must match or the job either under-uses reserved cores or over-subscribes them.
+
+A job script requests `#BSUB -n 8` but the script body never sets `OMP_NUM_THREADS`. The Python program uses a multi-threaded NumPy routine that respects `OMP_NUM_THREADS`. What is the most likely outcome?
+
+- A) NumPy automatically detects the 8 reserved cores and uses exactly 8 threads
+- B) The program uses however many threads the library's default selects, which may be the total physical core count of the node — potentially over-subscribing the allocation
+- C) LSF sets `OMP_NUM_THREADS=8` automatically whenever `-n 8` is specified
+- D) The program uses 1 thread because LSF does not export any thread-count environment variable
+
+**Answer: B**
+
+- A) Incorrect — LSF does not expose the `-n` value to the running process as a thread-count hint. NumPy/OpenMP have no awareness of LSF's slot reservation.
+- B) Correct — OpenMP and MKL (used by NumPy) read `OMP_NUM_THREADS` or fall back to detecting the node's physical core count. On a 40-core node with `-n 8`, the library may spawn 40 threads, causing 5× over-subscription of the 8 reserved slots and poor performance for all jobs on that node.
+- C) Incorrect — LSF does not automatically set `OMP_NUM_THREADS`. The user must explicitly add `export OMP_NUM_THREADS=8` (or equivalent) in the job script to match the `-n` value.
+- D) Incorrect — With no `OMP_NUM_THREADS` set, the library does not default to 1; it defaults to the hardware thread count detected at runtime.
+
+---
+
+## Q25 — Dependency by Job ID vs Job Name
+
+> **Week reference:** Week 11
+
+**Mental Model:** `done(name)` matches ALL currently submitted jobs with that name — if multiple jobs share a name, the dependency waits for all of them; using a numeric job ID `done(12345)` pins the dependency to exactly one specific job submission.
+
+You submit two separate jobs both named `preprocess`. Later you submit a `report` job with `#BSUB -w "done(preprocess)"`. How many jobs must complete before `report` starts?
+
+- A) Only the first `preprocess` job submitted, because LSF resolves the name at submission time
+- B) Both `preprocess` jobs, because `done(name)` matches all live jobs with that name
+- C) Only the most recently submitted `preprocess` job
+- D) Neither — using a name instead of a job ID causes LSF to ignore the dependency
+
+**Answer: B**
+
+- A) Incorrect — LSF does not freeze name resolution at submission time. The dependency expression is evaluated dynamically against all active jobs matching the name at the time the condition is checked.
+- B) Correct — `done(preprocess)` evaluates to true only when every job currently in the system with the name `preprocess` has reached DONE state. Both submissions must complete. This is why using unique job names (or job IDs) is important in complex pipelines to avoid accidental coupling.
+- C) Incorrect — LSF has no "most recent" tie-breaking rule for name-based dependencies. All matching jobs must satisfy the condition.
+- D) Incorrect — Name-based dependencies are a first-class feature of LSF and work correctly. The `-w` flag accepts both job names and numeric job IDs.
+
+---
+
+## Q26 — Non-Contiguous Job Array Indices
+
+> **Week reference:** Week 11
+
+**Mental Model:** LSF job arrays support non-contiguous index lists using comma-separated values inside the brackets — this allows you to re-run only specific failed elements without resubmitting the whole array.
+
+Which `#BSUB -J` directive submits a job array that runs only elements 2, 29, 71, and 127?
+
+- A) `#BSUB -J "run[2-127:step=29]"`
+- B) `#BSUB -J "run[2,29,71,127]"`
+- C) `#BSUB -J "run[2+29+71+127]"`
+- D) `#BSUB -J "run[2;29;71;127]"`
+
+**Answer: B**
+
+- A) Incorrect — `[2-127:step=29]` uses stride syntax, which generates indices 2, 31, 60, 89, 118 — not the desired values. Stride syntax is `[start-end:stride]`.
+- B) Correct — LSF supports comma-separated index lists inside the array brackets. `run[2,29,71,127]` creates exactly four array elements with `$LSB_JOBINDEX` taking those four values. This is the canonical way to re-run specific failed elements.
+- C) Incorrect — `+` is not valid syntax inside LSF array brackets. This would cause a submission parse error.
+- D) Incorrect — Semicolons are not valid separators in LSF array index syntax. Only commas (for lists) and hyphens with optional colons (for ranges with stride) are supported.
+
+---
+
+## Q27 — bsub Submission Syntax: < Is Required
+
+> **Week reference:** Week 1
+
+**Mental Model:** LSF reads the job script from stdin — the shell redirection `<` feeds the file to `bsub`; omitting it passes the filename as a positional argument, which `bsub` treats differently and may cause unexpected behavior.
+
+A student types `bsub submit.sh` instead of `bsub < submit.sh`. What is the most likely result?
+
+- A) The job is submitted identically — `bsub` accepts both forms
+- B) LSF executes `submit.sh` as a shell command immediately on the login node instead of submitting it
+- C) `bsub` treats `submit.sh` as the job command, submitting a job that runs the script directly as a process without parsing any `#BSUB` directives from inside it
+- D) LSF throws an error: "file argument not supported"
+
+**Answer: C**
+
+- A) Incorrect — The two forms are not equivalent. `bsub < file` reads BSUB directives from inside the script. `bsub file` passes the filename as an argument, and LSF behavior differs by version — typically it runs the file as the command but ignores embedded `#BSUB` lines, using only command-line flags.
+- B) Incorrect — `bsub` does not execute programs directly on the login node. The script is still submitted to the scheduler; the issue is that the embedded `#BSUB` resource directives are silently ignored.
+- C) Correct — Without `<`, `bsub` may interpret `submit.sh` as the command to run (as if you had typed `bsub submit.sh` like any other program name), submitting a job with default resources and none of the `#BSUB` directives parsed. The job may run with incorrect memory, wall time, and core counts.
+- D) Incorrect — LSF does not produce a clean error in this case on most versions; the misbehavior is silent, making it a dangerous mistake.
+
+---
+
+## Q28 — Memory Charged for Unused Cores
+
+> **Week reference:** Week 1
+
+**Mental Model:** LSF charges memory based on the number of cores **requested** via `-n`, not the number actually used — requesting more cores than the program needs wastes both CPU slots and memory allocation on the cluster.
+
+A job script has `#BSUB -n 16` and `#BSUB -R "rusage[mem=2GB]"`, but the Python program is single-threaded and only ever uses 1 core. How much memory does LSF reserve, and how much of that reservation is actually used?
+
+- A) LSF detects the single-threaded usage and reserves only 2 GB
+- B) LSF reserves 32 GB (16 × 2 GB), but the program only uses 2 GB worth — 30 GB is wasted and unavailable to other jobs
+- C) LSF reserves 2 GB total because single-threaded programs override the -n value
+- D) LSF reserves 16 GB because it uses -n as a divisor on the rusage value
+
+**Answer: B**
+
+- A) Incorrect — LSF has no runtime mechanism to detect thread usage and retroactively reduce memory reservations. Resources are committed at scheduling time based on `-n` and `rusage[mem=X]`.
+- B) Correct — LSF always charges `rusage[mem=X] × n_cores` regardless of how many cores the program actually uses. With `-n 16` and `rusage[mem=2GB]`, 32 GB is reserved for the duration of the job. The single-threaded program uses ~2 GB, leaving 30 GB allocated but idle, denying it to other jobs.
+- C) Incorrect — LSF has no concept of overriding `-n` based on program behavior. The `-n` value is a reservation, not a runtime observation.
+- D) Incorrect — LSF does not divide by `-n`. It multiplies `rusage[mem=X]` by the number of cores to get the total reservation. There is no inverse relationship.
+
+---
+
+## Q29 — USUSP and SSUSP States
+
+> **Week reference:** Week 1
+
+**Mental Model:** LSF has two suspended states beyond PEND/RUN — USUSP (user-suspended via `bstop`) and SSUSP (system-suspended by the scheduler) — a suspended job holds its allocated resources but does not execute.
+
+You run `bjobs -a` and see a job in **USUSP** state. What does this mean, and how do you resume it?
+
+- A) USUSP means the job is waiting for user authentication; run `bauth <jobid>` to authenticate
+- B) USUSP means the job was suspended by the user (via `bstop`); run `bresume <jobid>` to resume it
+- C) USUSP means the job finished with a user-space error; it cannot be resumed
+- D) USUSP is identical to PEND — both mean the job is waiting for resources
+
+**Answer: B**
+
+- A) Incorrect — USUSP has nothing to do with authentication. `bauth` is not a standard LSF command.
+- B) Correct — USUSP (user-suspended) means a user explicitly called `bstop <jobid>` to pause the job. The job retains its allocated nodes and cores but stops executing. `bresume <jobid>` releases the suspension and the job continues from where it was paused (for checkpoint-capable jobs) or restarts.
+- C) Incorrect — USUSP is a live, reversible state, not a terminal error state. EXIT is the terminal failure state.
+- D) Incorrect — PEND means the job has not yet been dispatched to a node. USUSP means it was dispatched, started, and then explicitly paused — a fundamentally different lifecycle stage.
+
+---
+
+## Q30 — Multiple -R Strings: AND Semantics
+
+> **Week reference:** Week 1
+
+**Mental Model:** Multiple `#BSUB -R` lines in a script are combined with AND logic — all constraints must be satisfied simultaneously — this is equivalent to putting all clauses in a single `-R` string separated by spaces.
+
+A job script has these two separate lines:
+
+```
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -R "span[hosts=1]"
+```
+
+How does LSF interpret these two `-R` directives?
+
+- A) The second `-R` line overrides the first; only `span[hosts=1]` applies
+- B) LSF picks whichever constraint is more restrictive and applies only that one
+- C) Both constraints apply simultaneously — LSF allocates all cores on a single node AND reserves 4 GB per core
+- D) Using two `-R` lines causes a script parse error; they must be combined into one string
+
+**Answer: C**
+
+- A) Incorrect — LSF does not use last-wins semantics for `-R` lines. Each additional `-R` adds another requirement to the existing set; nothing is overridden.
+- B) Incorrect — LSF has no concept of "more restrictive wins." All `-R` constraints form a logical AND and must all be satisfied for a node to be eligible.
+- C) Correct — Multiple `#BSUB -R` lines accumulate: LSF requires every `-R` clause to be true. The job gets all cores on one node (`span[hosts=1]`) AND reserves 4 GB per core (`rusage[mem=4GB]`). This is fully equivalent to writing `#BSUB -R "rusage[mem=4GB] span[hosts=1]"` on one line.
+- D) Incorrect — Multiple `-R` lines are valid and commonly used in real job scripts (as seen in the course's `submit.sh` examples). There is no parse error.
+
+---
+
+## Q31 — gpu32 Queue vs gpuv100 Queue
+
+> **Week reference:** Week 1
+
+**Mental Model:** DTU HPC has multiple GPU queues for different GPU hardware generations — `gpuv100` targets V100 cards, `gpu32` targets A100/newer 32 GB cards — choosing the wrong queue may put the job on hardware with insufficient VRAM or miss available resources.
+
+A deep learning job requires at least 24 GB of GPU VRAM. The cluster has both `gpuv100` (V100, 16 GB VRAM each) and `gpu32` (A100, 32 GB VRAM each) queues. Which queue should be used?
+
+- A) `gpuv100` — it is always the default GPU queue and handles VRAM requests automatically
+- B) `gpu32` — it provides GPUs with 32 GB VRAM, sufficient for the 24 GB requirement
+- C) Either queue — LSF automatically selects a GPU with enough VRAM regardless of queue
+- D) `hpc` — GPU memory is a software allocation that any queue can satisfy
+
+**Answer: B**
+
+- A) Incorrect — `gpuv100` nodes have V100 GPUs with 16 GB VRAM each, which is less than the 24 GB required. The job would submit successfully but fail at runtime when the model exceeds the GPU's memory capacity.
+- B) Correct — `gpu32` nodes have GPUs with 32 GB VRAM (e.g., A100-SXM4-32GB), which exceeds the 24 GB requirement. The correct queue must be chosen based on the hardware's actual VRAM capacity.
+- C) Incorrect — LSF queue selection is entirely the user's responsibility. LSF does not inspect VRAM requirements and cannot automatically route jobs to the right GPU hardware based on memory needs.
+- D) Incorrect — `hpc` is the standard CPU queue and has no GPU nodes. GPU VRAM is a physical hardware property of the node, not a software-allocated resource.
+
+---
+
+## Q32 — Separating stdout and stderr with -e
+
+> **Week reference:** Week 1
+
+**Mental Model:** By default, LSF merges stdout and stderr into the `-o` file — adding `-e` directs stderr to a separate file, making it much easier to distinguish program output from error messages and tracebacks.
+
+A job script has only `#BSUB -o job_%J.out` and no `-e` flag. The Python script prints normal output to stdout and raises an exception whose traceback goes to stderr. Where does the traceback appear?
+
+- A) It is lost — without `-e`, LSF discards stderr output
+- B) It appears in `job_<jobid>.out` alongside the stdout output, since LSF merges them by default
+- C) It appears in a file named `job_<jobid>.err` that LSF creates automatically even without `-e`
+- D) It is sent by email to the submitting user's account
+
+**Answer: B**
+
+- A) Incorrect — LSF does not discard stderr. Without `-e`, it merges stderr into the stdout file specified by `-o`.
+- B) Correct — When no `-e` flag is present, LSF redirects both stdout and stderr into the single `-o` output file. The Python traceback will appear in `job_<jobid>.out`, interleaved with any normal print output. This can make debugging confusing, which is why adding `#BSUB -e job_%J.err` is recommended best practice.
+- C) Incorrect — LSF does not automatically create a `.err` file unless `-e` is explicitly specified with a filename. Auto-creation of a separate error file is not standard LSF behavior.
+- D) Incorrect — stderr is not emailed. Only explicit `-B`/`-N` notification emails are sent; these carry job status information, not program output.
 
 ---

@@ -25,6 +25,17 @@
 - [Q18 — pd.to_numeric with downcast='float'](#q18-pdto_numeric-with-downcastfloat)
 - [Q19 — int8 Range: Values Including 200](#q19-int8-range-values-including-200)
 - [Q20 — float32 vs float64 for ML Features](#q20-float32-vs-float64-for-ml-features)
+- [Set 3 — Extended Practice](#set-3-extended-practice)
+- [Q21 — astype() Copy vs View Semantics](#q21-astype-copy-vs-view-semantics)
+- [Q22 — dtype Promotion When Mixing float32 and float64](#q22-dtype-promotion-when-mixing-float32-and-float64)
+- [Q23 — np.finfo() Fields: eps vs resolution](#q23-npfinfo-fields-eps-vs-resolution)
+- [Q24 — float64 Exact Integer Representation Limit](#q24-float64-exact-integer-representation-limit)
+- [Q25 — NaN Propagation Rules](#q25-nan-propagation-rules)
+- [Q26 — complex64 Memory Layout](#q26-complex64-memory-layout)
+- [Q27 — Mixed-dtype Array Construction Promotion](#q27-mixed-dtype-array-construction-promotion)
+- [Q28 — uint16 Overflow Wrapping](#q28-uint16-overflow-wrapping)
+- [Q29 — np.iinfo() for Safe Downcast Decisions](#q29-npiinfo-for-safe-downcast-decisions)
+- [Q30 — inf Arithmetic and NaN-Producing Operations](#q30-inf-arithmetic-and-nan-producing-operations)
 
 ---
 
@@ -485,5 +496,231 @@ A machine learning pipeline stores a feature matrix of 10,000,000 elements as fl
 - B) Correct — float32 uses 4 bytes vs float64's 8 bytes, cutting memory in half. Its ~7 significant digits of precision is adequate for normalized ML features (e.g., values scaled to [0, 1] or standardized). Before: 10M × 8 = 80 MB; after: 10M × 4 = 40 MB.
 - C) Incorrect — float64 is strictly more precise than float32 for all value ranges, including [0, 1]. float32 gives ~7 digits; float64 gives ~15 digits. More precision is always "more accurate," though the extra precision is often unnecessary for ML.
 - D) Incorrect — 75% reduction would require float64→float16 (8 bytes → 2 bytes = 4× reduction). float64→float32 is a 2× reduction = 50% savings, not 75%.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets astype() semantics, dtype promotion, np.finfo/iinfo, NaN/inf rules, complex dtypes, and uint overflow traps not covered in Sets 1 and 2.
+
+---
+
+## Q21 — astype() Copy vs View Semantics
+
+> **Week reference:** Week 2
+
+**Mental Model:** `astype()` always returns a copy by default, even if the source and target dtypes are identical. This is because dtype conversion semantics are defined as producing a new allocation. Contrast with `.view()`, which reinterprets the existing memory buffer without copying.
+
+Which statement about `arr.astype(np.float32)` is correct when `arr` is a float64 array?
+
+- A) It returns a view of `arr` reinterpreted as float32 — no memory is allocated
+- B) It returns a new array with a copied and converted buffer; modifying the result does not affect `arr`
+- C) It modifies `arr` in-place and changes its dtype to float32
+- D) It raises a `TypeError` because float64 and float32 are incompatible dtypes
+
+**Answer: B**
+
+- A) Incorrect — `astype()` always allocates a new array (copies data) by default. A view reinterpretation with `.view(np.float32)` would be possible but would misinterpret the raw bytes, not perform a proper value conversion.
+- B) Correct — `astype()` allocates a new buffer, converts each element from float64 to float32, and returns the new array. The original `arr` is untouched. This is the default behavior (`copy=True`).
+- C) Incorrect — NumPy arrays have a fixed dtype after creation; `astype()` never modifies the dtype of the original array in-place. The result is always a separate object.
+- D) Incorrect — float64 and float32 are fully compatible numeric dtypes. `astype()` supports conversion between any standard NumPy numeric dtypes, including all float, int, and complex types.
+
+---
+
+## Q22 — dtype Promotion When Mixing float32 and float64
+
+> **Week reference:** Week 2
+
+**Mental Model:** NumPy follows type promotion rules: when operands have different dtypes, the result is promoted to the "higher" dtype to avoid loss of information. float64 > float32 in this hierarchy, so mixing them always produces float64. This is a silent precision preservation, but it also silently undoes any memory savings from downcasting.
+
+A NumPy array `a` has dtype `float32` and array `b` has dtype `float64`. What is the dtype of `a + b`?
+
+- A) `float32` — the lower-precision operand determines the output dtype
+- B) `float64` — NumPy promotes to the higher-precision dtype to avoid data loss
+- C) `float128` — NumPy always promotes to a higher type than either input
+- D) `float32` — NumPy always returns the dtype of the left operand
+
+**Answer: B**
+
+- A) Incorrect — NumPy never demotes precision silently. Returning float32 when one operand is float64 would discard precision, which violates NumPy's type promotion rules.
+- B) Correct — NumPy's promotion rules elevate the result to the higher dtype. float64 has more precision than float32, so the result of any arithmetic mixing them is float64. This can silently undo memory savings from downcasting one array.
+- C) Incorrect — NumPy does not invent a higher dtype than the inputs; it promotes to the highest dtype present among the operands. float128 would only appear if one of the operands was already float128 (on platforms that support it).
+- D) Incorrect — the result dtype depends on both operands' dtypes, not just the left one. `float32_array + float64_array` and `float64_array + float32_array` both produce float64.
+
+---
+
+## Q23 — np.finfo() Fields: eps vs resolution
+
+> **Week reference:** Week 2
+
+**Mental Model:** `np.finfo(dtype).eps` is machine epsilon — the smallest value such that `1.0 + eps != 1.0`. `np.finfo(dtype).resolution` is the approximate decimal resolution (~10× larger than eps, representing decimal digits). These are often confused: eps is the raw ULP at 1.0, resolution is the human-readable decimal precision (~1e-6 for float32, ~1e-15 for float64).
+
+What does `np.finfo(np.float32).eps` represent?
+
+- A) The smallest positive float32 value (subnormal minimum)
+- B) The smallest value such that `np.float32(1.0) + eps` is distinguishable from `np.float32(1.0)` — i.e., the ULP at 1.0
+- C) The number of decimal digits of precision in float32 (approximately 7)
+- D) The maximum representable float32 value (~3.4 × 10³⁸)
+
+**Answer: B**
+
+- A) Incorrect — the smallest positive float32 value (including subnormals) is `np.finfo(np.float32).tiny` or `np.finfo(np.float32).smallest_subnormal`. Machine epsilon is not about the minimum representable value.
+- B) Correct — machine epsilon (`eps`) is defined as the smallest positive number such that `1.0 + eps != 1.0`. For float32, this is approximately 1.19 × 10⁻⁷. It equals one ULP (unit in the last place) at value 1.0.
+- C) Incorrect — the approximate number of significant decimal digits is given by `np.finfo(np.float32).precision` (which returns 6 for float32). The `eps` attribute is a floating-point value, not an integer digit count.
+- D) Incorrect — the maximum representable float32 value is `np.finfo(np.float32).max` ≈ 3.4 × 10³⁸. This is entirely separate from machine epsilon, which is a precision measure near 1.0.
+
+---
+
+## Q24 — float64 Exact Integer Representation Limit
+
+> **Week reference:** Week 2
+
+**Mental Model:** float64 has a 52-bit mantissa, so it can represent integers exactly up to 2^53 = 9,007,199,254,740,992. Beyond this, consecutive integers are no longer distinguishable. This is much larger than float32's limit of 2^24 = 16,777,216, but it still catches users who assume float64 is exact for all integers.
+
+Up to what integer value can `float64` represent all integers exactly?
+
+- A) Up to 2^32 − 1 = 4,294,967,295 (32-bit unsigned integer max)
+- B) Up to 2^52 − 1 = 4,503,599,627,370,495
+- C) Up to 2^53 = 9,007,199,254,740,992
+- D) float64 represents all integers exactly with no upper limit
+
+**Answer: C**
+
+- A) Incorrect — 2^32 − 1 is the limit of uint32, not float64. float64's exact integer range is much larger: its 52-bit mantissa (plus the implicit leading 1) gives exact representation up to 2^53.
+- B) Incorrect — the limit is 2^53, not 2^52. The float64 mantissa has 52 explicit bits, but the implicit leading 1 bit gives an effective 53-bit significand, allowing exact integers up to 2^53.
+- C) Correct — float64 has a 52-bit explicit mantissa plus an implicit leading 1 bit, giving 53 bits of significand. All integers from −2^53 to 2^53 are representable exactly. Beyond 2^53, consecutive integers merge.
+- D) Incorrect — float64 does have an exact integer limit at 2^53. For example, `float64(2**53 + 1)` rounds to `float64(2**53)` — the two values are indistinguishable in float64.
+
+---
+
+## Q25 — NaN Propagation Rules
+
+> **Week reference:** Week 2
+
+**Mental Model:** NaN is "contagious" in IEEE 754 arithmetic: any arithmetic operation involving NaN produces NaN. This means a single NaN in a large array can silently corrupt aggregations (sum, mean, max). Comparisons with NaN always return False, including `NaN == NaN`. NumPy provides `np.nansum`, `np.nanmean` etc. to skip NaN values.
+
+An array contains one `np.nan` value among 999 valid float64 values. Which statement is correct?
+
+- A) `np.sum(arr)` returns the sum of the 999 valid values, ignoring `nan`
+- B) `np.sum(arr)` returns `nan` because NaN propagates through arithmetic
+- C) `np.sum(arr)` raises a `ValueError` because NaN is not a valid float
+- D) `np.sum(arr)` returns `inf` because NaN indicates overflow
+
+**Answer: B**
+
+- A) Incorrect — `np.sum()` does not skip NaN values. Summing NaN with any finite value produces NaN. To skip NaN, use `np.nansum()`.
+- B) Correct — IEEE 754 mandates that any arithmetic operation involving NaN returns NaN. A single NaN in the array propagates through the entire sum, returning NaN regardless of the other 999 values.
+- C) Incorrect — NaN is a valid IEEE 754 floating-point bit pattern. NumPy never raises a ValueError for NaN in arithmetic. NaN is represented as a float with all exponent bits set and a non-zero mantissa.
+- D) Incorrect — NaN and inf are distinct IEEE 754 special values. NaN arises from undefined operations (0/0, inf−inf, sqrt(−1)); inf arises from overflow or non-zero divided by zero. NaN does not become inf through summation.
+
+---
+
+## Q26 — complex64 Memory Layout
+
+> **Week reference:** Week 2
+
+**Mental Model:** NumPy's `complex64` stores a complex number as two consecutive `float32` values (real part then imaginary part). This means each element occupies 8 bytes total — the same as `float64`. `complex128` uses two `float64` values = 16 bytes per element. This surprises users who expect complex64 to be "half the size" of complex128.
+
+How many bytes does each element of a `complex64` NumPy array occupy?
+
+- A) 4 bytes — the same as float32
+- B) 8 bytes — two float32 components (real + imaginary)
+- C) 16 bytes — two float64 components (real + imaginary)
+- D) 6 bytes — three float16 components for real, imaginary, and magnitude
+
+**Answer: B**
+
+- A) Incorrect — `complex64` contains both a real and an imaginary component, each stored as float32 (4 bytes). The total is 4 + 4 = 8 bytes, not 4. A single float32 alone is 4 bytes.
+- B) Correct — `complex64` stores two consecutive float32 values: the real part (4 bytes) followed by the imaginary part (4 bytes). Total: 8 bytes per element. Verify with `np.dtype(np.complex64).itemsize == 8`.
+- C) Incorrect — 16 bytes per element is `complex128`, which stores two float64 values. `complex64` uses two float32 values = 8 bytes.
+- D) Incorrect — complex numbers have exactly two components (real and imaginary). There is no "magnitude" component stored separately. The magnitude is computed from real and imaginary when needed.
+
+---
+
+## Q27 — Mixed-dtype Array Construction Promotion
+
+> **Week reference:** Week 2
+
+**Mental Model:** When `np.array()` constructs an array from a Python list containing mixed numeric types (int and float), it promotes all elements to a single dtype — the minimum dtype that can represent all values without loss. A Python float literal defaults to float64, so mixing Python ints with floats gives float64. Mixing NumPy scalars follows NumPy promotion rules.
+
+What dtype does `np.array([1, 2, 3.0])` have?
+
+- A) `int64` — the majority of values are integers
+- B) `object` — mixed types cannot be represented in a single dtype
+- C) `float64` — the Python float `3.0` promotes the whole array to float64
+- D) `float32` — NumPy defaults to the smallest float dtype
+
+**Answer: C**
+
+- A) Incorrect — `np.array()` does not use majority-voting for dtype selection. A single float literal forces promotion to a float type to avoid discarding the fractional capability, even if that particular value has no fractional part.
+- B) Incorrect — `object` dtype is used when values cannot be cast to a common numeric type (e.g., mixing strings with numbers). Integers and floats are fully compatible numeric types and promote to float64.
+- C) Correct — Python's `3.0` is a float64 scalar. `np.array()` promotes all elements to the minimum common dtype, which is float64. The integers `1` and `2` are losslessly converted to float64.
+- D) Incorrect — NumPy does not default to float32 for Python floats; Python floats are 64-bit (`float64`). float32 would only appear if the elements were explicitly `np.float32` scalars or the `dtype=` argument specified it.
+
+---
+
+## Q28 — uint16 Overflow Wrapping
+
+> **Week reference:** Week 2
+
+**Mental Model:** uint16 max is 65535 = 2^16 − 1. Adding 1 to 65535 in uint16 wraps to 0 (modulo 2^16 arithmetic). This is the unsigned equivalent of the int16 signed overflow trap. Confusion arises because 65535 is often mistaken for int16's max (which is only 32767).
+
+What is the result of `np.uint16(65535) + np.uint16(1)`?
+
+- A) 65536
+- B) 32767
+- C) -1
+- D) 0
+
+**Answer: D**
+
+- A) Incorrect — 65536 exceeds the uint16 range of 0 to 65535. Arithmetic wraps modulo 2^16: 65535 + 1 = 65536 mod 65536 = 0.
+- B) Incorrect — 32767 is the maximum value of the signed `int16` type, not uint16. The uint16 max is 65535 (all 16 bits set).
+- C) Incorrect — negative values are impossible in uint16 (unsigned). The bit pattern that int16 would interpret as −1 (`0xFFFF`) is interpreted as 65535 in uint16. Overflow wraps to 0, not −1.
+- D) Correct — uint16 arithmetic is modulo 2^16 = 65536. `65535 + 1 = 65536`, and `65536 mod 65536 = 0`. This is the unsigned equivalent of int16's boundary wrap from 32767 to −32768.
+
+---
+
+## Q29 — np.iinfo() for Safe Downcast Decisions
+
+> **Week reference:** Week 2
+
+**Mental Model:** `np.iinfo(dtype)` returns an object with `.min` and `.max` attributes giving the exact integer bounds for that dtype. This is the canonical way to check downcast safety programmatically, rather than hard-coding magic numbers like 127 or 32767. Exam questions often ask which attributes to use or what values they return.
+
+What does `np.iinfo(np.int16).max` return?
+
+- A) 255
+- B) 32767
+- C) 65535
+- D) 2147483647
+
+**Answer: B**
+
+- A) Incorrect — 255 is the maximum of `uint8` (unsigned 8-bit), not int16. `np.iinfo(np.uint8).max == 255`.
+- B) Correct — int16 is a signed 16-bit integer: range = −2^15 to 2^15 − 1 = −32768 to 32767. `np.iinfo(np.int16).max` returns 32767. This is the value to check when deciding if a column's max fits in int16.
+- C) Incorrect — 65535 = 2^16 − 1 is the maximum of `uint16` (unsigned 16-bit). `np.iinfo(np.uint16).max == 65535`. Confusing int16 max (32767) with uint16 max (65535) is the most common int16 exam trap.
+- D) Incorrect — 2,147,483,647 = 2^31 − 1 is the maximum of `int32`. `np.iinfo(np.int32).max == 2147483647`. int16 is only 16 bits wide, giving a much smaller range.
+
+---
+
+## Q30 — inf Arithmetic and NaN-Producing Operations
+
+> **Week reference:** Week 2
+
+**Mental Model:** IEEE 754 defines several operations that produce NaN from inf: `inf - inf`, `inf * 0`, `inf / inf`, and `0 / 0`. Operations like `inf + finite`, `inf * positive`, `1 / 0` all produce inf, not NaN. This is a common exam trap: students assume any inf-involving arithmetic produces NaN.
+
+Which of the following IEEE 754 floating-point operations produces `nan` (not `inf`)?
+
+- A) `np.float64(1.0) / np.float64(0.0)`
+- B) `np.float64('inf') + np.float64(1e300)`
+- C) `np.float64('inf') - np.float64('inf')`
+- D) `np.float64('inf') * np.float64(2.0)`
+
+**Answer: C**
+
+- A) Incorrect — dividing a non-zero finite value by zero produces `inf` (positive infinity), not NaN. IEEE 754 defines `1.0 / 0.0 = +inf`. NaN arises from indeterminate forms like `0.0 / 0.0`.
+- B) Incorrect — adding a finite value (even a very large one like 1e300) to infinity still gives infinity: `inf + finite = inf`. The result does not become NaN because the operation is not indeterminate.
+- C) Correct — `inf - inf` is an indeterminate form (like ∞ − ∞ in mathematics), so IEEE 754 defines it as NaN. This is one of the standard NaN-producing operations alongside `0/0`, `0*inf`, and `inf/inf`.
+- D) Incorrect — multiplying infinity by a positive finite value produces infinity: `inf * 2.0 = inf`. NaN only arises when multiplying `inf * 0` (indeterminate form `0 × ∞`), not `inf * positive_nonzero`.
 
 ---

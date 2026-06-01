@@ -28,6 +28,17 @@
 - [Q21 — Pool Worker Count and HPC Job Allocation](#q21-pool-worker-count-and-hpc-job-allocation)
 - [Q22 — Choosing Between Static and Dynamic Based on Coefficient of Variation](#q22-choosing-between-static-and-dynamic-based-on-coefficient-of-variation)
 - [Q23 — Recognising When Multiprocessing Overhead Outweighs Benefit](#q23-recognising-when-multiprocessing-overhead-outweighs-benefit)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q24 — `pool.starmap` for Multi-Argument Functions](#q24--poolstarmap-for-multi-argument-functions)
+- [Q25 — Lambda Functions and the Spawn Start Method](#q25--lambda-functions-and-the-spawn-start-method)
+- [Q26 — `fork` vs `spawn`: Copy-on-Write and Deadlock Risk](#q26--fork-vs-spawn-copy-on-write-and-deadlock-risk)
+- [Q27 — `pool.imap` Is a Lazy Iterator](#q27--poolimap-is-a-lazy-iterator)
+- [Q28 — One Process per Sample: The `pi_parallel.py` Anti-Pattern](#q28--one-process-per-sample-the-pi_parallelpy-anti-pattern)
+- [Q29 — Choosing Number of Workers: n_cores vs n_cores-1](#q29--choosing-number-of-workers-n_cores-vs-n_cores-1)
+- [Q30 — `ProcessPoolExecutor` vs `multiprocessing.Pool`](#q30--processpoolexecutor-vs-multiprocessingpool)
+- [Q31 — Parallel Reduction Requires an Associative Operator](#q31--parallel-reduction-requires-an-associative-operator)
+- [Q32 — `pool.apply_async` and Collecting Results](#q32--poolapply_async-and-collecting-results)
+- [Q33 — `multiprocessing.RawArray` for Shared Zero-Copy Data](#q33--multiprocessingrawarray-for-shared-zero-copy-data)
 
 ---
 
@@ -538,5 +549,240 @@ IPC overhead per task (argument pickling + queue write + queue read + result pic
 - B) Correct — IPC overhead per task dominates 50 µs task time; batching reduces IPC round-trips from 10,000 to ~10.
 - C) Incorrect — creating 10,000 processes would be catastrophically slow due to spawn overhead; fewer workers (8) is correct, but granularity is the problem.
 - D) Incorrect — `pool.map` tasks do overlap (workers run concurrently); the bottleneck is per-task IPC cost, not synchronisation order.
+
+---
+
+## Set 3 — Extended Practice
+
+- [Q24 — `pool.starmap` for Multi-Argument Functions](#q24--poolstarmap-for-multi-argument-functions)
+- [Q25 — Lambda Functions and the Spawn Start Method](#q25--lambda-functions-and-the-spawn-start-method)
+- [Q26 — `fork` vs `spawn`: Copy-on-Write and Deadlock Risk](#q26--fork-vs-spawn-copy-on-write-and-deadlock-risk)
+- [Q27 — `pool.imap` Is a Lazy Iterator](#q27--poolimap-is-a-lazy-iterator)
+- [Q28 — One Process per Sample: The `pi_parallel.py` Anti-Pattern](#q28--one-process-per-sample-the-pi_parallelpy-anti-pattern)
+- [Q29 — Choosing Number of Workers: n_cores vs n_cores-1](#q29--choosing-number-of-workers-n_cores-vs-n_cores-1)
+- [Q30 — `ProcessPoolExecutor` vs `multiprocessing.Pool`](#q30--processpoolexecutor-vs-multiprocessingpool)
+- [Q31 — Parallel Reduction Requires an Associative Operator](#q31--parallel-reduction-requires-an-associative-operator)
+- [Q32 — `pool.apply_async` and Collecting Results](#q32--poolapply_async-and-collecting-results)
+- [Q33 — `multiprocessing.RawArray` for Shared Zero-Copy Data](#q33--multiprocessingrawarray-for-shared-zero-copy-data)
+
+---
+
+## Q24 — `pool.starmap` for Multi-Argument Functions
+
+> **Week reference:** Week 5
+
+**Mental Model:** `pool.map` calls `func(item)` — one argument per task. When your function takes multiple arguments, `pool.starmap` unpacks each tuple element as a separate positional argument. The lambda workaround (`pool.map(lambda args: func(*args), ...)`) fails on macOS/Windows because lambdas cannot be pickled by the `spawn` start method.
+
+You have a function `score(x, weight)` that takes two arguments. You want to call it for 1,000 `(x, weight)` pairs in parallel. Which approach works correctly on all platforms, including macOS (where the default start method is `spawn`)?
+
+- A) `pool.map(lambda pair: score(*pair), pairs)` — packing into a lambda avoids the two-argument limitation
+- B) `pool.starmap(score, pairs)` — unpacks each tuple as positional arguments without requiring a lambda
+- C) `pool.map(score, pairs)` — `map` automatically unpacks tuples when the function signature has two parameters
+- D) `pool.map(functools.partial(score, weight=1.0), xs)` is the only safe option because `starmap` is not available in `concurrent.futures`
+
+**Answer: B**
+
+- A) Incorrect — lambdas are anonymous functions defined at runtime and cannot be pickled by Python's `pickle` module. On macOS/Windows, the `spawn` start method pickles the task function to send it to child processes; a lambda causes `AttributeError: Can't pickle local object`. This approach works only with `fork` (Linux default).
+- B) Correct — `pool.starmap(func, iterable_of_tuples)` unpacks each tuple as positional arguments. `score` is a named module-level function and pickles cleanly on all start methods. This is the canonical multi-argument pool pattern.
+- C) Incorrect — `pool.map` passes each element of the iterable as a single positional argument. A tuple `(x, w)` would be passed as one argument, causing a `TypeError: score() takes 2 positional arguments but 1 was given`.
+- D) Incorrect — `functools.partial` works but only when one argument is constant. `starmap` is available in `multiprocessing.Pool` (and `concurrent.futures` has its own equivalent via `executor.map` with multiple iterables). `starmap` is the cleaner, idiomatic choice when both arguments vary.
+
+---
+
+## Q25 — Lambda Functions and the Spawn Start Method
+
+> **Week reference:** Week 5
+
+**Mental Model:** On macOS and Windows, multiprocessing uses `spawn` as the default start method. Spawned worker processes import the module fresh and receive tasks by unpickling them from a queue. Python's `pickle` can only serialise named, importable objects — anonymous objects like lambdas, closures over local variables, and nested functions are not importable and raise `AttributeError` when pickled.
+
+On macOS, you run `Pool(4).map(lambda x: x**2, range(10))`. What happens?
+
+- A) It runs correctly — `spawn` can pickle lambdas because they are simple expressions
+- B) It raises `AttributeError: Can't pickle local object '<lambda>'` because `spawn` must pickle the function to send it to workers, and lambdas are not picklable
+- C) It runs correctly on macOS because `spawn` does not pickle the function — it shares it via a module reference
+- D) It raises a `RuntimeError` about the missing `if __name__ == '__main__':` guard, not a pickling error
+
+**Answer: B**
+
+- A) Incorrect — lambdas are not importable by name; they live only in the parent's memory. The `spawn` method cannot reconstruct them in a child process from a pickle stream.
+- B) Correct — `spawn` sends tasks by pickling them through a queue. `pickle.dumps(lambda x: x**2)` raises `AttributeError: Can't pickle local object`. The fix is to replace the lambda with a named module-level function or use `functools.partial`.
+- C) Incorrect — `spawn` does not share memory or function references. Each child imports the module independently and receives the task function as a pickled byte stream. Module-level named functions are reconstructed by name; lambdas are not.
+- D) Incorrect — the missing `__main__` guard causes recursive spawning when the pool creation code is at module level, but here the pool is created inline. The immediate failure is the unpicklable lambda.
+
+---
+
+## Q26 — `fork` vs `spawn`: Copy-on-Write and Deadlock Risk
+
+> **Week reference:** Week 5
+
+**Mental Model:** `fork` creates an exact copy of the parent process instantly using copy-on-write (CoW) — child sees parent's full memory, no re-import. This is fast but dangerous: any lock held by the parent at fork time is permanently locked in the child with no thread to release it, causing a deadlock. `spawn` creates a clean process from scratch — slower but safe. Linux defaults to `fork`; macOS/Windows default to `spawn`.
+
+A developer sets `multiprocessing.set_start_method('fork')` on macOS to avoid the lambda pickling issue. What new risk do they introduce?
+
+- A) `fork` is unavailable on macOS; the call raises `ValueError: 'fork' is not a safe start method`
+- B) Forking on macOS can cause deadlocks if the parent holds any Objective-C or C-extension locks (e.g., from importing `logging`, `ssl`, or GUI frameworks) at the time of the fork, because the child inherits a locked state with no thread to unlock it
+- C) `fork` works correctly on macOS but is slower than `spawn` because it copies the entire parent memory immediately
+- D) `fork` on macOS is only unsafe with NumPy; all pure Python code forks safely
+
+**Answer: B**
+
+- A) Incorrect — `fork` is available on macOS (it is a POSIX system) and can be set explicitly. Python 3.12+ emits a deprecation warning when using `fork` on macOS without explicit opt-in, but it does not raise `ValueError`.
+- B) Correct — `fork` duplicates the entire parent process including any held locks. If the `logging` module's internal lock is held during a log write in another thread when `fork` is called, the child inherits the locked lock with no thread to release it. The first time the child tries to log, it deadlocks. This is a real production issue on macOS.
+- C) Incorrect — `fork` with copy-on-write is actually faster than `spawn` for startup (no re-import of modules), not slower. The `spawn` overhead includes re-importing all modules in each child.
+- D) Incorrect — the deadlock risk is not NumPy-specific. Any C extension or standard library module that uses OS-level mutexes (logging, ssl, sqlite3, etc.) can trigger this. Pure Python `threading.Lock` objects are also affected.
+
+---
+
+## Q27 — `pool.imap` Is a Lazy Iterator
+
+> **Week reference:** Week 6
+
+**Mental Model:** `pool.map` collects all results into a list before returning — it blocks until every task finishes and holds all results in memory simultaneously. `pool.imap` returns a lazy iterator: results are yielded one by one as each worker finishes (in submission order). This allows processing results as they arrive without loading everything into memory at once — critical for very large result sets.
+
+You call `results = pool.imap(process, data)` and then immediately print `results`. What do you see, and what do you need to do to access the computed values?
+
+- A) A list of all computed results — `imap` works like `map` but with automatic dynamic scheduling
+- B) An `IMapIterator` object; you must iterate over `results` (e.g., `for r in results:` or `list(results)`) to trigger computation and receive values
+- C) `None` — `imap` is non-blocking and discards results unless you call `pool.join()` first
+- D) An `AsyncResult` object; you call `results.get()` to retrieve all values at once
+
+**Answer: B**
+
+- A) Incorrect — `pool.imap` does not return a list. It returns a lazy iterator. Printing it shows `<multiprocessing.pool.IMapIterator object at 0x...>`, not the computed values. Dynamic scheduling is a separate concept controlled by `chunksize`.
+- B) Correct — `pool.imap` returns an `IMapIterator`. Results are retrieved by iterating: `for r in results` yields each result in input order as it becomes available. This enables streaming processing and avoids materialising all results in memory at once.
+- C) Incorrect — `imap` does submit tasks immediately; calling `pool.join()` without first consuming the iterator would still not give you the values. `join()` is for waiting on workers after `pool.close()`, not for retrieving results.
+- D) Incorrect — `AsyncResult` (with `.get()`) is returned by `pool.apply_async` for single tasks. `imap` returns an `IMapIterator` for a sequence of tasks. They are different pool methods with different return types.
+
+---
+
+## Q28 — One Process per Sample: The `pi_parallel.py` Anti-Pattern
+
+> **Week reference:** Week 5
+
+**Mental Model:** Parallelism overhead has a fixed cost per task (pickling, IPC, process lookup). If each task is a single trivial operation (like sampling one random point), the overhead completely dominates. The course `pi_parallel.py` uses `pool.apply_async(sample)` for every one of 1,000,000 samples — this is the canonical example of why per-task granularity must be coarser than the IPC overhead. The correct fix is `pi_chunked.py`: send one chunk of N samples per process.
+
+You run Monte Carlo pi estimation with 1,000,000 samples. Version A submits one `sample()` call per process task (1,000,000 tasks). Version B divides into 10 chunks of 100,000 samples each. Which statement is true?
+
+- A) Version A is faster because 1,000,000 tasks can all run in parallel simultaneously
+- B) Version B is faster because each task carries enough work to amortise the IPC overhead; Version A's overhead per sample far exceeds the computation time of one sample
+- C) Both versions have the same performance since the total computation is identical
+- D) Version A is faster because `apply_async` avoids the pickling overhead that `pool.map` incurs
+
+**Answer: B**
+
+- A) Incorrect — `Pool(n_workers)` creates at most `n_workers` parallel workers (e.g., 10), not 1,000,000. The remaining tasks queue up and each incurs IPC overhead. With 1,000,000 tasks, total IPC overhead dominates.
+- B) Correct — each `sample()` call is pure Python taking ~1 µs. IPC round-trip cost is ~10-100 µs per task. Version A pays ~100 µs overhead for ~1 µs of work (100× overhead). Version B pays ~100 µs overhead for ~100,000 µs of work (0.1% overhead). The course quiz confirms chunked parallel is the fastest implementation.
+- C) Incorrect — total computation is the same but IPC overhead is not. Version A has 1,000,000 × IPC cost; Version B has 10 × IPC cost. This difference is orders of magnitude.
+- D) Incorrect — `apply_async` still pickles the function and its arguments for each call; the pickling overhead is not avoided. `pool.map` is not uniquely slower than `apply_async` for the same task granularity.
+
+---
+
+## Q29 — Choosing Number of Workers: n_cores vs n_cores-1
+
+> **Week reference:** Week 5
+
+**Mental Model:** On a shared machine, using all available cores for worker processes leaves no core for the operating system, the main Python process, I/O interrupts, and other overhead. A common guideline is `n_cores - 1` workers to keep the system responsive. On HPC nodes you should match the `#BSUB -n` allocation exactly. For I/O-bound workloads, you may benefit from more workers than cores (the GIL is not the limit; disk/network latency is).
+
+You have a CPU-bound multiprocessing workload on a dedicated 8-core machine (no other users). Which worker count is most appropriate?
+
+- A) `Pool(8)` — use all 8 cores; the main Python process is not CPU-bound during `pool.map` and barely uses a core
+- B) `Pool(16)` — more workers always give better throughput due to overlapping I/O
+- C) `Pool(4)` — using only half the cores avoids cache contention between workers
+- D) `Pool(os.cpu_count() * 2)` — hyperthreading doubles the effective core count for CPU-bound code
+
+**Answer: A**
+
+- A) Correct — for CPU-bound work on a dedicated machine, `Pool(n_cores)` is the standard choice. The main process blocks in `pool.map` waiting for results and is nearly idle; workers use the 8 physical cores. Using `n_cores - 1` is more conservative (leaves one core for OS/IO) and acceptable, but on a dedicated node `Pool(8)` is commonly used and correct.
+- B) Incorrect — for CPU-bound work, more workers than cores causes thrashing: context-switching overhead with no throughput benefit. Extra workers help only for I/O-bound workloads where workers spend time waiting.
+- C) Incorrect — using half the cores wastes 4 cores that could be doing useful work. Cache contention between workers sharing an L3 cache is a real effect but is addressed with NUMA-aware tools (numactl), not by halving core usage.
+- D) Incorrect — hyperthreading (SMT) provides 2 logical CPUs per physical core, but both logical CPUs share the same execution units, cache, and memory bandwidth. CPU-bound workloads do not benefit from hyperthreading — running 2 CPU-bound threads on one physical core gives roughly 1× throughput, not 2×.
+
+---
+
+## Q30 — `ProcessPoolExecutor` vs `multiprocessing.Pool`
+
+> **Week reference:** Week 5
+
+**Mental Model:** `concurrent.futures.ProcessPoolExecutor` and `multiprocessing.Pool` both create pools of worker processes, but `ProcessPoolExecutor` uses the modern `Future`-based API with `executor.submit()` / `executor.map()`. Key differences: `ProcessPoolExecutor` has no `starmap`, no `apply_async`, and no `imap`/`imap_unordered`. It uses `spawn` by default on all platforms. For most exam scenarios they are equivalent; the exam tests whether you know `starmap` is Pool-only.
+
+Which of the following is a capability of `multiprocessing.Pool` that `concurrent.futures.ProcessPoolExecutor` does NOT provide?
+
+- A) Running tasks across multiple worker processes
+- B) `starmap` for multi-argument functions, `imap` / `imap_unordered` for lazy iteration, and `apply_async` for submitting individual tasks
+- C) Using the `with` statement as a context manager
+- D) Distributing work across all available CPU cores
+
+**Answer: B**
+
+- A) Incorrect — both `Pool` and `ProcessPoolExecutor` distribute tasks across multiple worker processes. This is the core capability they share.
+- B) Correct — `multiprocessing.Pool` provides `starmap` (multi-argument), `imap` (lazy ordered iterator), `imap_unordered` (lazy unordered iterator), and `apply_async` (single-task with callback). `ProcessPoolExecutor` has only `submit` (returns a `Future`) and `map` (eager, ordered). It lacks `starmap`, `imap_unordered`, and `apply_async` equivalents.
+- C) Incorrect — both support `with` as context managers (`with Pool(4) as pool:` and `with ProcessPoolExecutor(4) as ex:`). This is not a differentiating feature.
+- D) Incorrect — both distribute work across all available cores. Neither is limited in terms of which cores it can use.
+
+---
+
+## Q31 — Parallel Reduction Requires an Associative Operator
+
+> **Week reference:** Week 6
+
+**Mental Model:** A parallel reduction tree splits a list in half repeatedly, combining pairs in parallel. This only produces the correct result if the combining operator is associative: `f(f(a,b), c) == f(a, f(b,c))`. Non-associative operators (like `abs(x+y)`) give different results depending on the order of combination — breaking the reduction tree. The exam directly tests this: `abssum(x, y) = abs(x+y)` is NOT associative.
+
+The course exam presents the function `abssum(x, y) = abs(x + y)`. Why can this NOT be used as the combining operator in a parallel reduction tree?
+
+- A) It cannot be pickled and sent to worker processes
+- B) It is not associative: `abs(abs(a+b)+c) ≠ abs(a+abs(b+c))` in general, so different tree orderings produce different results
+- C) It returns a scalar, but the reduction tree requires the operator to return a list
+- D) It is too slow for parallel execution; the overhead of calling `abs` dominates
+
+**Answer: B**
+
+- A) Incorrect — `abssum` is a named module-level function and pickles fine. The problem is mathematical, not technical.
+- B) Correct — parallel reduction trees apply the operator in arbitrary groupings determined by the tree structure. For `abssum`: `abs(abs(-3+2)+5) = abs(1+5) = 6`, but `abs(-3+abs(2+5)) = abs(-3+7) = 4`. Because grouping changes the result, the tree reduction is incorrect. A valid combining operator must be associative (and typically commutative) — addition, multiplication, max, min all qualify.
+- C) Incorrect — the reduction tree works perfectly with scalar-returning operators (in fact, that is the most common case). The issue is associativity, not the return type.
+- D) Incorrect — computational cost has no bearing on whether a reduction tree produces the correct result. Even an instantaneous non-associative operator would give wrong answers.
+
+---
+
+## Q32 — `pool.apply_async` and Collecting Results
+
+> **Week reference:** Week 5
+
+**Mental Model:** `pool.apply_async(func, args)` submits a single task and immediately returns an `AsyncResult` object — it does not block. The result is retrieved later with `.get()`, which blocks until the task finishes. The course `pi_parallel.py` uses this pattern: submit all samples as async tasks, then collect results with `sum(r.get() for r in results_async)`. This is fine functionally but has poor granularity (one task per sample).
+
+Consider the code: `result = pool.apply_async(compute, (x,))`. What does `result` contain immediately after this line executes?
+
+- A) The return value of `compute(x)` — `apply_async` waits for the task to finish before returning
+- B) An `AsyncResult` object; calling `result.get()` blocks until `compute(x)` finishes and then returns the value
+- C) A `Future` object; calling `result.result()` retrieves the value (same as `concurrent.futures`)
+- D) `None` — results from async tasks must be retrieved with `pool.join()`, not `.get()`
+
+**Answer: B**
+
+- A) Incorrect — `apply_async` is explicitly non-blocking ("async"). It returns immediately with an `AsyncResult` handle, not the computed value. Use `pool.apply` (blocking) if you need the result immediately.
+- B) Correct — `apply_async` returns an `AsyncResult`. Calling `.get()` blocks until the worker finishes and returns the result. Calling `.get(timeout=5)` raises `multiprocessing.TimeoutError` if the task takes longer than 5 seconds.
+- C) Incorrect — `AsyncResult` is not the same as `concurrent.futures.Future`. The method to retrieve the value is `.get()`, not `.result()`. Mixing up these APIs is a common exam trap.
+- D) Incorrect — `pool.join()` waits for all workers to finish after `pool.close()` has been called; it does not return task results. Results are always retrieved via the `AsyncResult` objects returned by each `apply_async` call.
+
+---
+
+## Q33 — `multiprocessing.RawArray` for Shared Zero-Copy Data
+
+> **Week reference:** Week 6
+
+**Mental Model:** `multiprocessing.RawArray` allocates memory in a shared memory segment visible to all processes in the pool without copying. Workers access it via `numpy.frombuffer`. This is the course's reduction pattern: a large array is placed in shared memory once at startup (via a pool initializer), and all workers read/write it without any IPC pickling. Contrast with standard `Pool`: every argument is pickled and sent through a pipe.
+
+You have a 2 GB NumPy array that all 8 pool workers need read-write access to. Which approach correctly shares it without copying?
+
+- A) Pass the array as an argument to `pool.map` — NumPy arrays are automatically shared via copy-on-write in all Python versions
+- B) Create a `multiprocessing.RawArray`, copy the data into it once, then pass it to workers via a pool initializer; workers access it as a NumPy view via `numpy.frombuffer`
+- C) Use `pickle.dumps` to serialise the array and write it to a shared file; workers read the file independently
+- D) Use `ThreadPoolExecutor` — threads always share memory, so no special setup is needed regardless of array size
+
+**Answer: B**
+
+- A) Incorrect — passing a NumPy array to `pool.map` pickles it for every task. A 2 GB array pickled once per task with 8 workers = 16 GB of data transferred through pipes. Copy-on-write applies to `fork`-created child processes for data already in the parent's memory, but arguments passed via `pool.map` are always pickled through the IPC queue regardless of start method.
+- B) Correct — `RawArray` creates a POSIX shared memory segment. Copying into it once at startup (before creating the pool, or via an initializer) means all 8 workers access the same physical memory pages. `numpy.frombuffer(raw_arr, dtype='float32')` creates a NumPy array view over the shared memory with zero copies. This is the exact pattern used in `reduction1.py` and `reduction_full.py` from the course.
+- C) Incorrect — writing to a shared file is slow (disk I/O), not truly concurrent (file locks needed), and requires pickling/unpickling. This is far worse than `RawArray`.
+- D) Incorrect — while `ThreadPoolExecutor` threads do share memory and would work without copying, threads hold the GIL for pure Python code. If the workers perform CPU-bound pure Python or Numba operations, using threads requires `nogil=True`. For general CPU-bound work with large shared arrays, the correct tool is shared memory with a process pool, not blindly switching to threads.
 
 ---

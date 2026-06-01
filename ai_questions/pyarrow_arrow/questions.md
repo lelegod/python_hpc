@@ -26,6 +26,16 @@
 - [Q20 — Parquet vs CSV File Size](#q20--parquet-vs-csv-file-size)
 - [Q21 — Arrow and Cache Efficiency](#q21--arrow-and-cache-efficiency)
 - [Q22 — When Arrow Conversion Cost is Worth It](#q22--when-arrow-conversion-cost-is-worth-it)
+- [Q23 — Arrow Table Immutability](#q23--arrow-table-immutability)
+- [Q24 — Feather vs Parquet: Use-Case Choice](#q24--feather-vs-parquet-use-case-choice)
+- [Q25 — Parquet Compression Codec Trade-offs](#q25--parquet-compression-codec-trade-offs)
+- [Q26 — pa.RecordBatch vs pa.Table](#q26--parecordbatch-vs-patable)
+- [Q27 — pa.array() Construction and Type Inference](#q27--paarray-construction-and-type-inference)
+- [Q28 — Explicit Schema Construction](#q28--explicit-schema-construction)
+- [Q29 — Arrow Table Shape Inspection](#q29--arrow-table-shape-inspection)
+- [Q30 — pyarrow.feather API](#q30--pyarrowfeather-api)
+- [Q31 — Parquet Predicate Pushdown vs Arrow Compute Filter](#q31--parquet-predicate-pushdown-vs-arrow-compute-filter)
+- [Q32 — Arrow Null Representation](#q32--arrow-null-representation)
 
 ---
 
@@ -521,5 +531,229 @@ You need to load a large CSV file and immediately compute the sum of one column 
 - B) Incorrect — Option B is faster than A, but it still pays the `.to_pandas()` conversion cost (~700 ms). When only a single aggregation is needed, there is no reason to convert to Pandas at all.
 - C) Correct — `pyarrow.compute.sum(table['value'])` computes directly on the Arrow buffer without allocating any Pandas objects. This is the fastest and most memory-efficient path for a simple aggregation.
 - D) Incorrect — C avoids the `.to_pandas()` conversion cost entirely, so it is measurably faster than B for a single aggregation.
+
+---
+
+## Set 3 — Extended Practice
+
+---
+
+## Q23 — Arrow Table Immutability
+
+> **Week reference:** Week 7
+
+**Mental Model:** A `pyarrow.Table` is immutable — you cannot modify its columns or values in place. Operations that appear to "add" or "modify" a column always return a brand-new `Table` object; the original is unchanged.
+
+You have `table = pyarrow.csv.read_csv('data.csv')` and want to add a computed column. Which statement is correct?
+
+- A) `table['new_col'] = some_array` adds the column in-place, mutating the existing table.
+- B) You must use `table.append_column('new_col', some_array)`, which returns a new `Table` with the column added; the original `table` is unchanged.
+- C) Arrow tables support in-place column assignment via `table.set_column(idx, 'new_col', data)`, which modifies the table directly.
+- D) You must convert to a Pandas DataFrame, add the column there, and convert back with `pa.Table.from_pandas()`.
+
+**Answer: B**
+
+- A) Incorrect — `pyarrow.Table` does not support item assignment (`table['col'] = ...`). Attempting this raises `TypeError` because Arrow tables are immutable.
+- B) Correct — `table.append_column('new_col', some_array)` is the correct API. It returns a new `Table` that contains all the original columns plus the new one; the original `table` object is unmodified.
+- C) Incorrect — `table.set_column()` exists and does return a new `Table`, but it does not modify the table in-place. The phrasing "modifies the table directly" is wrong — it still returns a new object.
+- D) Incorrect — While converting via Pandas is possible, it is the least efficient option and is not required. `append_column()` handles this entirely within Arrow without a round-trip to Pandas.
+
+---
+
+## Q24 — Feather vs Parquet: Use-Case Choice
+
+> **Week reference:** Week 7
+
+**Mental Model:** Feather (Arrow IPC on disk) is optimised for fast round-trip read/write with zero serialisation overhead — ideal for inter-process data exchange and short-lived checkpoints. Parquet is optimised for long-term compressed storage and is the standard for data warehouse workflows.
+
+Which scenario is best served by the Feather format rather than Parquet?
+
+- A) Archiving 5 years of sensor data that must be stored as compactly as possible on an HPC scratch filesystem.
+- B) Sharing a processed intermediate table between two Python processes in a pipeline where read/write speed is critical and file size is a secondary concern.
+- C) Providing a dataset to external collaborators who use Apache Spark or Hive.
+- D) Storing a dataset that will be queried with SQL predicates by tools like DuckDB or Trino.
+
+**Answer: B**
+
+- A) Incorrect — Long-term archival where size matters calls for Parquet with compression (Snappy or Gzip), not Feather which applies minimal compression.
+- B) Correct — Feather's design goal is fast in-process and inter-process data exchange. Because the on-disk format mirrors Arrow's in-memory layout, reading a Feather file requires almost no deserialisation. For a pipeline checkpoint where speed dominates and the file is temporary, Feather is the right choice.
+- C) Incorrect — Spark and Hive natively read Parquet; Feather is not a standard format in the Hadoop ecosystem.
+- D) Incorrect — SQL engines like DuckDB leverage Parquet's row group statistics for predicate pushdown; this is a core Parquet feature not available in Feather.
+
+---
+
+## Q25 — Parquet Compression Codec Trade-offs
+
+> **Week reference:** Week 7
+
+**Mental Model:** Parquet supports multiple compression codecs. Snappy (the default) prioritises speed over ratio. Gzip/Zstandard achieve better compression ratios at the cost of higher CPU usage during write. LZ4 is the fastest codec with a modest compression ratio. The choice affects write time, read time, and file size.
+
+Which statement about Parquet compression codecs is most accurate?
+
+- A) Gzip always produces smaller files than Snappy, and reads back faster because less data must be read from disk.
+- B) Snappy is the default because it provides the best compression ratio among all available codecs.
+- C) Snappy prioritises fast compression and decompression speed over compression ratio; Gzip/Zstandard achieve higher ratios but require more CPU during write.
+- D) LZ4 and Snappy produce identical file sizes; the difference is only in CPU usage during decompression.
+
+**Answer: C**
+
+- A) Incorrect — Gzip files are smaller, but reading them is not necessarily faster overall: although less data is read from disk, the higher CPU cost of decompression can make the wall-clock read time similar to or slower than Snappy for CPU-bound workloads.
+- B) Incorrect — Snappy is the default precisely because it is fast, not because it has the best compression ratio. Gzip and Zstandard typically achieve better ratios.
+- C) Correct — Snappy was designed by Google for speed; its compression ratio (~2:1) is modest. Gzip and Zstandard offer ratios of 3:1 or better for typical tabular data but require significantly more CPU time to compress. The choice is a trade-off between file size and write/read CPU cost.
+- D) Incorrect — LZ4 and Snappy produce different file sizes; both favour speed over ratio, but their compression algorithms differ and produce different byte-level output.
+
+---
+
+## Q26 — pa.RecordBatch vs pa.Table
+
+> **Week reference:** Week 7
+
+**Mental Model:** A `pa.RecordBatch` is a single contiguous block of rows with a schema, limited to a single chunk per column. A `pa.Table` is a higher-level structure that can contain multiple `RecordBatch` chunks per column (as `ChunkedArray`). Tables are what you get back from `read_csv()` and `read_table()`; RecordBatches are the unit used in streaming/IPC protocols.
+
+Which of the following best distinguishes `pa.RecordBatch` from `pa.Table`?
+
+- A) A `RecordBatch` can hold multiple chunks per column; a `Table` always holds exactly one chunk per column.
+- B) A `RecordBatch` is a single contiguous block of rows (one chunk per column); a `Table` is a logical grouping of one or more `RecordBatch` objects, potentially with multiple chunks per column.
+- C) A `RecordBatch` stores data on disk; a `Table` stores data in memory.
+- D) A `RecordBatch` and a `Table` are interchangeable — they have the same memory layout and the same methods.
+
+**Answer: B**
+
+- A) Incorrect — This reverses the truth. A `RecordBatch` has exactly one chunk per column; a `Table` (via `ChunkedArray`) can have multiple.
+- B) Correct — `RecordBatch` is Arrow's fundamental unit of columnar data — a contiguous in-memory block of rows. `Table` wraps one or more `RecordBatch` objects per column as `ChunkedArray`, making it suitable for datasets larger than a single contiguous allocation.
+- C) Incorrect — Both `RecordBatch` and `Table` are in-memory structures. Neither is inherently on-disk; they can be serialised to Feather/IPC files, but that is not what they are.
+- D) Incorrect — They are distinct types with different APIs. A `Table` has `table.column()`, `table.append_column()`, etc. A `RecordBatch` has `batch.column()` but not the chunked-aware methods. You can convert between them with `pa.Table.from_batches([batch])` or `table.to_batches()`.
+
+---
+
+## Q27 — pa.array() Construction and Type Inference
+
+> **Week reference:** Week 7
+
+**Mental Model:** `pa.array([...])` constructs an Arrow array from a Python list. Arrow infers the type from the values: a list of Python `int` becomes `int64`, a list of Python `float` becomes `float64`, a list of Python `str` becomes `string`. You can override with the `type=` argument.
+
+What Arrow type does `pa.array([1, 2, 3])` produce by default?
+
+- A) `pa.int32()` — Arrow defaults to 32-bit integers to save memory.
+- B) `pa.int64()` — Arrow infers the type from Python `int` objects, which map to 64-bit integers.
+- C) `pa.float64()` — Arrow assumes all numeric literals could be fractional.
+- D) `pa.uint64()` — Arrow uses unsigned integers for non-negative values.
+
+**Answer: B**
+
+- A) Incorrect — Arrow infers from the Python type, not from the value range. Python `int` maps to `int64`, not `int32`.
+- B) Correct — Python's `int` type is mapped to Arrow's `int64` by default in `pa.array()`. To get `int32` you must explicitly pass `type=pa.int32()`.
+- C) Incorrect — A list of Python `int` values infers to `int64`, not `float64`. A list of Python `float` values would infer to `float64`.
+- D) Incorrect — Arrow does not automatically choose unsigned types based on value sign; it maps Python `int` to signed `int64` regardless of whether values are positive.
+
+---
+
+## Q28 — Explicit Schema Construction
+
+> **Week reference:** Week 7
+
+**Mental Model:** You can define a `pyarrow.Schema` explicitly before loading data, then pass it to control column types precisely. This is more reliable than post-hoc casting when you know the expected types in advance, and it avoids the cost of inferring and then re-casting types.
+
+Which of the following correctly constructs an explicit Arrow schema with a `station_id` integer column and a `value` float32 column?
+
+- A) `pa.schema({'station_id': pa.int32(), 'value': pa.float32()})`
+- B) `pa.schema([pa.field('station_id', pa.int32()), pa.field('value', pa.float32())])`
+- C) `pa.Schema(columns=['station_id', 'value'], dtypes=[pa.int32(), pa.float32()])`
+- D) `pa.schema([('station_id', 'int32'), ('value', 'float32')])`
+
+**Answer: B**
+
+- A) Incorrect — `pa.schema()` does not accept a plain Python `dict`; it requires a list of `pa.Field` objects or a list of `(name, type)` tuples.
+- B) Correct — `pa.schema([pa.field('name', type), ...])` is the standard PyArrow API for constructing an explicit schema. Each column is defined as a `pa.Field` with a name and an Arrow type object.
+- C) Incorrect — `pa.Schema` is not directly instantiated with keyword arguments like `columns=` and `dtypes=`. That constructor signature does not exist in PyArrow.
+- D) Incorrect — While `pa.schema([('name', type)])` does work, the type must be a PyArrow type object (`pa.int32()`), not a string like `'int32'`. Passing strings raises `TypeError`.
+
+---
+
+## Q29 — Arrow Table Shape Inspection
+
+> **Week reference:** Week 7
+
+**Mental Model:** A `pyarrow.Table` exposes `table.num_rows` and `table.num_columns` as integer attributes for its dimensions, and `table.column_names` as a list of column name strings. These are direct property accesses, not method calls like `.shape` on a Pandas DataFrame.
+
+Which of the following correctly retrieves the number of rows in a `pyarrow.Table`?
+
+- A) `table.shape[0]`
+- B) `table.num_rows`
+- C) `len(table.index)`
+- D) `table.count()`
+
+**Answer: B**
+
+- A) Incorrect — `pyarrow.Table` does not have a `.shape` attribute like a Pandas DataFrame or NumPy array. Accessing `table.shape` raises `AttributeError`.
+- B) Correct — `table.num_rows` is a direct integer property of `pyarrow.Table`. It is equivalent to calling `len(table)` (which also works and returns row count), but `num_rows` makes the intent explicit.
+- C) Incorrect — `pyarrow.Table` has no `.index` attribute; that is a Pandas concept. Arrow tables use positional integer indexing and have no row label index.
+- D) Incorrect — `table.count()` is not a method on `pyarrow.Table`. Aggregate counts are performed via `pyarrow.compute.count(column)`, not as a table-level method.
+
+---
+
+## Q30 — pyarrow.feather API
+
+> **Week reference:** Week 7
+
+**Mental Model:** `pyarrow.feather.write_feather(table, path)` writes an Arrow Table to a Feather (IPC) file. `pyarrow.feather.read_feather(path)` reads it back — but returns a `pandas.DataFrame` by default, not a `pyarrow.Table`. To get an Arrow Table back, you must pass `memory_map=False` or use `pyarrow.ipc.open_file()` directly.
+
+What does `pyarrow.feather.read_feather('data.feather')` return by default?
+
+- A) A `pyarrow.Table`
+- B) A `pandas.DataFrame`
+- C) A `pyarrow.RecordBatch`
+- D) A `pyarrow.ipc.RecordBatchFileReader`
+
+**Answer: B**
+
+- A) Incorrect — Despite writing from a `pyarrow.Table`, `read_feather()` returns a Pandas DataFrame by default. To get an Arrow Table, pass `pyarrow.feather.read_table('data.feather')` instead.
+- B) Correct — `pyarrow.feather.read_feather()` is designed for Pandas interoperability and returns a `pandas.DataFrame`. This is a common exam trap: even though feather is an Arrow format, the convenience reader produces a DataFrame.
+- C) Incorrect — `RecordBatch` is not the return type of `read_feather()`. Streaming IPC readers yield `RecordBatch` objects, but the feather convenience function does not expose this.
+- D) Incorrect — `RecordBatchFileReader` is the low-level IPC file reader; `read_feather()` is a higher-level convenience function that handles the IPC format internally and returns user-friendly types (DataFrame by default).
+
+---
+
+## Q31 — Parquet Predicate Pushdown vs Arrow Compute Filter
+
+> **Week reference:** Week 7
+
+**Mental Model:** Parquet predicate pushdown (via `filters=` in `read_table`) operates at the file level: entire row groups that cannot match the predicate are skipped before any bytes are deserialised. Arrow compute `filter()` operates in memory on an already-loaded table. Pushdown avoids I/O; compute filter avoids nothing — the full table is already loaded.
+
+Which of the following filtering approaches minimises total I/O for a large Parquet file?
+
+- A) Load the full table with `pq.read_table()` and then apply `table.filter(mask)` using `pyarrow.compute`.
+- B) Use `pq.read_table('data.parquet', filters=[('value', '>', 100)])` to push the predicate into the Parquet reader.
+- C) Load with `pd.read_parquet()` and apply `df[df['value'] > 100]` to filter in Pandas.
+- D) Both A and C are equivalent in I/O because the filter is applied before returning to Python in both cases.
+
+**Answer: B**
+
+- A) Incorrect — Loading the full table first reads all row group bytes from disk and deserialises all column data. The `table.filter()` call then discards matching rows in memory, but the I/O was already paid.
+- B) Correct — The `filters=` parameter is forwarded to the Parquet row group reader. It compares the filter predicate against each row group's stored min/max statistics and skips groups that provably contain no matching rows, reading their bytes from disk at all.
+- C) Incorrect — `pd.read_parquet()` with no `filters=` argument also loads the full table; applying the Pandas filter afterwards does not reduce I/O.
+- D) Incorrect — A and C both pay full I/O cost. Only option B reduces I/O via predicate pushdown.
+
+---
+
+## Q32 — Arrow Null Representation
+
+> **Week reference:** Week 7
+
+**Mental Model:** Arrow represents nulls using a separate validity bitmap — a packed bit array with one bit per value. A value is valid (non-null) if its bit is 1, and null if its bit is 0. This is orthogonal to the value buffer, meaning Arrow can represent nulls in any column type without sentinel values like NaN.
+
+How does Apache Arrow represent null (missing) values in a column?
+
+- A) Arrow stores a special sentinel value (e.g., `NaN` for floats, `-1` for integers) in the data buffer to indicate nulls.
+- B) Arrow maintains a separate validity bitmap alongside the data buffer; a 0 bit marks a value as null, and the corresponding slot in the data buffer is ignored.
+- C) Arrow stores nulls by omitting the row entirely from the data buffer and recording its position in an index array.
+- D) Arrow does not support nulls; columns with missing values must be stored as strings and parsed at query time.
+
+**Answer: B**
+
+- A) Incorrect — Arrow does not use in-band sentinel values. This approach is used by Pandas (`NaN` for float columns, `pd.NA` for nullable integer columns), but Arrow's design separates null tracking from the value data entirely.
+- B) Correct — Arrow's null representation uses a packed validity bitmap (one bit per value). This allows any column type — including integers, which have no natural "missing" value — to represent nulls without contaminating the data buffer. Only the bitmap bit needs to be checked to determine nullness.
+- C) Incorrect — Arrow does not use a sparse encoding for nulls. Every row position has a slot in the data buffer; the validity bitmap determines which slots are valid without removing or reordering rows.
+- D) Incorrect — Arrow has first-class null support via the validity bitmap. It is one of Arrow's explicit design goals to handle nulls efficiently in all column types.
 
 ---

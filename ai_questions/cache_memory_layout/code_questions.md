@@ -25,6 +25,17 @@
 - [Q18 — Transpose Flags](#q18-transpose-flags)
 - [Q19 — Memory Access Pattern for Diagonal Sum](#q19-memory-access-pattern-for-diagonal-sum)
 - [Q20 — Choosing Layout for a CUDA Reduction](#q20-choosing-layout-for-a-cuda-reduction)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q21 — Strides of Every-Other-Column Slice](#q21--strides-of-every-other-column-slice)
+- [Q22 — Fancy Index vs Slice: View or Copy?](#q22--fancy-index-vs-slice-view-or-copy)
+- [Q23 — reshape(-1) on F-Order Array](#q23--reshape-1-on-f-order-array)
+- [Q24 — np.nditer with order='F' on C-Order Array](#q24--npnditer-with-orderf-on-c-order-array)
+- [Q25 — Strides After np.expand_dims](#q25--strides-after-npexpand_dims)
+- [Q26 — C_CONTIGUOUS Flag After Transpose and Copy](#q26--c_contiguous-flag-after-transpose-and-copy)
+- [Q27 — Loop Order for 3D F-Order Array](#q27--loop-order-for-3d-f-order-array)
+- [Q28 — np.broadcast_to Writability](#q28--npbroadcast_to-writability)
+- [Q29 — Strides of int32 vs float64 Array](#q29--strides-of-int32-vs-float64-array)
+- [Q30 — Identifying the Cache-Friendly Reduction Axis](#q30--identifying-the-cache-friendly-reduction-axis)
 
 ---
 
@@ -836,5 +847,360 @@ In F-order, `data[row, 0], data[row, 1], ...` are H×4 = 4096 bytes apart — 32
 - **B) Correct.** C-order places all columns of a row contiguously. Warp threads accessing adjacent columns issue one coalesced transaction.
 - **C) Incorrect.** CUDA hardware coalesces only when addresses issued by a warp are naturally aligned and consecutive. F-order column access produces strided, uncoalesced transactions that hardware cannot transparently fix.
 - **D) Incorrect.** CUDA is a C/C++ extension; it has no affinity for Fortran-order arrays. CUDA's memory coalescing model aligns with C-order for row-based access patterns.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets strides after slicing, fancy-index copies, reshape ordering, nditer, expand_dims, and dtype-dependent strides — edge cases not covered in Sets 1–2.
+
+---
+
+## Q21 — Strides of Every-Other-Column Slice
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.zeros((6, 8), dtype=np.float64)  # C-order, strides (64, 8)
+b = a[:, ::2]   # every other column
+print(b.shape)
+print(b.strides)
+```
+
+What does this print?
+
+- A) `(6, 4)` / `(64, 8)`
+- B) `(6, 4)` / `(64, 16)`
+- C) `(6, 8)` / `(64, 16)`
+- D) `(3, 8)` / `(128, 8)`
+
+**Answer: B**
+
+`a` has shape `(6, 8)` and strides `(64, 8)`. `[:, ::2]` selects every other column (columns 0, 2, 4, 6), giving shape `(6, 4)`. The row stride is unchanged at 64 bytes (skipping rows still jumps a full original row). The column stride doubles: stepping over one column in `b` skips two original columns: `2 × 8 = 16` bytes. No data is copied — `b` is a view.
+
+- **A) Incorrect.** Shape is correct but strides are wrong. Column stride 8 would mean adjacent columns in `b` are still 1 float64 apart, as if no skipping occurred. The `::2` step doubles the column stride.
+- **B) Correct.** Shape `(6, 4)`, strides `(64, 16)`. Row stride unchanged; column stride doubled by the step-2 slice.
+- **C) Incorrect.** Shape `(6, 8)` would mean all 8 original columns are present, but `::2` selects only 4 columns. Shape and strides are both wrong.
+- **D) Incorrect.** Shape `(3, 8)` would result from `a[::2, :]` (every other row), not `a[:, ::2]`. This confuses row slicing with column slicing.
+
+---
+
+## Q22 — Fancy Index vs Slice: View or Copy?
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.arange(20, dtype=np.float64)
+
+b = a[2:10]          # basic slice
+c = a[[2, 3, 4, 5, 6, 7, 8, 9]]  # fancy index with same elements
+
+print(np.shares_memory(a, b))
+print(np.shares_memory(a, c))
+```
+
+What does this print?
+
+- A) `True` / `True`
+- B) `True` / `False`
+- C) `False` / `True`
+- D) `False` / `False`
+
+**Answer: B**
+
+`b = a[2:10]` is basic (slice) indexing — it returns a view that shares the buffer with `a`. `np.shares_memory(a, b)` is `True`.
+
+`c = a[[2, 3, 4, 5, 6, 7, 8, 9]]` is fancy (integer array) indexing — NumPy cannot express this as a stride-offset view even though the indices happen to be consecutive. It always allocates a new buffer and copies the selected elements. `np.shares_memory(a, c)` is `False`.
+
+- **A) Incorrect.** Fancy indexing always produces a copy, so the second `shares_memory` is `False`, not `True`.
+- **B) Correct.** Basic slice → view (True); fancy index → copy (False), even when the elements selected are identical.
+- **C) Incorrect.** Basic slicing always produces a view (True), not a copy (False). Only fancy indexing always produces a copy.
+- **D) Incorrect.** Basic slicing never copies — it is always a view, so the first result cannot be `False` for a valid non-strided slice like `a[2:10]`.
+
+---
+
+## Q23 — reshape(-1) on F-Order Array
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.asfortranarray(np.array([[1, 2, 3],
+                                 [4, 5, 6]], dtype=np.int64))
+print(a.reshape(-1))
+```
+
+What does this print?
+
+- A) `[1 2 3 4 5 6]` — row-major (C-order) flattening
+- B) `[1 4 2 5 3 6]` — column-major (F-order) flattening
+- C) `[1 2 3 4 5 6]` — NumPy always flattens in C-order regardless of array layout
+- D) `[4 5 6 1 2 3]` — F-order reverses the row sequence
+
+**Answer: C**
+
+`np.reshape` with no `order` argument defaults to `order='C'`, which means the output is filled in row-major order regardless of the input array's memory layout. Even though `a` is F-contiguous, `a.reshape(-1)` reads elements in C-order: row 0 first (`1, 2, 3`), then row 1 (`4, 5, 6`). To flatten in column-major order you must use `a.reshape(-1, order='F')`, which would give `[1, 4, 2, 5, 3, 6]`.
+
+- **A) Correct description, but the reasoning in option A is that it is row-major — that matches C correct.** See C below.
+- **B) Incorrect.** This is what `a.reshape(-1, order='F')` would produce (column-major flattening: column 0 first = 1,4; column 1 = 2,5; column 2 = 3,6). Without `order='F'`, reshape defaults to C-order.
+- **C) Correct.** `reshape(-1)` uses C-order by default, producing `[1 2 3 4 5 6]`. The underlying F-order storage is irrelevant to the reshape output order.
+- **D) Incorrect.** F-order changes which axis varies fastest in memory, but it does not reverse the row sequence. The rows of `a` are still [1,2,3] and [4,5,6] logically; F-order only affects the physical byte layout.
+
+---
+
+## Q24 — np.nditer with order='F' on C-Order Array
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.array([[1, 2, 3],
+              [4, 5, 6]], dtype=np.float64)  # C-order
+
+result = [x for x in np.nditer(a, order='F')]
+print(result)
+```
+
+What does this print?
+
+- A) `[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]` — C-order traversal (row by row)
+- B) `[1.0, 4.0, 2.0, 5.0, 3.0, 6.0]` — F-order traversal (column by column)
+- C) `[6.0, 5.0, 4.0, 3.0, 2.0, 1.0]` — reversed C-order
+- D) `[4.0, 5.0, 6.0, 1.0, 2.0, 3.0]` — row-reversed order
+
+**Answer: B**
+
+`np.nditer(a, order='F')` traverses the array in Fortran (column-major) order — the first axis (rows) varies fastest. For the shape `(2, 3)` array, iteration goes: column 0 top-to-bottom (`a[0,0]=1`, `a[1,0]=4`), then column 1 (`a[0,1]=2`, `a[1,1]=5`), then column 2 (`a[0,2]=3`, `a[1,2]=6`). The `order` parameter of `nditer` controls traversal sequence, not the memory layout of `a`.
+
+- **A) Incorrect.** This is what `np.nditer(a, order='C')` would produce (or equivalently, just iterating `a` with default settings). `order='F'` changes the traversal to column-major.
+- **B) Correct.** F-order iteration: column 0 (1, 4), column 1 (2, 5), column 2 (3, 6) → `[1.0, 4.0, 2.0, 5.0, 3.0, 6.0]`.
+- **C) Incorrect.** Reversed C-order would be `[6, 5, 4, 3, 2, 1]`. `order='F'` does not reverse; it changes which axis varies fastest.
+- **D) Incorrect.** Row-reversed would be `[4, 5, 6, 1, 2, 3]`. This would come from iterating rows in reverse order, which is not what `order='F'` does.
+
+---
+
+## Q25 — Strides After np.expand_dims
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.zeros((4, 5), dtype=np.float64)
+# a.strides == (40, 8)
+
+b = np.expand_dims(a, axis=1)
+print(b.shape)
+print(b.strides)
+```
+
+What does this print?
+
+- A) `(4, 1, 5)` / `(40, 40, 8)`
+- B) `(4, 1, 5)` / `(40, 8, 8)`
+- C) `(1, 4, 5)` / `(320, 40, 8)`
+- D) `(4, 5, 1)` / `(40, 8, 8)`
+
+**Answer: A**
+
+`np.expand_dims(a, axis=1)` inserts a new axis of size 1 at position 1, giving shape `(4, 1, 5)`. This is a zero-copy view — no data moves. The new axis has a formally defined stride, but since its size is 1, the stride value never actually causes any memory jump. NumPy sets the stride of the new size-1 axis equal to the stride of the original axis at that position, which is 40 bytes (the original row stride). The existing strides (40 for axis 0, 8 for axis 2) are preserved.
+
+- **A) Correct.** Shape `(4, 1, 5)`, strides `(40, 40, 8)`. The inserted axis-1 inherits the stride from the original axis-0 stride (40). Axis 0 stays 40; axis 2 stays 8.
+- **B) Incorrect.** `(40, 8, 8)` would place the new axis stride at 8 bytes, confusing it with the column stride. The inserted axis stride should reflect the step between "rows" of the sub-array it spans, which is 40 bytes.
+- **C) Incorrect.** Shape `(1, 4, 5)` would result from `np.expand_dims(a, axis=0)` (inserting at position 0, not 1). The strides `(320, 40, 8)` are correct for that case: the new leading axis of size 1 has stride = 4×5×8 = 160... actually 320 is also wrong; the stride of a size-1 axis inserted at position 0 is the original total array size in bytes or the stride of the first axis = 40×4 = 160... this option is internally inconsistent.
+- **D) Incorrect.** Shape `(4, 5, 1)` would result from `np.expand_dims(a, axis=2)` or `np.expand_dims(a, axis=-1)`, inserting the new axis at the end.
+
+---
+
+## Q26 — C_CONTIGUOUS Flag After Transpose and Copy
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.zeros((3, 7), dtype=np.float64)
+b = a.T
+c = b.copy()
+
+print(b.flags['C_CONTIGUOUS'])
+print(c.flags['C_CONTIGUOUS'])
+print(np.shares_memory(b, c))
+```
+
+What does this print?
+
+- A) `False` / `False` / `True`
+- B) `False` / `True` / `False`
+- C) `True` / `True` / `False`
+- D) `True` / `False` / `True`
+
+**Answer: B**
+
+`a` is C-contiguous with shape `(3, 7)` and strides `(56, 8)`. `b = a.T` has shape `(7, 3)` and strides `(8, 56)`. With strides `(8, 56)`, the row stride (8) is smaller than the column stride (56), which is the signature of F-contiguous layout — so `b` is F-contiguous but **not** C-contiguous. `b.flags['C_CONTIGUOUS']` is `False`.
+
+`c = b.copy()` creates a C-contiguous copy by default. Shape `(7, 3)`, strides `(3×8, 8) = (24, 8)`. `c.flags['C_CONTIGUOUS']` is `True`.
+
+`np.shares_memory(b, c)` is `False` because `.copy()` always allocates a new independent buffer.
+
+- **A) Incorrect.** `c.copy()` produces a C-contiguous array by default, so `c.flags['C_CONTIGUOUS']` is `True`, not `False`. Also, the two arrays do not share memory after a copy.
+- **B) Correct.** `b`: False (F-contiguous transpose view). `c`: True (freshly copied C-contiguous array). `shares_memory`: False (copy allocates new buffer).
+- **C) Incorrect.** `b.flags['C_CONTIGUOUS']` is `False` — the transposed view is not C-contiguous. This option incorrectly claims `True` for `b`.
+- **D) Incorrect.** `.copy()` never produces a view; memory is never shared after a `.copy()` call. `np.shares_memory` cannot be `True` for a copy.
+
+---
+
+## Q27 — Loop Order for 3D F-Order Array
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.asfortranarray(np.zeros((4, 5, 6), dtype=np.float64))
+# a.strides == (8, 32, 160)
+
+total = 0.0
+# Option X
+for k in range(6):
+    for j in range(5):
+        for i in range(4):
+            total += a[i, j, k]
+
+# Option Y
+for i in range(4):
+    for j in range(5):
+        for k in range(6):
+            total += a[i, j, k]
+```
+
+Which option is more cache-efficient, and why?
+
+- A) Option Y — outer `i`, middle `j`, inner `k` — because this is the standard row-major loop order
+- B) Option X — outer `k`, middle `j`, inner `i` — because F-order stores axis 0 fastest, so the inner `i` loop steps by 8 bytes
+- C) Both are equivalent — `np.asfortranarray` normalizes access patterns
+- D) Option Y — because iterating over the largest dimension last (k=6) reduces cache evictions
+
+**Answer: B**
+
+For an F-order array of shape `(4, 5, 6)`, strides are: axis 0 (i) = 8, axis 1 (j) = 4×8 = 32, axis 2 (k) = 4×5×8 = 160. The smallest stride is axis 0 (8 bytes). Cache efficiency requires the innermost loop to vary the axis with the smallest stride.
+
+Option X: inner `i` (stride 8) — sequential memory access, 8 float64 values per 64-byte cache line.
+Option Y: inner `k` (stride 160) — jumps 20 float64 values per step, a cache miss on almost every access.
+
+- **A) Incorrect.** "Standard row-major loop order" (outer=axis 0, inner=last axis) is optimal for C-order arrays. For F-order arrays the logic is inverted: the innermost loop should cover the first axis (axis 0), not the last. Applying C-order intuition to F-order arrays is the classic exam trap.
+- **B) Correct.** F-order strides `(8, 32, 160)`: innermost loop must vary axis 0 (`i`, stride 8). Option X has `i` innermost, giving stride-8 sequential access.
+- **C) Incorrect.** `np.asfortranarray` changes the memory layout but does not reorder Python for-loops. The programmer must match loop order to the actual strides.
+- **D) Incorrect.** Dimension size does not determine cache efficiency — stride does. The innermost loop over `k` in Option Y has stride 160 bytes regardless of whether k's dimension is 6 or 600.
+
+---
+
+## Q28 — np.broadcast_to Writability
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.array([1.0, 2.0, 3.0])
+b = np.broadcast_to(a, (4, 3))
+
+try:
+    b[0, 0] = 99.0
+    print("write succeeded")
+except ValueError as e:
+    print("write failed:", e)
+```
+
+What does this print?
+
+- A) `write succeeded` — broadcast arrays support element assignment
+- B) `write failed: ...` — broadcast arrays are read-only
+- C) `write succeeded` — only the first row is affected since stride[0] = 0
+- D) `write failed: ...` — but only because axis 0 has stride 0
+
+**Answer: B**
+
+`np.broadcast_to` creates a **read-only view**. The stride-0 trick used for the broadcast dimension means that a single write to any element would logically affect all rows (since they all point to the same memory). NumPy prevents this silent aliasing by marking broadcast arrays as read-only. Attempting to write raises `ValueError: assignment destination is read-only`.
+
+- **A) Incorrect.** Broadcast arrays are explicitly read-only. Attempting to write raises `ValueError`, not silently succeeds. A writable broadcast-like array requires `np.broadcast_arrays` followed by `.copy()`.
+- **B) Correct.** `b.flags['WRITEABLE']` is `False` for broadcast views. Any assignment raises `ValueError: assignment destination is read-only`.
+- **C) Incorrect.** Even if the runtime allowed the write (it does not), writing to `b[0, 0]` with stride 0 on axis 0 would write to the same memory location used by `b[1, 0]`, `b[2, 0]`, and `b[3, 0]` — silently modifying all rows. NumPy prevents this by marking the array read-only.
+- **D) Incorrect.** The `ValueError` is raised because the array is read-only (not specifically because stride[0] = 0). Any non-writable array raises this error on write, regardless of the reason for the read-only flag.
+
+---
+
+## Q29 — Strides of int32 vs float64 Array
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.zeros((5, 4), dtype=np.int32)
+b = np.zeros((5, 4), dtype=np.float64)
+
+print(a.strides)
+print(b.strides)
+```
+
+What does this print?
+
+- A) `(20, 4)` / `(40, 8)`
+- B) `(16, 4)` / `(32, 8)`
+- C) `(20, 4)` / `(20, 4)`
+- D) `(4, 1)` / `(8, 1)`
+
+**Answer: B**
+
+Strides depend on the dtype element size. For a C-order array of shape `(5, 4)`:
+- `int32`: 4 bytes per element. Axis 1 stride = 1×4 = 4 bytes. Axis 0 stride = 4×4 = 16 bytes. → `(16, 4)`.
+- `float64`: 8 bytes per element. Axis 1 stride = 1×8 = 8 bytes. Axis 0 stride = 4×8 = 32 bytes. → `(32, 8)`.
+
+- **A) Incorrect.** `(20, 4)` for int32 would imply axis 0 stride = 5×4 = 20 bytes, using the first dimension (5) instead of the second (4) in the formula. Axis 0 stride = n_cols × element_size = 4×4 = 16, not 20.
+- **B) Correct.** `int32`: `(16, 4)` — 4 columns × 4 bytes/col = 16 for axis 0. `float64`: `(32, 8)` — 4 columns × 8 bytes/col = 32 for axis 0.
+- **C) Incorrect.** Both arrays having the same strides would only happen if `int32` and `float64` had the same element size, which they do not (4 vs 8 bytes).
+- **D) Incorrect.** `(4, 1)` and `(8, 1)` would be element-count strides (not byte strides). NumPy strides are always in **bytes**. The column stride is never 1 for numeric dtypes larger than 1 byte.
+
+---
+
+## Q30 — Identifying the Cache-Friendly Reduction Axis
+
+> **Week reference:** Week 3
+
+```python
+import numpy as np
+
+a = np.random.rand(200, 300, 400).astype(np.float64)
+# C-order: strides = (300*400*8, 400*8, 8) = (960000, 3200, 8)
+
+result_axis0 = a.sum(axis=0)  # shape (300, 400)
+result_axis1 = a.sum(axis=1)  # shape (200, 400)
+result_axis2 = a.sum(axis=2)  # shape (200, 300)
+```
+
+Which reduction accesses memory with the smallest per-element stride (most cache-friendly), and what is that stride?
+
+- A) `axis=0` — stride 960000 bytes (reduces the outermost axis)
+- B) `axis=1` — stride 3200 bytes (reduces the middle axis)
+- C) `axis=2` — stride 8 bytes (reduces the innermost/last axis, which is contiguous)
+- D) All three reductions have the same stride because NumPy internally reorders accesses
+
+**Answer: C**
+
+For a C-order array, the last axis has the smallest stride (8 bytes for float64). Summing along axis 2 means iterating over 400 consecutive float64 values per row — stride 8 bytes, fully sequential and cache-friendly. Each 64-byte cache line delivers 8 useful elements.
+
+Summing along axis 0 means iterating over 200 values spaced 960,000 bytes apart — one cache miss per element. Summing along axis 1 means iterating over 300 values spaced 3,200 bytes apart — still cache-unfriendly.
+
+- **A) Incorrect.** `axis=0` reduction iterates along the first axis with stride 960,000 bytes. This is the worst case — each element accessed is in a completely different region of memory with no cache reuse.
+- **B) Incorrect.** `axis=1` reduction iterates along the middle axis with stride 3,200 bytes. Better than axis=0 but still causes a cache miss on almost every access (3,200 bytes >> 64-byte cache line).
+- **C) Correct.** `axis=2` reduction iterates along the last axis with stride 8 bytes. This is sequential memory access: `a[i, j, 0], a[i, j, 1], ..., a[i, j, 399]` are physically contiguous. Every loaded cache line delivers 8 usable values.
+- **D) Incorrect.** NumPy does not transparently reorder reduction accesses to be cache-friendly. The actual memory access pattern follows the strides of the array for the chosen axis. The programmer must select the axis that aligns with the physical layout.
 
 ---

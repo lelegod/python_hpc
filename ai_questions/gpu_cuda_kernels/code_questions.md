@@ -27,13 +27,24 @@
 - [Question 18 — Transfer Count: Pre-allocated Device Output](#question-18-transfer-count-pre-allocated-device-output)
 - [Question 19 — Mixed Arguments: Automatic vs Explicit Transfers](#question-19-mixed-arguments-automatic-vs-explicit-transfers)
 - [Question 20 — Shared Memory Reduction: Missing syncthreads](#question-20-shared-memory-reduction-missing-syncthreads)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Question 21 — Shared Array with Variable Size: Compilation Trap](#question-21--shared-array-with-variable-size-compilation-trap)
+- [Question 22 — Atomic Add vs Non-Atomic Race Condition](#question-22--atomic-add-vs-non-atomic-race-condition)
+- [Question 23 — Timing Without `cuda.synchronize()`](#question-23--timing-without-cudasynchronize)
+- [Question 24 — Pinned Memory Transfer Code Reading](#question-24--pinned-memory-transfer-code-reading)
+- [Question 25 — In-Place Kernel: How Many DtoH Transfers?](#question-25--in-place-kernel-how-many-dtoh-transfers)
+- [Question 26 — Grid-Stride Loop: Which Indices Does Thread 5 Process?](#question-26--grid-stride-loop-which-indices-does-thread-5-process)
+- [Question 27 — `blockDim.x` vs `gridDim.x` Inside a Kernel](#question-27--blockdimx-vs-griddimx-inside-a-kernel)
+- [Question 28 — 2D Grid Index Verification](#question-28--2d-grid-index-verification)
+- [Question 29 — Shared Memory Padding for Bank Conflicts](#question-29--shared-memory-padding-for-bank-conflicts)
+- [Question 30 — What Does the Kernel Call Return?](#question-30--what-does-the-kernel-call-return)
 
 ---
 
 > Format: Each question shows a Numba CUDA kernel or grid setup code to analyse.
 > Exam frequency: **Every exam** — 4+ questions per exam.
 
-**Navigate:** &nbsp;[▶ Set 1 — Original Questions (Q1–Q10)](#question-1--thread-index-calculation)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice (Q11–Q20)](#set-2--generated-practice-questions-exam-day-focus)
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions (Q1–Q10)](#question-1--thread-index-calculation)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice (Q11–Q20)](#set-2--generated-practice-questions-exam-day-focus)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 3 — Extended Practice (Q21–Q30)](#set-3--extended-practice)
 
 ---
 
@@ -731,3 +742,388 @@ What is the bug?
 - D) Incorrect — `tid < s` is correct; `tid = s` would access `shared[2s]`, which is outside the active range for that step
 
 ---
+
+## Set 3 — Extended Practice
+
+> Targets concepts not in Sets 1 & 2: shared-memory compile-time size, atomic operations, synchronize() timing, pinned memory, in-place kernels, grid-stride loops, blockDim/gridDim inspection, 2D index mapping, bank conflict padding, kernel return values.
+
+---
+
+## Question 21 — Shared Array with Variable Size: Compilation Trap
+
+```python
+from numba import cuda
+from numba import float32
+
+@cuda.jit
+def kernel(data, tpb):
+    shared = cuda.shared.array(tpb, dtype=float32)
+    tid = cuda.threadIdx.x
+    i = cuda.grid(1)
+    if i < data.shape[0]:
+        shared[tid] = data[i]
+    cuda.syncthreads()
+    if tid == 0:
+        data[cuda.blockIdx.x] = shared[0]
+```
+
+What happens when this kernel is compiled and run?
+
+- A) It compiles and runs correctly; `tpb` is passed at launch time so Numba treats it as a constant
+- B) It raises a compilation error because `cuda.shared.array` requires a compile-time integer literal, not a runtime kernel argument
+- C) It compiles but `shared` silently has size 1 regardless of `tpb`
+- D) It compiles and the shared array size is determined from `cuda.blockDim.x` at runtime
+
+**Answer: B**
+
+- A) Incorrect — `tpb` is a kernel argument received at runtime; even though the caller knows its value, the Numba compiler cannot evaluate it when generating PTX; the compiler sees an unknown symbol and raises a `TypingError`
+- B) Correct — `cuda.shared.array` allocates memory at PTX compile time; the shape argument must be a Python integer literal embedded in the source (e.g., `cuda.shared.array(256, dtype=float32)`); passing a variable causes a `numba.core.errors.TypingError` stating that the shape must be a constant
+- C) Incorrect — Numba does not silently default to size 1; it fails loudly with a compilation error before any execution occurs
+- D) Incorrect — shared memory allocation happens at compile time, not at kernel launch; `cuda.blockDim.x` is a runtime value and cannot influence the compile-time PTX allocation
+
+---
+
+## Question 22 — Atomic Add vs Non-Atomic Race Condition
+
+```python
+from numba import cuda
+import numpy as np
+
+# Version A — non-atomic
+@cuda.jit
+def count_nonzero_bad(data, counter):
+    i = cuda.grid(1)
+    if i < data.shape[0]:
+        if data[i] != 0:
+            counter[0] += 1   # Race condition!
+
+# Version B — atomic
+@cuda.jit
+def count_nonzero_good(data, counter):
+    i = cuda.grid(1)
+    if i < data.shape[0]:
+        if data[i] != 0:
+            cuda.atomic.add(counter, 0, 1)
+
+data = np.array([1, 0, 3, 0, 5, 0, 7, 0], dtype=np.int32)
+# Expected: 4 non-zero elements
+```
+
+What result does `count_nonzero_bad` produce in practice, and why?
+
+- A) Always 4 — the GPU serialises all threads automatically for writes to the same location
+- B) An unpredictable value between 1 and 4 — multiple threads read `counter[0]` before any writes it back, so some increments are lost to race conditions
+- C) Always 0 — the non-atomic write is silently discarded for safety
+- D) A value greater than 4 — threads can increment `counter[0]` more than once each
+
+**Answer: B**
+
+- A) Incorrect — the GPU does not automatically serialise conflicting writes; that is exactly what `cuda.atomic.add` is for; without it, concurrent read-modify-write operations on the same address produce undefined behaviour
+- B) Correct — `counter[0] += 1` compiles to a load-add-store sequence; if threads A and B both load the current value (say 2) before either stores the result, both compute 3 and write 3 — one increment is lost; with many concurrent threads this can drop the final count well below 4; the exact result is non-deterministic
+- C) Incorrect — CUDA does not discard writes for safety; it executes every write; the problem is that the writes overwrite each other rather than accumulating
+- D) Incorrect — the race condition causes under-counting (lost increments), not over-counting; each thread increments by exactly 1 and cannot exceed its intended contribution
+
+---
+
+## Question 23 — Timing Without `cuda.synchronize()`
+
+```python
+from numba import cuda
+from time import perf_counter
+import numpy as np
+
+@cuda.jit
+def scale(data, factor):
+    i = cuda.grid(1)
+    if i < data.shape[0]:
+        data[i] *= factor
+
+N = 10_000_000
+d_data = cuda.to_device(np.ones(N, dtype=np.float32))
+
+t0 = perf_counter()
+scale[N // 256 + 1, 256](d_data, 2.0)
+t1 = perf_counter()
+print(f"Time: {(t1 - t0)*1000:.3f} ms")
+```
+
+The printed time is consistently 0.04 ms. The actual kernel takes about 2 ms on this GPU. What is wrong?
+
+- A) The kernel is too fast for `perf_counter()` to measure accurately
+- B) `d_data` is a device array, so the kernel is skipped
+- C) The kernel launch is asynchronous; `t1` is recorded after the launch call returns, not after GPU execution completes; insert `cuda.synchronize()` before `t1 = perf_counter()`
+- D) The `factor` argument is a Python float, causing an implicit type conversion that makes timing unreliable
+
+**Answer: C**
+
+- A) Incorrect — `perf_counter()` resolution is sub-microsecond; 2 ms is easily measurable; the problem is not resolution but that the clock stops before the GPU has actually finished
+- B) Incorrect — device array arguments are handled correctly by Numba; the kernel executes normally; the issue is purely in the timing methodology
+- C) Correct — CUDA kernel launches are fire-and-forget from the host perspective; the `scale[...]()` call enqueues the kernel on the GPU command queue and returns immediately (in ~0.04 ms); to measure true kernel time, add `cuda.synchronize()` between the launch and `t1 = perf_counter()` to block until all GPU work completes
+- D) Incorrect — Numba handles Python float → float32 conversion automatically without observable timing side effects; this is not the cause of the 50× timing error
+
+---
+
+## Question 24 — Pinned Memory Transfer Code Reading
+
+```python
+from numba import cuda
+import numpy as np
+
+N = 1_000_000
+
+# Approach 1: regular NumPy
+x_regular = np.random.rand(N).astype(np.float32)
+
+# Approach 2: pinned NumPy
+x_pinned = cuda.pinned_array(N, dtype=np.float32)
+x_pinned[:] = np.random.rand(N).astype(np.float32)
+
+d1 = cuda.to_device(x_regular)
+d2 = cuda.to_device(x_pinned)
+```
+
+Both `d1` and `d2` contain the same data on the GPU. Which statement about the two transfers is correct?
+
+- A) Both transfers are functionally identical with the same speed; `pinned_array` only affects GPU-side memory layout
+- B) `d2` (from pinned memory) achieves higher and more consistent HtoD bandwidth because the DMA engine transfers directly without an intermediate staging buffer
+- C) `d1` is faster because the OS can optimise pageable memory transfers using its own caching
+- D) `d2` requires an additional copy during the transfer, making it slower than `d1`
+
+**Answer: B**
+
+- A) Incorrect — `pinned_array` specifically affects host-side memory allocation to be page-locked; this directly impacts PCIe transfer performance, not GPU-side layout
+- B) Correct — page-locked (pinned) host memory has a fixed physical address; the GPU's DMA engine can initiate a direct PCIe transfer without first staging data to a locked intermediate buffer (which pageable transfers require); this eliminates one CPU-side memory copy and results in higher sustainable bandwidth, often approaching PCIe theoretical limits
+- C) Incorrect — OS caching of pageable memory does not speed up GPU transfers; if anything, the OS needing to lock pages before DMA adds latency; pageable transfers are slower than pinned
+- D) Incorrect — it is the pageable case (`d1`) that involves an extra staging copy; pinned memory eliminates this extra copy, making `d2` faster
+
+---
+
+## Question 25 — In-Place Kernel: How Many DtoH Transfers?
+
+```python
+from numba import cuda
+import numpy as np
+
+@cuda.jit
+def normalise_inplace(data, mean, std):
+    i = cuda.grid(1)
+    if i < data.shape[0]:
+        data[i] = (data[i] - mean) / std
+
+N = 500_000
+raw = np.random.randn(N).astype(np.float32)
+mean_val = float(raw.mean())
+std_val = float(raw.std())
+
+d_data = cuda.to_device(raw)
+bpg = (N + 255) // 256
+
+normalise_inplace[bpg, 256](d_data, mean_val, std_val)
+
+result = d_data.copy_to_host()
+```
+
+How many HtoD and DtoH transfers occur in total?
+
+- A) 1 HtoD + 1 DtoH
+- B) 2 HtoD + 2 DtoH (mean and std also transfer)
+- C) 1 HtoD + 0 DtoH (result stays on device)
+- D) 0 HtoD + 1 DtoH (device arrays need no HtoD)
+
+**Answer: A**
+
+- A) Correct — `cuda.to_device(raw)` = 1 HtoD; `mean_val` and `std_val` are Python scalars passed by value as kernel arguments — they are not arrays and do not trigger memory transfers; `d_data` is modified in-place on the GPU; `d_data.copy_to_host()` = 1 DtoH; total = 1 HtoD + 1 DtoH
+- B) Incorrect — scalar kernel arguments (`mean_val`, `std_val`) are passed in GPU registers, not via PCIe memory transfers; only array arguments can trigger HtoD transfers
+- C) Incorrect — `copy_to_host()` is an explicit DtoH transfer; it always fires when called
+- D) Incorrect — `cuda.to_device(raw)` is an explicit HtoD transfer; it fires once at the start
+
+---
+
+## Question 26 — Grid-Stride Loop: Which Indices Does Thread 5 Process?
+
+```python
+from numba import cuda
+import numpy as np
+
+@cuda.jit
+def double(data, n):
+    i = cuda.grid(1)
+    stride = cuda.blockDim.x * cuda.gridDim.x
+    while i < n:
+        data[i] *= 2
+        i += stride
+
+N = 100
+tpb = 16
+bpg = 2  # total threads = 32
+double[bpg, tpb](d_data, N)
+```
+
+With `tpb=16` and `bpg=2`, what indices does thread with global index 5 process?
+
+- A) Only index 5
+- B) Indices 5, 37, 69 (stride = 32, stopping before 100)
+- C) Indices 5, 21, 37, 53, 69, 85 (stride = 16)
+- D) Indices 5, 36, 67, 98 (stride = 31)
+
+**Answer: B**
+
+- A) Incorrect — without a grid-stride loop, thread 5 would only process index 5; but the loop adds the stride each iteration, so thread 5 processes multiple indices
+- B) Correct — total threads = bpg × tpb = 2 × 16 = 32; stride = 32; thread 5 starts at i=5 and processes: 5 (< 100 ✓), 5+32=37 (✓), 37+32=69 (✓), 69+32=101 (≥ 100, exits); indices processed = {5, 37, 69}
+- C) Incorrect — stride = 16 would be just `blockDim.x`, not the full grid stride; the full grid stride is `blockDim.x * gridDim.x = 16 * 2 = 32`
+- D) Incorrect — stride 31 would indicate an off-by-one error in computing `blockDim.x * gridDim.x - 1`; the correct stride is 32
+
+---
+
+## Question 27 — `blockDim.x` vs `gridDim.x` Inside a Kernel
+
+```python
+from numba import cuda
+import numpy as np
+
+@cuda.jit
+def inspect(out):
+    tid = cuda.threadIdx.x
+    if tid == 0 and cuda.blockIdx.x == 0:
+        out[0] = cuda.blockDim.x
+        out[1] = cuda.gridDim.x
+
+d_out = cuda.device_array(2, dtype=np.int32)
+inspect[5, 64](d_out)
+result = d_out.copy_to_host()
+print(result)
+```
+
+What does `print(result)` output?
+
+- A) `[5, 64]`
+- B) `[64, 5]`
+- C) `[320, 1]` (total threads, 1 grid)
+- D) `[64, 320]`
+
+**Answer: B**
+
+- A) Incorrect — `blockDim.x` is the threads-per-block value (64), not the blocks-per-grid value (5); the launch syntax `kernel[bpg, tpb]` puts blocks first, threads second
+- B) Correct — `inspect[5, 64]` launches with 5 blocks per grid and 64 threads per block; inside the kernel: `cuda.blockDim.x = 64` (threads per block) and `cuda.gridDim.x = 5` (blocks per grid); `out[0] = 64`, `out[1] = 5` → `result = [64, 5]`
+- C) Incorrect — `blockDim.x` is not the total thread count (320); it is per-block thread count (64); `gridDim.x` is 5, not 1
+- D) Incorrect — `blockDim.x = 64` (correct) but `gridDim.x = 5`, not 320; 320 would be `blockDim.x * gridDim.x` (total threads), which is not what either variable holds
+
+---
+
+## Question 28 — 2D Grid Index Verification
+
+```python
+from numba import cuda
+import numpy as np
+
+@cuda.jit
+def fill_indices(out):
+    row, col = cuda.grid(2)
+    if row < out.shape[0] and col < out.shape[1]:
+        out[row, col] = row * 100 + col
+
+H, W = 32, 32
+d_out = cuda.device_array((H, W), dtype=np.int32)
+fill_indices[(2, 2), (16, 16)](d_out)
+result = d_out.copy_to_host()
+```
+
+A thread has `blockIdx = (1, 0)` and `threadIdx = (3, 7)`. What value does it write to `out`?
+
+- A) `out[3, 7] = 307`
+- B) `out[19, 7] = 1907`
+- C) `out[7, 19] = 719`
+- D) `out[3, 23] = 323`
+
+**Answer: B**
+
+- A) Incorrect — `row` and `col` include the block offset; `blockIdx.x * blockDim.x = 1 * 16 = 16` must be added to `threadIdx.x = 3`, giving row = 19, not 3
+- B) Correct — `row = blockIdx.x * blockDim.x + threadIdx.x = 1*16 + 3 = 19`; `col = blockIdx.y * blockDim.y + threadIdx.y = 0*16 + 7 = 7`; value = `19 * 100 + 7 = 1907`; `out[19, 7] = 1907`
+- C) Incorrect — row and col are swapped; `cuda.grid(2)` returns `(x_index, y_index)` = `(row, col)`; blockIdx.x maps to row, blockIdx.y maps to col
+- D) Incorrect — `col = blockIdx.y * blockDim.y + threadIdx.y = 0*16 + 7 = 7`, not 23; 23 would come from incorrectly using `blockIdx.x` for col
+
+---
+
+## Question 29 — Shared Memory Padding for Bank Conflicts
+
+```python
+from numba import cuda, float32
+
+TILE = 32
+
+@cuda.jit
+def transpose_padded(src, dst):
+    # Pad by 1 to avoid bank conflicts
+    shared = cuda.shared.array((TILE, TILE + 1), dtype=float32)
+    x = cuda.blockIdx.x * TILE + cuda.threadIdx.x
+    y = cuda.blockIdx.y * TILE + cuda.threadIdx.y
+    if x < src.shape[1] and y < src.shape[0]:
+        shared[cuda.threadIdx.y, cuda.threadIdx.x] = src[y, x]
+    cuda.syncthreads()
+    # Write transposed
+    x2 = cuda.blockIdx.y * TILE + cuda.threadIdx.x
+    y2 = cuda.blockIdx.x * TILE + cuda.threadIdx.y
+    if x2 < dst.shape[1] and y2 < dst.shape[0]:
+        dst[y2, x2] = shared[cuda.threadIdx.x, cuda.threadIdx.y]
+```
+
+Why is the shared array declared as `(TILE, TILE + 1)` instead of `(TILE, TILE)`?
+
+- A) To ensure the array fits within the 48 KB shared memory limit
+- B) The extra column pads each row so that threads reading the same column after transposition map to different shared memory banks, eliminating 32-way bank conflicts
+- C) CUDA requires shared arrays to have dimensions that are multiples of 33
+- D) The `+ 1` creates space for a sentinel value used by `cuda.syncthreads()`
+
+**Answer: B**
+
+- A) Incorrect — `32 * 32 * 4 = 4096` bytes is well within the 48 KB limit; `32 * 33 * 4 = 4224` bytes is also fine; memory size is not the motivation
+- B) Correct — shared memory has 32 banks (each 4 bytes wide); with a 32-column array, column `k` of every row maps to bank `k`; when reading the transposed tile, 32 threads all access column 0 (then column 1, etc.) of different rows — all land in bank 0 simultaneously (32-way conflict); padding to 33 columns shifts each row by one element, scattering accesses across different banks and eliminating the conflict
+- C) Incorrect — there is no CUDA requirement that shared array dimensions be multiples of 33; this is a performance optimisation pattern, not a hardware constraint
+- D) Incorrect — `cuda.syncthreads()` uses no sentinel values; it is a hardware barrier instruction with no associated data storage requirement
+
+---
+
+## Question 30 — What Does the Kernel Call Return?
+
+```python
+from numba import cuda
+import numpy as np
+
+@cuda.jit
+def square_sum(data, result):
+    shared = cuda.shared.array(256, dtype=np.float64)
+    tid = cuda.threadIdx.x
+    i = cuda.grid(1)
+    shared[tid] = data[i] ** 2 if i < data.shape[0] else 0.0
+    cuda.syncthreads()
+    if tid == 0:
+        s = 0.0
+        for k in range(cuda.blockDim.x):
+            s += shared[k]
+        cuda.atomic.add(result, 0, s)
+
+data = np.arange(256, dtype=np.float64)
+d_data = cuda.to_device(data)
+d_result = cuda.device_array(1, dtype=np.float64)
+
+x = square_sum[1, 256](d_data, d_result)
+print(x)
+print(d_result.copy_to_host())
+```
+
+What do the two `print` statements output?
+
+- A) `None` then `[5559680.0]` — the kernel returns None; the result (sum of squares 0²+…+255²) is read from the device array
+- B) `5559680.0` then `[5559680.0]` — the kernel returns the computed sum
+- C) `None` then `[0.0]` — `cuda.atomic.add` requires both arguments to be NumPy arrays
+- D) `None` then `[5559679.5]` — floating-point rounding causes a slight error
+
+**Answer: A**
+
+- A) Correct — all `@cuda.jit` kernel calls return `None` to the host, so `x = square_sum[...](...) ` assigns `None` to `x`; `print(x)` prints `None`; the kernel writes its result via `cuda.atomic.add(result, 0, s)` into `d_result`; `d_result.copy_to_host()` retrieves `[5559680.]`; the exact value is `sum(k² for k in 0..255) = 255 × 256 × 511 / 6 = 5,559,680` — an integer value, representable exactly in float64
+- B) Incorrect — `@cuda.jit` kernels never return a value to Python; attempting to use the return value of a kernel call always gives `None`; there is no mechanism for a GPU kernel to pass a scalar back to the Python caller via `return`
+- C) Incorrect — `cuda.atomic.add(result, 0, s)` is valid: `result` is a device array, `0` is the index, `s` is a scalar float; this correctly accumulates the block sum into `result[0]`
+- D) Incorrect — the calculation uses float64 throughout (`dtype=np.float64`); for sums of integers up to 255², float64 has more than enough precision to give an exact integer result; rounding error is not the issue here
+
+---
+

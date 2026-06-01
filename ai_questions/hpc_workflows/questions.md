@@ -27,6 +27,17 @@
 - [Q20 — AND Dependency: Both Jobs Must Succeed](#q20-and-dependency-both-jobs-must-succeed)
 - [Q21 — What %I Expands To in a Running Job](#q21-what-i-expands-to-in-a-running-job)
 - [Q22 — Danger of Missing %I in Output Directive](#q22-danger-of-missing-i-in-output-directive)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q23 — Explicit Index List in Job Array](#q23--explicit-index-list-in-job-array)
+- [Q24 — Per-Core Memory Calculation With rusage](#q24--per-core-memory-calculation-with-rusage)
+- [Q25 — span[hosts=1] Purpose in Job Scripts](#q25--spanhosts1-purpose-in-job-scripts)
+- [Q26 — Element-Level Dependency With done(array[*])](#q26--element-level-dependency-with-donearray)
+- [Q27 — LSB_DJOB_NUMPROC for Correct Core Count](#q27--lsb_djob_numproc-for-correct-core-count)
+- [Q28 — Rerunning a Single Failed Array Element](#q28--rerunning-a-single-failed-array-element)
+- [Q29 — -B vs -N Notification Flags](#q29---b-vs--n-notification-flags)
+- [Q30 — OR Dependency With Two Named Jobs](#q30--or-dependency-with-two-named-jobs)
+- [Q31 — Fan-Out Fan-In: Naming Output Files Per Element](#q31--fan-out-fan-in-naming-output-files-per-element)
+- [Q32 — Maximum Array Size Limit Consequence](#q32--maximum-array-size-limit-consequence)
 
 ---
 
@@ -489,5 +500,231 @@ A job array `#BSUB -J "proc[1-10]"` uses the output directive `#BSUB -o output_%
 **Answer: B**
 
 Without `%I`, `%J` expands to the same parent job ID for all 10 elements. Every element therefore opens the identical file `output_<jobID>.out`. With 10 processes writing simultaneously to the same file from different nodes, writes interleave unpredictably and output is corrupted or mixed. The fix is to use `%J_%I`. C) is false — LSF never auto-appends the index. D) is false — all elements write output, causing the collision.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets explicit index lists, per-core memory, span[hosts=1], element-level dependencies, LSB_DJOB_NUMPROC, rerunning failed elements, notification flags, OR dependencies, fan-out/fan-in output naming, and array size limits.
+
+---
+
+## Q23 — Explicit Index List in Job Array
+
+> **Week reference:** Week 11
+
+**Mental Model:** LSF allows a comma-separated list of specific indices instead of a range. This is useful when you need to rerun only a handful of failed elements, or when your dataset has gaps. The indices do not have to be contiguous or sorted.
+
+A developer wants to submit a job array that runs only for indices 2, 29, 71, 73, and 127 — matching specific files in a dataset. Which `#BSUB` directive achieves this?
+
+- A) `#BSUB -J "proc[2-127:25]"`
+- B) `#BSUB -J "proc[2,29,71,73,127]"`
+- C) `#BSUB -J "proc[2..127]" -subset 2,29,71,73,127`
+- D) `#BSUB -J "proc[1-5]"` with a lookup table inside the script
+
+**Answer: B**
+
+- A) Incorrect — `[2-127:25]` is step syntax starting at 2 with step 25, giving indices 2, 27, 52, 77, 102, 127. These do not match the desired set; index 29, 71, and 73 are missing.
+- B) Correct — LSF supports an explicit comma-separated index list inside the brackets. `proc[2,29,71,73,127]` creates exactly 5 array elements with those specific `$LSB_JOBINDEX` values. This is the standard way to rerun a known set of failed elements.
+- C) Incorrect — `..` is not valid LSF range syntax, and `-subset` is not an LSF directive. This would cause a job submission error.
+- D) Incorrect — using `[1-5]` with an internal lookup table works but is a workaround that introduces extra complexity and still creates indices 1–5 rather than the semantically meaningful target indices. The direct syntax in B is the correct approach.
+
+---
+
+## Q24 — Per-Core Memory Calculation With rusage
+
+> **Week reference:** Week 11
+
+**Mental Model:** The `rusage[mem=X]` value in LSF is the memory **per slot (core)**, not the total job memory. If your job requests `#BSUB -n 4` and needs 100 GB total, you must request 25 GB per core. Setting the full amount per core would over-request 4× and waste resources or prevent scheduling.
+
+A job script contains `#BSUB -n 4` and the Python script it runs requires at least 100 GB of RAM in total. What value should replace `???` in `#BSUB -R "rusage[mem=???GB]"`?
+
+- A) 25GB — divide total memory by the number of requested cores
+- B) 100GB — always specify the total memory the job needs
+- C) 400GB — LSF divides by cores automatically so you must multiply up
+- D) 50GB — use half the total as a conservative estimate
+
+**Answer: A**
+
+- A) Correct — `rusage[mem=X]` is per core in LSF. With 4 cores requested, the per-core value is 100 GB ÷ 4 = 25 GB. LSF multiplies this by the core count when enforcing the allocation, so the total reserved memory is 100 GB as required.
+- B) Incorrect — specifying 100 GB per core on a 4-core job would request 400 GB total from the scheduler. This wastes three times as much memory as needed and may delay or prevent scheduling if nodes do not have 400 GB free.
+- C) Incorrect — LSF does not divide your value by the core count. What you specify is already the per-core amount. Providing 400 GB per core would request 1600 GB total, which is almost certainly unavailable on any node.
+- D) Incorrect — there is no "half as conservative" heuristic in LSF memory requests. Under-requesting memory risks the job being killed by the OOM killer when it exceeds the reserved amount.
+
+---
+
+## Q25 — span[hosts=1] Purpose in Job Scripts
+
+> **Week reference:** Week 11
+
+**Mental Model:** By default, LSF may spread a multi-core job across multiple nodes (e.g., 2 cores on node A and 2 cores on node B). `span[hosts=1]` forces all requested cores to be allocated on a single node. This is required for shared-memory parallelism (multiprocessing, threading) because processes on different nodes cannot share memory.
+
+A job script requests 8 cores with `#BSUB -n 8` and also includes `#BSUB -R "span[hosts=1]"`. What does the `span[hosts=1]` resource requirement do?
+
+- A) It limits the job to run on exactly 1 compute node total, ensuring all 8 cores are on the same physical machine.
+- B) It requests 1 dedicated GPU host in addition to the 8 CPU cores.
+- C) It restricts the job to a single rack of hosts to minimise network latency.
+- D) It submits one copy of the job to each available host simultaneously.
+
+**Answer: A**
+
+- A) Correct — `span[hosts=1]` is a placement constraint that forces LSF to allocate all `n` cores on a single node. This is essential for any shared-memory parallel program (Python multiprocessing, OpenMP, threading) because inter-node communication is not possible through shared memory.
+- B) Incorrect — `span[hosts=1]` has nothing to do with GPU allocation. GPU resources are requested separately via `rusage[ngpus_excl_p=N]` or similar directives depending on the cluster configuration.
+- C) Incorrect — LSF does not have a rack-level placement constraint expressed through `span[hosts=1]`. Rack-level affinity would require a different resource string if supported at all.
+- D) Incorrect — `span[hosts=1]` is a constraint that concentrates resources, not a fan-out directive. It reduces the host count to exactly 1, the opposite of distributing across many hosts.
+
+---
+
+## Q26 — Element-Level Dependency With done(array[*])
+
+> **Week reference:** Week 11
+
+**Mental Model:** `done(jobname[*])` is a special form that lets each element of a new array wait for the corresponding element of a previously submitted array. Element 1 of the new array waits for element 1 of the old array, element 2 waits for element 2, and so on. This enables element-wise pipelines without a single bottleneck reduce step.
+
+An array `stage1[1-5]` is already running. A new array `stage2[1-5]` is submitted where each element must wait only for its matching `stage1` element (element 2 waits for element 2, not all five). Which dependency directive achieves this?
+
+- A) `#BSUB -w "done(stage1)"`
+- B) `#BSUB -w "done(stage1[*])"`
+- C) `#BSUB -w "done(stage1[1-5])"`
+- D) `#BSUB -w "done(stage1) && started(stage2)"`
+
+**Answer: B**
+
+- A) Incorrect — `done(stage1)` without a subscript means every element of `stage2` waits for ALL elements of `stage1` to reach DONE before any `stage2` element can start. This is a fan-in, not a per-element dependency.
+- B) Correct — `done(stage1[*])` uses the `[*]` wildcard to express an element-wise dependency: each element of the new array waits for the correspondingly indexed element of `stage1`. This is the standard LSF syntax for element-level chaining.
+- C) Incorrect — `done(stage1[1-5])` is not valid LSF dependency syntax. Range subscripts inside dependency expressions are not supported; only `[*]` and explicit single indices like `[3]` are valid.
+- D) Incorrect — `started(stage2)` is not a valid LSF dependency keyword. Valid keywords are `done`, `ended`, `exit`, `started` is not supported in this context. The expression is syntactically invalid.
+
+---
+
+## Q27 — LSB_DJOB_NUMPROC for Correct Core Count
+
+> **Week reference:** Week 11
+
+**Mental Model:** `LSB_DJOB_NUMPROC` is the LSF environment variable that contains the number of CPU slots actually allocated to the job (matching `#BSUB -n`). Reading this at runtime instead of calling `os.cpu_count()` lets Python multiprocessing respect the LSF allocation regardless of the total hardware on the node.
+
+A job script requests 8 cores. To fix the `Pool()` oversubscription problem, which Python line correctly creates a pool with exactly the LSF-allocated core count?
+
+- A) `with Pool(processes=os.cpu_count()) as pool:`
+- B) `with Pool(processes=8) as pool:`
+- C) `with Pool(processes=int(os.environ["LSB_DJOB_NUMPROC"])) as pool:`
+- D) `with Pool(processes=int(os.environ["OMP_NUM_THREADS"])) as pool:`
+
+**Answer: C**
+
+- A) Incorrect — `os.cpu_count()` returns the total hardware logical CPUs on the node (e.g., 32), not the LSF-allocated count. This is the original oversubscription problem.
+- B) Incorrect — hard-coding 8 works for this specific job but is fragile: if someone changes `#BSUB -n` without updating the Python script, the mismatch silently returns. It is not portable across different job submissions.
+- C) Correct — `LSB_DJOB_NUMPROC` is set by LSF to the number of allocated CPU slots, matching the `#BSUB -n` value. Reading it dynamically ensures the pool size always equals the actual allocation, regardless of what hardware is under the job or what `#BSUB -n` is set to.
+- D) Incorrect — `OMP_NUM_THREADS` controls OpenMP thread count, not Python multiprocessing worker count. `Pool()` does not read `OMP_NUM_THREADS`. If `OMP_NUM_THREADS` is unset, this raises `KeyError`.
+
+---
+
+## Q28 — Rerunning a Single Failed Array Element
+
+> **Week reference:** Week 11
+
+**Mental Model:** A job array is one logical submission, but individual elements can be rerun by specifying the parent job ID with a subscript index: `bsub -J "name[k]" ... script.sh` does not work for rerunning; instead you resubmit with an explicit single-element array or use `bkill` + resubmit. The cleanest pattern is to submit a new single-element array with the exact failed index.
+
+A 100-element job array (`proc[1-100]`) finishes, but elements 7, 43, and 88 failed. What is the correct command to rerun only those three elements?
+
+- A) `brerun proc[7,43,88]`
+- B) `bsub -J "proc[7,43,88]" proc.sh`
+- C) `bsub -restart proc 7 43 88`
+- D) `bjobs -rerun 7,43,88`
+
+**Answer: B**
+
+- A) Incorrect — `brerun` is not a valid LSF command. LSF does not have a built-in `brerun` utility; failed elements must be resubmitted as a new job.
+- B) Correct — submitting a new job array with the explicit index list `[7,43,88]` creates a new 3-element array using exactly those `$LSB_JOBINDEX` values. The script receives the same indices as before and can reprocess the same data. This is the standard LSF approach to rerunning specific failed elements.
+- C) Incorrect — `bsub -restart` is not a valid LSF option. There is no restart mechanism built into LSF for rerunning specific failed elements of a previously submitted array.
+- D) Incorrect — `bjobs` is a query command for viewing job status; it does not accept a `-rerun` flag. `bjobs` cannot submit, restart, or requeue jobs.
+
+---
+
+## Q29 — -B vs -N Notification Flags
+
+> **Week reference:** Week 11
+
+**Mental Model:** LSF has two separate email notification flags: `-B` sends an email when the job transitions from PEND to RUN (job starts), and `-N` sends an email when the job ends. Both can be combined. On large job arrays, both flags multiply by the element count, potentially causing hundreds of emails.
+
+A job array `#BSUB -J "run[1-10]"` includes both `#BSUB -B` and `#BSUB -N`. How many emails are sent in total when all 10 elements start and finish successfully?
+
+- A) 2 emails total — one start email and one end email for the whole array
+- B) 10 emails — one end email per element (only `-N` sends email; `-B` is for start events but counts once per array)
+- C) 20 emails — `-B` sends 10 start emails and `-N` sends 10 end emails, one per element
+- D) 1 email — LSF batches all notifications into a single summary when both flags are used together
+
+**Answer: C**
+
+- A) Incorrect — like `-N`, the `-B` flag sends notifications per array element, not per array. There is no array-level aggregation for either flag.
+- B) Incorrect — `-B` does send per-element start notifications exactly like `-N` sends per-element end notifications. Both flags operate at the element level for job arrays.
+- C) Correct — `-B` sends one email per element when it starts (10 emails) and `-N` sends one email per element when it ends (10 emails), totalling 20 emails. This is why both flags should be avoided on large arrays.
+- D) Incorrect — there is no batching or summary mode when both `-B` and `-N` are used together. They operate independently and each fires once per element event.
+
+---
+
+## Q30 — OR Dependency With Two Named Jobs
+
+> **Week reference:** Week 11
+
+**Mental Model:** LSF dependency expressions support `||` (OR) in addition to `&&` (AND). An OR dependency starts the job as soon as either condition is satisfied. This is useful for "whichever data source finishes first" patterns, or for resilient pipelines where the downstream job can tolerate incomplete upstream data.
+
+A reporting job should start as soon as EITHER a `modelA` job OR a `modelB` job reaches DONE (the report can work with either model's output). Which dependency directive is correct?
+
+- A) `#BSUB -w "done(modelA) && done(modelB)"`
+- B) `#BSUB -w "done(modelA,modelB)"`
+- C) `#BSUB -w "done(modelA) || done(modelB)"`
+- D) `#BSUB -w "ended(modelA) || ended(modelB)"`
+
+**Answer: C**
+
+- A) Incorrect — `&&` (AND) requires both `modelA` AND `modelB` to reach DONE before the report starts. This is the opposite of the desired "either one" behaviour.
+- B) Incorrect — a comma inside `done()` is not valid LSF dependency syntax. This would cause a submission error or be misinterpreted; the correct multi-job AND form uses `&&`.
+- C) Correct — `||` (OR) means the condition is satisfied as soon as either `done(modelA)` or `done(modelB)` becomes true. The reporting job starts as soon as the first model completes successfully.
+- D) Incorrect — `ended()` is satisfied by any terminal state including EXIT (failure). If either model job fails, `ended(modelA) || ended(modelB)` would trigger the report even though neither model produced valid output. The question requires success (`done()`), not just termination.
+
+---
+
+## Q31 — Fan-Out Fan-In: Naming Output Files Per Element
+
+> **Week reference:** Week 11
+
+**Mental Model:** In a fan-out/fan-in pattern, each array element writes a partial result to its own file, then a single reduce job loads all partial files. The naming convention must be deterministic and based on the array index so the reduce job can discover all partial files with a glob pattern like `subhist_*.npy`.
+
+In a fan-out workflow, each element of a 203-element array processes one folder and saves a partial histogram. Which Python line correctly saves the result so that the reduce job can later load all files with `glob("subhist_*.npy")`?
+
+- A) `np.save("subhist.npy", hist)`
+- B) `np.save(f"subhist_{idx}.npy", hist)` where `idx = int(sys.argv[1]) - 1`
+- C) `np.save(f"subhist_{os.environ['LSB_JOBINDEX']}.npy", hist)`
+- D) Both B and C are correct; either naming convention works equally well
+
+**Answer: D**
+
+- A) Incorrect — a fixed filename means all 203 elements overwrite each other's output. Only the last element's histogram would survive; the reduce job would load a single file instead of 203.
+- B) Correct on its own — `idx` here is the 0-based Python index (after subtracting 1), giving filenames `subhist_0.npy` through `subhist_202.npy`. These are all found by `glob("subhist_*.npy")`.
+- C) Correct on its own — using `$LSB_JOBINDEX` directly (1-based) gives `subhist_1.npy` through `subhist_203.npy`. These are also found by `glob("subhist_*.npy")`. The starting index differs from B but both sets are unique and complete.
+- D) Correct — both B and C produce 203 uniquely named files that `glob("subhist_*.npy")` will find. The reduce job sums all loaded arrays regardless of the numbering scheme. Either convention is valid; consistency within the project is what matters.
+
+---
+
+## Q32 — Maximum Array Size Limit Consequence
+
+> **Week reference:** Week 11
+
+**Mental Model:** LSF clusters impose a maximum array size (e.g., 1000 elements on some clusters). Attempting to submit an array larger than the limit causes the submission to fail immediately with an error, not a silent reduction. The fix is to either split the work into multiple smaller arrays submitted sequentially, or use the `%N` concurrency limit to throttle a large array if the cluster permits it.
+
+A cluster has a maximum job array size of 1000 elements. A user tries to submit `#BSUB -J "sim[1-5000]"`. What happens?
+
+- A) LSF silently truncates the array to 1000 elements and runs those.
+- B) The submission fails immediately with an error; the job is not queued at all.
+- C) LSF queues all 5000 elements but runs only 1000 concurrently until the others are promoted.
+- D) The array is split automatically into 5 batches of 1000 and submitted as separate jobs.
+
+**Answer: B**
+
+- A) Incorrect — LSF does not silently truncate arrays. Silent data loss would be catastrophic in scientific workflows. The scheduler rejects the submission outright so the user knows to fix the script.
+- B) Correct — exceeding the cluster's maximum array size causes an immediate submission error (e.g., "array size exceeds maximum"). The job is not queued, not partially queued, and not silently modified. The user must split the work manually or use the `%N` concurrency throttle if a larger array is permitted with throttling.
+- C) Incorrect — the `%N` concurrency throttle limits simultaneous running elements, but only after a valid array is successfully submitted. It does not allow bypassing the maximum array size limit during submission.
+- D) Incorrect — LSF has no automatic batch-splitting feature. The user must manually submit multiple smaller arrays or write a wrapper script to chain them with dependencies.
 
 ---

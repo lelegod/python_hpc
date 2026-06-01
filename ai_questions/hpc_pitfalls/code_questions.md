@@ -23,6 +23,17 @@
 - [Q16 — Output File Location Pitfall](#q16--output-file-location-pitfall)
 - [Q17 — Predicting Run Time from Thread Count](#q17--predicting-run-time-from-thread-count)
 - [Q18 — Fixing All Pitfalls in a Combined Script](#q18--fixing-all-pitfalls-in-a-combined-script)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q19 — rusage Per-Core Trap](#q19--rusage-per-core-trap)
+- [Q20 — Pure Python ThreadPool Speedup Prediction](#q20--pure-python-threadpool-speedup-prediction)
+- [Q21 — time.time vs time.perf_counter Output](#q21--timetime-vs-timeperf_counter-output)
+- [Q22 — ProcessPool with Large Arrays](#q22--processpool-with-large-arrays)
+- [Q23 — What os.environ.get Sees When export Is Missing](#q23--what-osenvironget-sees-when-export-is-missing)
+- [Q24 — Wall Time Kill: What Output Remains](#q24--wall-time-kill-what-output-remains)
+- [Q25 — Counting Active Threads from Config Variables](#q25--counting-active-threads-from-config-variables)
+- [Q26 — OMP=0 Undefined Behaviour vs OMP=1](#q26--omp0-undefined-behaviour-vs-omp1)
+- [Q27 — LSB_JOBID in Shell Redirect vs %J in BSUB](#q27--lsb_jobid-in-shell-redirect-vs-j-in-bsub)
+- [Q28 — Amdahl Calculation from Timing Output](#q28--amdahl-calculation-from-timing-output)
 
 ---
 
@@ -714,5 +725,427 @@ python -u matmul_and_print.py > /work3/02613/out_${LSB_JOBID}.txt
 - B) Correct — Fixes all four pitfalls from the original: (1) `export` on all three thread vars so Python inherits them; (2) `rusage[mem=4GB]` to safely cover two 800 MB arrays plus Python overhead; (3) `span[hosts=1]` to keep all cores on one node; (4) shell redirection to `/work3/` scratch space with `-u` to bypass LSF's I/O channel for the 80,000 print statements.
 - C) Incorrect — Exports only `OMP_NUM_THREADS` (not MKL or OpenBLAS), and is missing `span[hosts=1]`. Memory is correct and redirection is correct, but thread coverage and node placement are incomplete.
 - D) Incorrect — `OMP_NUM_THREADS` and `MKL_NUM_THREADS` are assigned without `export`, so Python still cannot see them — the core pitfall from the original script is unchanged.
+
+---
+
+## Set 3 — Extended Practice
+
+---
+
+## Q19 — rusage Per-Core Trap
+
+```bash
+#!/bin/bash
+#BSUB -J simulate
+#BSUB -q hpc
+#BSUB -W 10:00
+#BSUB -R "rusage[mem=100GB]"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -o sim_%J.out
+#BSUB -e sim_%J.err
+
+python simulate.py initconds.npy
+```
+
+The `simulate.py` script needs at least 100 GB of RAM in total. How much total memory does this job script actually reserve, and is it correct?
+
+**A)** 100 GB total — the script is correct
+
+**B)** 25 GB total — the script under-requests by 4×, and the job will be OOM-killed
+
+**C)** 400 GB total — the script over-requests by 4× because `rusage[mem=X]` is per core
+
+**D)** 400 GB total — the script is correct because LSF divides the memory evenly among cores
+
+**Answer: C**
+
+- A) Incorrect — `rusage[mem=100GB]` is not a total-job specification; it is a per-slot (per-core) specification on LSF. With 4 cores, LSF reserves 4 × 100 GB = 400 GB.
+- B) Incorrect — The memory reservation is too large (400 GB), not too small. The program would not be OOM-killed; instead, the job would wait a very long time in the queue while LSF searches for a node with 400 GB free.
+- C) Correct — This is the exact scenario from the F25 exam Q1. On DTU's LSF cluster, `rusage[mem=X]` is a per-core specification. Four cores × 100 GB = 400 GB reserved. The correct directive to reserve exactly 100 GB total across 4 cores is `rusage[mem=25GB]` (100 GB / 4 = 25 GB per core).
+- D) Incorrect — LSF does not divide the requested memory among cores; it multiplies it. Each core is independently allocated the requested `rusage` amount.
+
+---
+
+## Q20 — Pure Python ThreadPool Speedup Prediction
+
+```python
+from multiprocessing.pool import ThreadPool
+from time import perf_counter
+
+def sum_range(n):
+    s = 0
+    for i in range(n):
+        s += i
+    return s
+
+numbers = list(range(1, 100_001))  # [1, 2, ..., 100000]
+
+t0 = perf_counter()
+with ThreadPool(8) as p:
+    results = p.map(sum_range, numbers)
+t1 = perf_counter()
+print(f"{t1 - t0:.2f}s")
+```
+
+This job runs on a node with 8 cores. Compared to a serial `for` loop calling `sum_range` over all 100,000 numbers, what speedup does the `ThreadPool(8)` version achieve?
+
+**A)** Approximately 8× — each thread handles 12,500 numbers independently
+
+**B)** Approximately 1× or less — `sum_range` is pure Python and holds the GIL, so all 8 threads serialize at the interpreter level
+
+**C)** Approximately 4× — the GIL allows two threads to overlap at a time
+
+**D)** Approximately 64× — ThreadPool combines 8 threads with Python's internal BLAS optimisation
+
+**Answer: B**
+
+- A) Incorrect — `sum_range` is pure Python bytecode (a for loop with integer addition). The GIL means only one thread executes Python bytecode at any instant. With 8 threads all trying to run Python, the effective execution is largely serial plus the overhead of thread creation, context switching, and GIL acquisition/release. Real performance is typically equal to or worse than single-threaded.
+- B) Correct — `sum_range` never releases the GIL: it only does Python integer arithmetic and loop iteration, both of which hold the GIL throughout. A `ThreadPool` therefore provides no meaningful parallelism here. For such workloads, `multiprocessing.pool.Pool` (process pool) is needed to bypass the GIL entirely.
+- C) Incorrect — The GIL is a mutual exclusion lock; at most one thread holds it and executes Python bytecode at any given time. There is no "two threads overlap" mode for pure Python.
+- D) Incorrect — `sum_range` does not use NumPy or BLAS at all. There is no BLAS optimisation involved.
+
+---
+
+## Q21 — time.time vs time.perf_counter Output
+
+```python
+import time
+
+A_time   = time.time()
+B_time   = time.perf_counter()
+C_time   = time.process_time()
+D_time   = time.monotonic()
+
+# ... run a 2-second computation ...
+
+print(time.time()         - A_time)   # Line A
+print(time.perf_counter() - B_time)   # Line B
+print(time.process_time() - C_time)   # Line C
+print(time.monotonic()    - D_time)   # Line D
+```
+
+The computation runs for approximately 2 seconds of wall time and uses 100% of one CPU core throughout. Which line is most suitable for use in the Week 13 HPC benchmarks, and approximately what value does it print?
+
+**A)** Line A — `time.time()` is the most accurate; prints ~2.0
+
+**B)** Line B — `time.perf_counter()` is the highest-resolution monotonic clock for benchmarking; prints ~2.0
+
+**C)** Line C — `time.process_time()` measures true CPU usage; prints ~2.0, and is the right choice for HPC
+
+**D)** Line D — `time.monotonic()` is the only clock suitable for multi-threaded work; prints ~2.0
+
+**Answer: B**
+
+- A) Incorrect — `time.time()` returns the system clock which can be adjusted by NTP, potentially jumping backward. While it would print ~2.0 in this case, it is not the recommended benchmarking tool. The Week 13 `matmul.py` specifically imports `perf_counter`, not `time`.
+- B) Correct — `time.perf_counter()` is the Python standard for benchmarking. It is monotonic, has the highest platform resolution (often nanoseconds), and cannot be adjusted by the system clock. For a 2-second single-threaded computation it prints ~2.0. This is exactly what `from time import perf_counter as time` in `matmul.py` uses.
+- C) Incorrect — `time.process_time()` excludes time when the process is not scheduled (e.g., when the OS runs other processes). For a 2-second wall-time computation it would also print ~2.0 if the core was 100% busy, but it would underreport if there was any scheduling preemption or sleep. More importantly, it is not the right tool for measuring what users actually experience (wall-clock latency).
+- D) Incorrect — `time.monotonic()` is suitable for measuring elapsed time and cannot go backward, but it has lower resolution than `perf_counter` on many platforms. It is not the standard choice for HPC benchmarks. It would also print ~2.0 here but is not preferred.
+
+---
+
+## Q22 — ProcessPool with Large Arrays
+
+```python
+from multiprocessing.pool import Pool
+import numpy as np
+from time import perf_counter
+
+def multiply(args):
+    a, b = args
+    return np.matmul(a, b)
+
+A = np.random.rand(100, 1000, 1000)   # 100 matrices, each 8 MB
+B = np.random.rand(100, 1000, 1000)
+
+t0 = perf_counter()
+with Pool(8) as p:
+    results = p.map(multiply, zip(A, B))
+C = np.concatenate(results)
+t1 = perf_counter()
+print(t1 - t0)
+```
+
+This uses `Pool` (process pool) instead of `ThreadPool`. What is the primary performance concern compared to the `ThreadPool` version?
+
+**A)** `Pool` cannot concatenate results because each worker returns a different array type
+
+**B)** Each 8 MB matrix slice must be pickled and sent through an IPC pipe to a worker process, and the result must be pickled back — adding ~1.6 GB of serialisation overhead for 100 pairs
+
+**C)** `Pool` workers do not inherit `OMP_NUM_THREADS`, so BLAS uses all available cores in each worker, causing oversubscription
+
+**D)** `Pool(8)` on an 8-core node always produces the same run time as `ThreadPool(8)` because both use 8 parallel execution units
+
+**Answer: B**
+
+- A) Incorrect — `Pool` workers can return any picklable object, including NumPy arrays. `np.concatenate` works on a list of arrays regardless of how they were produced.
+- B) Correct — Each 1000×1000 float64 matrix is 8 MB. `Pool` must pickle the input arrays (A[i] and B[i]) in the parent and send them through an OS pipe to the worker, then pickle the 8 MB result back. For 100 pairs: 100 × 2 × 8 MB in + 100 × 8 MB out = ~2.4 GB of data through IPC. `ThreadPool` workers share the same address space, so `A[i]` is simply a pointer view with zero copying. This pickle overhead is why `ThreadPool` is strongly preferred for NumPy parallelism.
+- C) Incorrect — `Pool` workers inherit the parent's exported environment, including `OMP_NUM_THREADS`. BLAS threading is controlled correctly in each worker.
+- D) Incorrect — `Pool` and `ThreadPool` have fundamentally different communication mechanisms. `Pool` has IPC serialisation overhead; `ThreadPool` does not. Their run times differ significantly for large-array workloads.
+
+---
+
+## Q23 — What os.environ.get Sees When export Is Missing
+
+```bash
+#!/bin/bash
+#BSUB -n 8
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=4GB]"
+
+OMP_NUM_THREADS=8
+MKL_NUM_THREADS=8
+OPENBLAS_NUM_THREADS=8
+
+python - <<'EOF'
+import os
+print("OMP:", os.environ.get("OMP_NUM_THREADS", "NOT SET"))
+print("MKL:", os.environ.get("MKL_NUM_THREADS", "NOT SET"))
+print("OBL:", os.environ.get("OPENBLAS_NUM_THREADS", "NOT SET"))
+EOF
+```
+
+What does this script print?
+
+**A)**
+```
+OMP: 8
+MKL: 8
+OBL: 8
+```
+
+**B)**
+```
+OMP: NOT SET
+MKL: NOT SET
+OBL: NOT SET
+```
+
+**C)**
+```
+OMP: 8
+MKL: NOT SET
+OBL: NOT SET
+```
+
+**D)**
+```
+OMP: NOT SET
+MKL: 8
+OBL: NOT SET
+```
+
+**Answer: B**
+
+- A) Incorrect — The variables are assigned in the shell but not exported. Python's `os.environ` reflects the process environment inherited at launch, which only includes *exported* variables. Without `export`, none of the three variables reach the Python process.
+- B) Correct — `OMP_NUM_THREADS=8` (without `export`) sets a local shell variable. When the shell forks to run Python (even via the heredoc `python - <<'EOF'`), the child inherits only the exported environment. Since none of the thread variables were exported, `os.environ.get(...)` returns the default `"NOT SET"` for all three. This directly demonstrates the Week 13 core pitfall.
+- C) Incorrect — There is no mechanism by which `OMP_NUM_THREADS` would be inherited but not `MKL_NUM_THREADS`. All three were assigned identically (no export), so all three are equally invisible to Python.
+- D) Incorrect — Same reasoning as C: all three variables were set without `export` in the same fashion; none are inherited.
+
+---
+
+## Q24 — Wall Time Kill: What Output Remains
+
+```bash
+#!/bin/bash
+#BSUB -J crunch
+#BSUB -q hpc
+#BSUB -n 1
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -W 00:02
+#BSUB -o crunch_%J.out
+#BSUB -e crunch_%J.err
+
+python -u long_job.py
+```
+
+`long_job.py` runs a loop that writes progress lines and takes 5 minutes to complete:
+
+```python
+import time
+for i in range(300):        # one iteration per second
+    time.sleep(1)
+    print(f"Step {i+1}/300 done")
+```
+
+After the job finishes (or is terminated), what does `crunch_%J.out` contain?
+
+**A)** All 300 lines — LSF buffers output and writes it all at job end regardless of the `-W` limit
+
+**B)** Nothing — LSF discards buffered output when a job is killed
+
+**C)** Lines for steps 1 through approximately 120, followed by the LSF resource summary showing the job was killed
+
+**D)** Lines for steps 1 through approximately 120; the file ends mid-job because LSF killed the process at the 2-minute wall time limit
+
+**Answer: D**
+
+- A) Incorrect — The job is killed at the 2-minute wall time limit. Only the output produced before the kill signal reaches the output file. There is no post-kill buffering.
+- B) Incorrect — Output already written to the file before the kill signal is preserved. LSF does not retroactively erase completed output lines.
+- C) Incorrect — The LSF resource summary appears at the end of the `-o` file when a job *completes normally*. A job killed by the wall time limit may receive a brief LSF notice, but not a full resource summary in the same format as a successful completion.
+- D) Correct — The job runs for 2 minutes (120 seconds), printing one line per second. At the 2-minute mark, LSF sends SIGKILL. Because `-u` (unbuffered output) is used, each `print()` was flushed immediately to the LSF `-o` channel. Approximately 120 lines are preserved in the output file. The file then ends abruptly — no "Step 121" onward, and no clean resource summary.
+
+---
+
+## Q25 — Counting Active Threads from Config Variables
+
+```bash
+export OMP_NUM_THREADS=4
+export MKL_NUM_THREADS=4
+export OPENBLAS_NUM_THREADS=4
+
+python - <<'EOF'
+import numpy as np
+from multiprocessing.pool import ThreadPool
+
+A = np.random.rand(50, 500, 500)
+B = np.random.rand(50, 500, 500)
+
+with ThreadPool(4) as p:
+    C = np.concatenate(p.starmap(np.matmul, zip(A, B)))
+EOF
+```
+
+This job runs on a node with 8 allocated cores (`#BSUB -n 8`). How many active threads are running at peak during the `ThreadPool` execution, and is the job oversubscribed relative to allocated cores?
+
+**A)** 4 threads total — the ThreadPool uses 4 workers and each runs single-threaded NumPy
+
+**B)** 8 threads total — 4 pool threads + 4 BLAS threads shared across the pool; matches the 8 allocated cores exactly
+
+**C)** 16 threads total — each of the 4 pool threads spawns 4 BLAS threads; 16 > 8 cores, so the job is oversubscribed 2×
+
+**D)** 4 threads total — NumPy detects the ThreadPool context and automatically limits BLAS to 1 thread per call
+
+**Answer: C**
+
+- A) Incorrect — `OMP_NUM_THREADS=4` means *each* BLAS call spawns 4 threads internally. With 4 pool workers each making a `np.matmul` call simultaneously, the total is 4 × 4 = 16 threads.
+- B) Incorrect — BLAS threads are not shared across pool workers; each pool worker independently spawns its own set of BLAS threads. 4 pool threads × 4 BLAS threads each = 16 total, not 8.
+- C) Correct — This is the oversubscription pattern from Week 13 at a smaller scale. Each of the 4 `ThreadPool` workers calls `np.matmul`, which spawns `OMP_NUM_THREADS=4` BLAS threads internally. At peak, 4 × 4 = 16 threads are active on 8 cores — 2× oversubscribed. The fix is to set `OMP_NUM_THREADS=1` and keep `ThreadPool(8)`, or use `ThreadPool(1)` and `OMP_NUM_THREADS=8`, or use `ThreadPool(4)` with `OMP_NUM_THREADS=2` (4 × 2 = 8).
+- D) Incorrect — NumPy has no detection logic for external ThreadPool contexts. It always spawns the number of BLAS threads specified by the environment variable, regardless of whether a ThreadPool is active.
+
+---
+
+## Q26 — OMP=0 Undefined Behaviour vs OMP=1
+
+```bash
+# Script A
+export OMP_NUM_THREADS=0
+python matmul.py
+
+# Script B
+export OMP_NUM_THREADS=1
+python matmul.py
+```
+
+A developer wants to ensure NumPy runs single-threaded. They are deciding between `OMP_NUM_THREADS=0` and `OMP_NUM_THREADS=1`. Which is correct, and what does `OMP_NUM_THREADS=0` actually do?
+
+**A)** Both are equivalent — setting `OMP_NUM_THREADS` to 0 or 1 both produce single-threaded NumPy execution
+
+**B)** `OMP_NUM_THREADS=1` is correct and produces single-threaded execution; `OMP_NUM_THREADS=0` is undefined behaviour and may cause a crash, run with the default thread count, or behave unpredictably depending on the OpenMP implementation
+
+**C)** `OMP_NUM_THREADS=0` disables OpenMP entirely and is the recommended way to force single-threaded execution
+
+**D)** `OMP_NUM_THREADS=0` means "use all available cores" in OpenMP's convention
+
+**Answer: B**
+
+- A) Incorrect — `0` and `1` have different semantics. `OMP_NUM_THREADS=1` explicitly requests 1 thread and is well-defined. `OMP_NUM_THREADS=0` is outside the valid positive-integer range; its behaviour is implementation-defined.
+- B) Correct — The OpenMP specification defines `OMP_NUM_THREADS` as a positive integer. Setting it to `0` is technically undefined behaviour. In practice, different OpenMP runtimes handle it differently: some fall back to the default (hardware thread count), some crash, and some silently treat it as 1. For reliable single-threaded execution, `OMP_NUM_THREADS=1` is the correct and portable choice.
+- C) Incorrect — There is no standard OpenMP or BLAS convention where `0` means "disable threading." The safe way to force single-threaded execution is `OMP_NUM_THREADS=1`.
+- D) Incorrect — "Use all available cores" is not an OpenMP convention for any value of `OMP_NUM_THREADS`. The default thread count (when the variable is unset or set to `0`) varies by implementation; it is often the hardware core count, but this is not guaranteed.
+
+---
+
+## Q27 — LSB_JOBID in Shell Redirect vs %J in BSUB
+
+```bash
+#!/bin/bash
+#BSUB -J myrun
+#BSUB -q hpc
+#BSUB -n 1
+#BSUB -R "rusage[mem=512MB]"
+#BSUB -W 00:10
+#BSUB -o output_%J.out
+
+python -u script.py > output_${LSB_JOBID}.txt
+```
+
+The job gets ID 12345. What are the names of the two output files created, and what does each contain?
+
+**A)** Only `output_12345.out` is created; the shell redirect overwrites it
+
+**B)** `output_12345.out` (LSF's output file, contains the LSF resource summary only) and `output_12345.txt` (shell-redirected stdout from `script.py`)
+
+**C)** `output_%J.out` (a file literally named with `%J`) and `output_12345.txt`
+
+**D)** `output_12345.out` containing all output from `script.py`, and `output_12345.txt` which is empty
+
+**Answer: B**
+
+- A) Incorrect — The shell redirect (`> output_${LSB_JOBID}.txt`) and the LSF `-o` flag write to *different files*. They do not interfere with each other.
+- B) Correct — `%J` is LSF's own substitution token, expanded at job submission time to the job ID (12345), so `-o output_%J.out` creates `output_12345.out`. This file receives the LSF resource summary (and any stdout not redirected by the shell). `$LSB_JOBID` is a shell environment variable set at runtime to the same job ID, so the shell redirect `> output_${LSB_JOBID}.txt` creates `output_12345.txt` and writes `script.py`'s stdout there. The key insight: `%J` is a LSF directive token, `$LSB_JOBID` is a shell variable — both resolve to the same number but in different contexts.
+- C) Incorrect — `%J` is expanded by LSF at submission time, not kept as a literal string. The file will be named `output_12345.out`, not `output_%J.out`.
+- D) Incorrect — The shell redirect captures stdout from `script.py` into the `.txt` file. The LSF `-o` file receives LSF's own output (resource summary and any stdout not captured by the redirect), not the full script output.
+
+---
+
+## Q28 — Amdahl Calculation from Timing Output
+
+```python
+# Serial baseline
+serial_time = 12.0   # seconds, 1 core
+
+# Parallel run on 3 cores
+parallel_time = 4.8  # seconds, 3 cores
+
+speedup = serial_time / parallel_time
+print(f"Speedup: {speedup:.1f}x")
+
+# Amdahl: 1/S(p) = (1 - F) + F/p  →  solve for F
+# Then max speedup = 1 / (1 - F)
+p = 3
+S = speedup
+F = p * (1 - 1/S) / (p - 1)
+max_speedup = 1 / (1 - F)
+print(f"Parallel fraction F: {F:.2f}")
+print(f"Theoretical max speedup: {max_speedup:.1f}x")
+```
+
+What does this code print?
+
+**A)**
+```
+Speedup: 2.5x
+Parallel fraction F: 0.90
+Theoretical max speedup: 10.0x
+```
+
+**B)**
+```
+Speedup: 2.5x
+Parallel fraction F: 0.75
+Theoretical max speedup: 4.0x
+```
+
+**C)**
+```
+Speedup: 3.0x
+Parallel fraction F: 1.00
+Theoretical max speedup: inf x
+```
+
+**D)**
+```
+Speedup: 2.5x
+Parallel fraction F: 0.80
+Theoretical max speedup: 5.0x
+```
+
+**Answer: A**
+
+- A) Correct — Step by step: `speedup = 12.0 / 4.8 = 2.5`. Then F = p × (1 - 1/S) / (p - 1) = 3 × (1 - 1/2.5) / (3 - 1) = 3 × (1 - 0.4) / 2 = 3 × 0.6 / 2 = 1.8 / 2 = 0.9. Maximum speedup = 1 / (1 - 0.9) = 1 / 0.1 = 10.0. This matches the F25 exam Q8 Amdahl calculation exactly.
+- B) Incorrect — F=0.75 would give S(3) = 1/(0.25 + 0.25) = 2.0×, not 2.5×.
+- C) Incorrect — F=1.0 would require `parallel_time = serial_time / p = 4.0s`, giving speedup=3.0. But 12.0/4.8=2.5, not 3.0.
+- D) Incorrect — F=0.80 gives S(3) = 1/(0.2 + 0.8/3) = 1/0.467 ≈ 2.14×, not 2.5×.
 
 ---

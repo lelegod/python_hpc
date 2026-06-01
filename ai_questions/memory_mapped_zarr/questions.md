@@ -30,6 +30,17 @@
 - [Q23 — zarr.open Default Mode](#q23-zarropen-default-mode)
 - [Q24 — zarr.open Mode 'w-' / 'x'](#q24-zarropen-mode-w-x)
 - [Q25 — zarr.open Mode Comparison: 'r+' vs 'a'](#q25-zarropen-mode-comparison-r-vs-a)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q26 — memmap Is a Subclass of ndarray](#q26--memmap-is-a-subclass-of-ndarray)
+- [Q27 — np.memmap offset Parameter](#q27--npmemmap-offset-parameter)
+- [Q28 — memmap Shape–File Size Mismatch](#q28--memmap-shapefile-size-mismatch)
+- [Q29 — Zarr DirectoryStore vs ZipStore](#q29--zarr-directorystore-vs-zipstore)
+- [Q30 — Zarr Default Compressor](#q30--zarr-default-compressor)
+- [Q31 — zarr.zeros vs zarr.open mode='w'](#q31--zarrzeros-vs-zarropen-modew)
+- [Q32 — SharedMemory Create vs Attach](#q32--sharedmemory-create-vs-attach)
+- [Q33 — Zarr vs HDF5 Key Difference](#q33--zarr-vs-hdf5-key-difference)
+- [Q34 — Zarr nchunks_initialized](#q34--zarr-nchunks_initialized)
+- [Q35 — Chunk Size and Compression Ratio](#q35--chunk-size-and-compression-ratio)
 
 ---
 
@@ -545,5 +556,244 @@ Which of the following correctly distinguishes `zarr.open(..., mode='r+')` from 
 - B) Correct — `'r+'` requires the store to already exist (analogous to POSIX `O_RDWR` without `O_CREAT`); it raises an error on a missing path. `'a'` adds `O_CREAT` semantics — it creates the store if absent, then opens it read-write.
 - C) Incorrect — `'r+'` does not create the store if absent; that is the key distinction from `'a'`.
 - D) Incorrect — both modes allow writing; the distinction is purely about whether the store must pre-exist.
+
+---
+
+## Set 3 — Extended Practice
+
+- [Q26 — memmap Is a Subclass of ndarray](#q26--memmap-is-a-subclass-of-ndarray)
+- [Q27 — np.memmap offset Parameter](#q27--npmemmap-offset-parameter)
+- [Q28 — memmap Shape–File Size Mismatch](#q28--memmap-shapefile-size-mismatch)
+- [Q29 — Zarr DirectoryStore vs ZipStore](#q29--zarr-directorystore-vs-zipstore)
+- [Q30 — Zarr Default Compressor](#q30--zarr-default-compressor)
+- [Q31 — zarr.zeros vs zarr.open mode='w'](#q31--zarrzeros-vs-zarropen-modew)
+- [Q32 — SharedMemory Create vs Attach](#q32--sharedmemory-create-vs-attach)
+- [Q33 — Zarr vs HDF5 Key Difference](#q33--zarr-vs-hdf5-key-difference)
+- [Q34 — Zarr nchunks_initialized](#q34--zarr-nchunks_initialized)
+- [Q35 — Chunk Size and Compression Ratio](#q35--chunk-size-and-compression-ratio)
+
+---
+
+## Q26 — memmap Is a Subclass of ndarray
+
+> **Week reference:** Week 8
+
+**Mental Model:** `numpy.memmap` inherits from `numpy.ndarray`. This means every ndarray operation — slicing, broadcasting, ufuncs, `isinstance` checks — works on a memmap as if it were a plain array. The only behavioural difference is the backing storage (file on disk instead of RAM heap).
+
+Which of the following statements about `numpy.memmap` is correct?
+
+- A) `numpy.memmap` is a completely separate class from `numpy.ndarray`; you must call `.toarray()` to use it with NumPy functions.
+- B) `numpy.memmap` is a subclass of `numpy.ndarray`; all ndarray operations work on it directly without conversion.
+- C) `numpy.memmap` is a Python wrapper around a file object; it has no NumPy dtype or shape attributes.
+- D) `numpy.memmap` inherits from `numpy.matrix`, so it supports only 2D arrays.
+
+**Answer: B**
+
+- A) Incorrect — no `.toarray()` method exists on memmap. Because memmap is an ndarray subclass, you can pass it directly to `np.sum`, `np.dot`, broadcasting expressions, and any function that accepts an ndarray. No conversion step is needed.
+- B) Correct — `numpy.memmap` is defined as `class memmap(ndarray)`. It overrides `__new__` to set up the file-backed memory mapping, but all ndarray methods (`reshape`, `dtype`, `shape`, ufuncs, slicing) are inherited and work exactly as on a normal array.
+- C) Incorrect — memmap has full NumPy dtype and shape attributes; these are set when the object is created and are standard ndarray attributes, not file-object attributes.
+- D) Incorrect — `numpy.matrix` is a different, deprecated class for 2D linear algebra. `numpy.memmap` inherits from `numpy.ndarray` and supports arrays of any shape (1D, 2D, 3D, etc.).
+
+---
+
+## Q27 — np.memmap offset Parameter
+
+> **Week reference:** Week 8
+
+**Mental Model:** The `offset` parameter of `np.memmap` specifies how many **bytes** from the start of the file to begin the mapping. It is expressed in bytes, not in elements. This allows you to skip a binary header or map only a sub-region of a file without reading the skipped bytes.
+
+A file contains a 4-byte integer header followed by a flat array of 1000 `float32` values. You want to map only the float32 data. Which call is correct?
+
+- A) `np.memmap('data.bin', dtype='float32', mode='r', offset=1, shape=(1000,))`
+- B) `np.memmap('data.bin', dtype='float32', mode='r', offset=4, shape=(1000,))`
+- C) `np.memmap('data.bin', dtype='float32', mode='r', offset=1000, shape=(1000,))`
+- D) `np.memmap('data.bin', dtype='float32', mode='r', shape=(1000,))` — offset defaults to the end of the header automatically.
+
+**Answer: B**
+
+- A) Incorrect — `offset=1` skips only 1 byte, placing the float32 mapping at byte 1 of the file. Since the header is 4 bytes, the mapping would overlap with bytes 1–3 of the header and misalign the float32 data.
+- B) Correct — the header occupies the first 4 bytes (one 4-byte integer). Setting `offset=4` tells NumPy to start the mapping at byte 4, which is exactly where the float32 array begins. All 1000 × 4 = 4000 bytes of float32 data are then correctly mapped.
+- C) Incorrect — `offset=1000` skips 1000 bytes, which would place the start of the mapping inside the float32 array rather than at its beginning. The offset is in bytes, not in element count.
+- D) Incorrect — `offset` defaults to `0` (the beginning of the file), not to any auto-detected header size. NumPy has no mechanism to detect or skip binary headers automatically; the caller must always specify the byte offset explicitly.
+
+---
+
+## Q28 — memmap Shape–File Size Mismatch
+
+> **Week reference:** Week 8
+
+**Mental Model:** When opening a file with `mode='r'` or `mode='r+'`, NumPy verifies that `shape × dtype.itemsize` equals the file size (minus any offset). If the declared shape implies more bytes than the file contains, NumPy raises a `ValueError` immediately at open time.
+
+A file `small.raw` contains exactly 100 bytes. You attempt:
+```python
+m = np.memmap('small.raw', dtype='float64', mode='r', shape=(100,))
+```
+`float64` uses 8 bytes per element. What happens?
+
+- A) The mapping succeeds; the extra bytes beyond the file end are filled with zeros.
+- B) A `ValueError` is raised because the requested mapping (100 × 8 = 800 bytes) exceeds the file size (100 bytes).
+- C) The mapping succeeds but reading beyond index 12 returns garbage values.
+- D) NumPy silently truncates `shape` to `(12,)` to fit the file.
+
+**Answer: B**
+
+- A) Incorrect — `np.memmap` does not extend a file in read modes. Extending a file with zero-fill only happens in `'w+'` mode, which creates or truncates the file. In `'r'` mode, the file is immutable and the OS cannot map beyond the file boundary.
+- B) Correct — NumPy checks that `offset + shape[0] * itemsize <= file_size` when opening in `'r'` or `'r+'` mode. Here `0 + 100 * 8 = 800 > 100`, so a `ValueError` is raised with a message about the file being too small for the specified shape and dtype.
+- C) Incorrect — there is no silent partial mapping; reading beyond the file boundary would cause a bus error (SIGBUS) at the OS level if somehow the mapping were created. NumPy prevents this by checking the size upfront.
+- D) Incorrect — NumPy never silently resizes the shape to fit the file. It raises an error and leaves the caller to fix the mismatch explicitly.
+
+---
+
+## Q29 — Zarr DirectoryStore vs ZipStore
+
+> **Week reference:** Week 8
+
+**Mental Model:** Zarr's default store is `DirectoryStore`: each chunk is a separate file on the filesystem, and the array metadata is `.zarray` / `.zattrs` JSON files. `ZipStore` packs all chunks into a single ZIP archive. The choice affects portability (single file vs many files), random write performance, and compatibility with cluster filesystems.
+
+Which statement correctly distinguishes `zarr.DirectoryStore` from `zarr.ZipStore`?
+
+- A) `DirectoryStore` compresses each chunk; `ZipStore` stores chunks uncompressed.
+- B) `DirectoryStore` stores each chunk as a separate file on disk; `ZipStore` packs all chunks and metadata into a single ZIP file.
+- C) `ZipStore` supports parallel chunk writes from multiple processes; `DirectoryStore` does not.
+- D) `DirectoryStore` can only store 1D arrays; `ZipStore` supports arbitrary dimensionality.
+
+**Answer: B**
+
+- A) Incorrect — compression in Zarr is applied per chunk regardless of store type. Both `DirectoryStore` and `ZipStore` compress chunks using the configured compressor (e.g., Blosc). The store type controls how compressed bytes are persisted, not whether compression occurs.
+- B) Correct — in `DirectoryStore`, each chunk is a file named by its chunk index (e.g., `0.0`, `1.2`) inside the array directory, and metadata is JSON files (`.zarray`, `.zattrs`). In `ZipStore`, all of these are entries inside a single `.zip` archive, making the whole array a single portable file. The trade-off is that `ZipStore` does not support parallel writes well because ZIP does not support concurrent random writes.
+- C) Incorrect — it is the reverse: `DirectoryStore` supports safe parallel writes to distinct chunks (each chunk is an independent file). `ZipStore` is generally not safe for parallel writes because the ZIP format requires sequential appending or rebuilding the central directory.
+- D) Incorrect — both store types support Zarr arrays of any shape and dimensionality. The store is an abstraction over key-value storage and is agnostic to array dimensions.
+
+---
+
+## Q30 — Zarr Default Compressor
+
+> **Week reference:** Week 8
+
+**Mental Model:** Zarr applies compression independently to each chunk. The default compressor (when none is specified) is Blosc with the LZ4 codec. Compression happens transparently: data is compressed before writing to the store and decompressed after reading. This is why larger Zarr chunks generally compress better — more data per chunk means more redundancy for the compressor to exploit.
+
+You create `z = zarr.zeros((1000, 1000), chunks=(100, 100), dtype='float32')` without specifying a compressor. Which statement is correct?
+
+- A) No compression is applied; Zarr only compresses when `compressor=zarr.Blosc()` is passed explicitly.
+- B) Each chunk is compressed with Blosc (default) before being written to the store, and decompressed transparently on read.
+- C) The entire array is compressed as a single block after all chunks are written.
+- D) Zarr uses gzip compression by default, not Blosc.
+
+**Answer: B**
+
+- A) Incorrect — Zarr applies Blosc compression by default even when no compressor argument is provided. To disable compression you must explicitly pass `compressor=None`.
+- B) Correct — Zarr's default compressor is `numcodecs.Blosc(cname='lz4', clevel=5, shuffle=Blosc.SHUFFLE)`. Every chunk is compressed individually with Blosc before being stored, and decompressed when read back. This is transparent to the user — array indexing works identically whether compression is on or off.
+- C) Incorrect — compression in Zarr is always per-chunk, never per-array. This per-chunk independence is what makes parallel reads and writes safe and efficient.
+- D) Incorrect — gzip is an available compressor option but is not the default. Blosc (specifically with LZ4) is the default because it is much faster than gzip while achieving comparable compression ratios for numerical data.
+
+---
+
+## Q31 — zarr.zeros vs zarr.open mode='w'
+
+> **Week reference:** Week 8
+
+**Mental Model:** `zarr.zeros(shape, chunks, dtype, store)` is a convenience function that creates a new array filled with zeros, equivalent to `zarr.open(store, mode='w', shape=shape, chunks=chunks, dtype=dtype)`. Both overwrite any existing data at the store path. The difference is ergonomic: `zarr.zeros` is shorter when you specifically want a zero-initialised array.
+
+A colleague writes `z = zarr.zeros((500, 500), chunks=(50, 50), dtype='int32', store='grid.zarr')`. Which of the following is an equivalent one-liner using `zarr.open`?
+
+- A) `z = zarr.open('grid.zarr', mode='a', shape=(500,500), chunks=(50,50), dtype='int32')`
+- B) `z = zarr.open('grid.zarr', mode='r+', shape=(500,500), chunks=(50,50), dtype='int32')`
+- C) `z = zarr.open('grid.zarr', mode='w', shape=(500,500), chunks=(50,50), dtype='int32')`
+- D) `z = zarr.open('grid.zarr', mode='w-', shape=(500,500), chunks=(50,50), dtype='int32')`
+
+**Answer: C**
+
+- A) Incorrect — `mode='a'` opens or creates without truncating. If `grid.zarr` already contains data with a different shape, it is not reset; the old array is returned. `zarr.zeros` always creates a fresh zero-filled array.
+- B) Incorrect — `mode='r+'` requires the store to already exist and does not reset it to zeros. If the store is absent, it raises an error.
+- C) Correct — `mode='w'` creates the store if absent or truncates it if present, initialising the array to zeros. This is exactly what `zarr.zeros` does internally for a `DirectoryStore`-backed array.
+- D) Incorrect — `mode='w-'` (exclusive create) raises a `ContainsArrayError` if the store already exists, so it is not equivalent to `zarr.zeros` which silently overwrites an existing store.
+
+---
+
+## Q32 — SharedMemory Create vs Attach
+
+> **Week reference:** Week 8
+
+**Mental Model:** `multiprocessing.shared_memory.SharedMemory` has two distinct roles: the **creator** passes `create=True` and `size=N` to allocate a new shared block and gets back a name; **workers** pass `create=False` and the name to attach to the existing block. The creator must call `shm.unlink()` at the end to release the OS-level resource; workers only call `shm.close()` to detach.
+
+Process A creates a 1 KB shared memory block with `shm = SharedMemory(create=True, size=1024)`. Process B wants to attach to it. Which call is correct for Process B?
+
+- A) `shm_b = SharedMemory(create=True, size=1024)` — creates a second independent block.
+- B) `shm_b = SharedMemory(name=shm.name, create=False)` — attaches to the existing block by name.
+- C) `shm_b = SharedMemory(name=shm.name, create=True, size=1024)` — re-creates the block with the same name.
+- D) `shm_b = SharedMemory(size=1024)` — size alone is enough to find the block.
+
+**Answer: B**
+
+- A) Incorrect — `create=True` always allocates a new, independent block (with a new OS-assigned name). Process B would get its own separate 1 KB block with no shared data with Process A's block.
+- B) Correct — to attach to an existing shared memory block, pass `create=False` and the `name` attribute from the creator's `shm` object. The `name` is a unique OS-level identifier (e.g., `/psm_xxxxxxxx` on POSIX systems). Both processes then share the same physical memory pages.
+- C) Incorrect — passing `create=True` with an already-existing name raises a `FileExistsError` on most POSIX systems. You cannot re-create a named block that already exists.
+- D) Incorrect — `size` alone does not identify a specific shared memory block. Multiple blocks of the same size exist simultaneously on a busy system. The unique identifier is the `name`, not the size.
+
+---
+
+## Q33 — Zarr vs HDF5 Key Difference
+
+> **Week reference:** Week 8
+
+**Mental Model:** Both Zarr and HDF5 store chunked, compressed N-dimensional arrays, but their architecture differs fundamentally: HDF5 is a single monolithic binary file with an internal B-tree index; Zarr uses a flat key-value store where each chunk is a separate object. This makes Zarr naturally suited to cloud object stores (S3, GCS) and parallel writes, while HDF5 requires special parallel I/O libraries (HDF5 MPI) for safe concurrent access.
+
+Which statement best describes a key architectural difference between Zarr and HDF5?
+
+- A) HDF5 supports chunked storage; Zarr does not — Zarr stores the entire array as a single contiguous block.
+- B) Zarr stores each chunk as an independent object in a key-value store; HDF5 stores all chunks inside a single binary file with an internal index.
+- C) HDF5 supports compression per chunk; Zarr applies compression only to the entire array.
+- D) Zarr requires a database server process to be running; HDF5 is accessed directly as a file.
+
+**Answer: B**
+
+- A) Incorrect — Zarr is fundamentally a chunked storage format. Chunking is core to its design; there is no mode that stores an entire array as a single block.
+- B) Correct — HDF5 is a single file containing a hierarchical namespace and all data blocks managed by an internal B-tree. Zarr externalises chunk storage to a key-value abstraction: in `DirectoryStore`, chunks are separate files; in `S3Store`, they are separate objects. This flat-chunk architecture makes Zarr trivially parallelisable and cloud-native without requiring specialised parallel I/O libraries.
+- C) Incorrect — both HDF5 and Zarr apply compression per chunk, not per array. HDF5 `h5py` also supports per-chunk compression via filters (gzip, lzf, etc.).
+- D) Incorrect — neither Zarr nor HDF5 requires a server process. Both are accessed directly from Python via library calls (`zarr`, `h5py`). Zarr additionally works with cloud-backed stores that require network calls, but there is no "server" in the traditional sense.
+
+---
+
+## Q34 — Zarr nchunks_initialized
+
+> **Week reference:** Week 8
+
+**Mental Model:** Zarr arrays are **sparse by default**: a chunk only exists on disk when it has been written. The attribute `z.nchunks` gives the total possible chunk count; `z.nchunks_initialized` gives how many have actually been written. Reading an unwritten chunk returns the fill value (default 0) without any disk I/O.
+
+You create a Zarr array with shape `(1000, 1000)` and chunk shape `(100, 100)`, giving 100 total chunks. You write data to only 3 chunks, then check `z.nchunks_initialized`. What does it return?
+
+- A) 100 — all chunks are initialised on creation.
+- B) 3 — only the three chunks that have been written exist on disk.
+- C) 0 — `nchunks_initialized` is always 0 until `z.store.consolidate_metadata()` is called.
+- D) 97 — the 97 unwritten chunks are filled with zeros automatically on creation.
+
+**Answer: B**
+
+- A) Incorrect — Zarr does not pre-allocate chunk files on creation. `zarr.zeros(...)` sets the fill value to 0 but writes no chunk files. The logical zero-fill is achieved by returning the fill value for any unwritten chunk, not by creating 100 zero-filled files.
+- B) Correct — `nchunks_initialized` counts chunk files (or objects) that actually exist in the store. After writing 3 chunks, exactly 3 chunk files exist; the other 97 are absent from disk. Reading them returns 0 (the fill value) without any stored data.
+- C) Incorrect — `nchunks_initialized` queries the store directly and returns an accurate count without requiring any metadata consolidation step. It is a live property, not a cached counter.
+- D) Incorrect — the 97 unwritten chunks have no on-disk representation at all. They consume zero storage and zero I/O bandwidth. This sparse storage is one of Zarr's key advantages over raw memmap, which always allocates the full file size on creation with `mode='w+'`.
+
+---
+
+## Q35 — Chunk Size and Compression Ratio
+
+> **Week reference:** Week 8
+
+**Mental Model:** Zarr (and other chunked formats) compress each chunk independently. Larger chunks give the compressor more data to find patterns in, generally yielding a better compression ratio. Smaller chunks compress poorly because each independently compressed block is too small for the compressor to detect long-range redundancy. The DTU 02613 Week 8 solutions show this empirically: chunk size 200 produced 656 KB while chunk size 10 produced 285 MB for the same 1000×1000 Mandelbrot array.
+
+A 1000×1000 int32 Zarr array of Mandelbrot escape-time values is stored with Blosc compression. You compare two chunk sizes: `(10, 10)` and `(200, 200)`. Which statement about on-disk size is correct?
+
+- A) Both chunk sizes produce the same on-disk size because the total number of bytes before compression is identical.
+- B) The `(10, 10)` chunk size produces a smaller on-disk size because smaller chunks are faster to compress.
+- C) The `(200, 200)` chunk size produces a significantly smaller on-disk size because larger chunks give Blosc more context to find redundancy and achieve a better compression ratio.
+- D) On-disk size depends only on the compressor level (clevel), not on chunk shape.
+
+**Answer: C**
+
+- A) Incorrect — the total uncompressed bytes are indeed identical (1000 × 1000 × 4 = 4 MB either way), but compressed size is not. Compression ratio depends on the size and content of each independently compressed block.
+- B) Incorrect — smaller chunks are faster to compress individually (less data per call) but compress to a larger total size. Each tiny (10,10) block has only 400 bytes of data, giving the compressor almost no context. Furthermore, per-chunk metadata overhead is significant when there are ~10,500 chunks.
+- C) Correct — the DTU 02613 Week 8 solutions measured this directly: chunk size (10,10) → 285 MB on disk; chunk size (200,200) → 656 KB on disk, for the same 1000×1000 array. Larger chunks allow Blosc to exploit spatial patterns (large uniform regions away from the Mandelbrot boundary) that are invisible across chunk boundaries. The compression ratio improvement is dramatic — over 400×.
+- D) Incorrect — `clevel` (compression level) affects the time/ratio trade-off within a fixed chunk, but chunk shape has a far greater effect on total compressed size by controlling how much context the compressor sees per call.
 
 ---

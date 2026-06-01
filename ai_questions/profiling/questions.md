@@ -28,6 +28,17 @@
 - [Q21 — Scaling with Non-Linear Growth](#q21-scaling-with-non-linear-growth)
 - [Q22 — line_profiler % Time Interpretation](#q22-line_profiler-time-interpretation)
 - [Q23 — nsys Kernel Time Granularity](#q23-nsys-kernel-time-granularity)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q24 — timeit GC Behaviour](#q24--timeit-gc-behaviour)
+- [Q25 — timeit vs perf_counter for Microbenchmarks](#q25--timeit-vs-perf_counter-for-microbenchmarks)
+- [Q26 — %timeit Auto-Repeat in IPython](#q26--timeit-auto-repeat-in-ipython)
+- [Q27 — memory_profiler Granularity](#q27--memory_profiler-granularity)
+- [Q28 — memory_profiler vs cProfile Decorator Clash](#q28--memory_profiler-vs-cprofile-decorator-clash)
+- [Q29 — sys.getsizeof Shallow Measurement](#q29--sysgetsizeof-shallow-measurement)
+- [Q30 — pstats: Programmatic cProfile Analysis](#q30--pstats-programmatic-cprofile-analysis)
+- [Q31 — cProfile Overhead on Short Functions](#q31--cprofile-overhead-on-short-functions)
+- [Q32 — dis Module: What It Reveals](#q32--dis-module-what-it-reveals)
+- [Q33 — Choosing tottime Sort for Own-Code Bottleneck Hunt](#q33--choosing-tottime-sort-for-own-code-bottleneck-hunt)
 
 ---
 
@@ -577,5 +588,252 @@ Which of the following statements about `gpukernsum` in an nsys profile is TRUE?
 **Answer: C**
 
 `gpukernsum` reports the aggregate execution time of CUDA kernels running on the GPU device — pure compute time. Memory transfers (HtoD/DtoH via `cudaMemcpy` or unified memory migrations) are reported separately in `gpumemtimesum`. A) is the most common misconception. B) describes `cudaapisum`, which tracks CPU-side API call overhead. D) is false — there can also be synchronization gaps, idle time, and other GPU activity not captured in either summary table.
+
+---
+
+## Set 3 — Extended Practice
+
+- [Q24 — timeit GC Behaviour](#q24--timeit-gc-behaviour)
+- [Q25 — timeit vs perf_counter for Microbenchmarks](#q25--timeit-vs-perf_counter-for-microbenchmarks)
+- [Q26 — %timeit Auto-Repeat in IPython](#q26--timeit-auto-repeat-in-ipython)
+- [Q27 — memory_profiler Granularity](#q27--memory_profiler-granularity)
+- [Q28 — memory_profiler vs cProfile Decorator Clash](#q28--memory_profiler-vs-cprofile-decorator-clash)
+- [Q29 — sys.getsizeof Shallow Measurement](#q29--sysgetsizeof-shallow-measurement)
+- [Q30 — pstats: Programmatic cProfile Analysis](#q30--pstats-programmatic-cprofile-analysis)
+- [Q31 — cProfile Overhead on Short Functions](#q31--cprofile-overhead-on-short-functions)
+- [Q32 — dis Module: What It Reveals](#q32--dis-module-what-it-reveals)
+- [Q33 — Choosing tottime Sort for Own-Code Bottleneck Hunt](#q33--choosing-tottime-sort-for-own-code-bottleneck-hunt)
+
+---
+
+## Q24 — timeit GC Behaviour
+
+> **Week reference:** Week 2
+
+**Mental Model:** `timeit.timeit()` deliberately disables Python's garbage collector during the timed run. This removes GC pauses from the measurement, making results more reproducible — but it also means the benchmark does not reflect real-world performance when GC overhead is significant.
+
+Which statement about `timeit.timeit()` and the garbage collector is correct?
+
+- A) `timeit.timeit()` enables the garbage collector to simulate realistic production conditions
+- B) `timeit.timeit()` disables the garbage collector by default, which can make short-lived object benchmarks appear faster than in production
+- C) `timeit.timeit()` disables the garbage collector permanently for the rest of the Python session
+- D) The garbage collector has no effect on `timeit` results because Python uses reference counting, not GC
+
+**Answer: B**
+
+- A) Incorrect — the default behaviour is the opposite: GC is disabled. Enabling GC during timing would require passing `setup="import gc; gc.enable()"` explicitly or calling `timeit.Timer(...).timeit()` with a custom setup.
+- B) Correct — `timeit` disables GC via `gc.disable()` before each timed loop and restores it after. This prevents GC pauses from inflating measurements, but benchmarks that allocate many short-lived objects will look faster than they are in production where GC runs normally.
+- C) Incorrect — `timeit` restores the original GC state after the timed run. The disable is scoped to the measurement, not the interpreter session.
+- D) Incorrect — CPython does use reference counting as its primary mechanism, but it also has a cyclic garbage collector that handles reference cycles. The cyclic GC can trigger pauses for code that creates many inter-referencing objects; this is precisely what `timeit` disables.
+
+---
+
+## Q25 — timeit vs perf_counter for Microbenchmarks
+
+> **Week reference:** Week 2
+
+**Mental Model:** `timeit.timeit()` runs the statement many times (controlled by `number`) and returns the total time, averaging out OS scheduling noise. `time.perf_counter()` measures a single execution, which is susceptible to interrupts and context switches. For microbenchmarks (sub-millisecond code), `timeit` is the right tool; `perf_counter` is for coarse-grained wall-clock measurement of larger work.
+
+A developer writes `t = perf_counter(); f(); elapsed = perf_counter() - t` and finds the result varies by ±30% between runs. Which is the BEST explanation?
+
+- A) `perf_counter` has lower resolution than `timeit` and cannot measure sub-millisecond operations
+- B) A single-shot `perf_counter` measurement is susceptible to OS scheduling jitter; `timeit` averages many repetitions to reduce this noise
+- C) `f()` has non-deterministic behaviour; repeating it would not help
+- D) `perf_counter` returns CPU time, not wall-clock time, so it is inappropriate for timing Python functions
+
+**Answer: B**
+
+- A) Incorrect — `time.perf_counter()` has nanosecond resolution on modern systems (it is the highest-resolution clock available in Python). Low resolution is not the issue.
+- B) Correct — a single measurement captures whatever OS scheduling event happened to occur during that one run. `timeit` runs the code `number` times (defaulting to enough repetitions so the total takes ≥0.2 s) and divides, effectively averaging out transient OS-level interruptions and cache-warming effects.
+- C) Incorrect — the problem is not the function's behaviour; it is that a single measurement does not average out external noise. Most functions are deterministic; the variance comes from the measurement environment.
+- D) Incorrect — `time.perf_counter()` returns wall-clock time (the highest-precision monotonic clock). `time.process_time()` returns CPU time. This is a common confusion but is not the issue described.
+
+---
+
+## Q26 — %timeit Auto-Repeat in IPython
+
+> **Week reference:** Week 2
+
+**Mental Model:** `%timeit` in IPython automatically chooses the number of loops and repeat count so that the total timing takes a few seconds, then reports the best (minimum) of the repeats. It reports the best run rather than mean to minimize the impact of outliers caused by OS interrupts. This is different from `timeit.timeit()` which returns the total time and requires manual loop count selection.
+
+What does `%timeit` in IPython report when it says `"1.23 ms ± 45 µs per loop (mean ± std dev of 7 runs, 1000 loops each)"`?
+
+- A) The function was called once; 1.23 ms is the wall-clock time for that single call
+- B) The function was called 7 times total; 1.23 ms is the average across all 7 calls
+- C) The function was called 7,000 times total (7 runs × 1,000 loops); 1.23 ms is the mean per-loop time across those 7 run-totals, and ±45 µs is the standard deviation between runs
+- D) `%timeit` always runs exactly 100,000 iterations regardless of the function's runtime
+
+**Answer: C**
+
+- A) Incorrect — the output explicitly states "7 runs, 1000 loops each". The function was called 7,000 times total, not once.
+- B) Incorrect — 7 runs × 1,000 loops = 7,000 calls. The 1.23 ms is the average time per single loop iteration, not per run. One "run" of 1000 loops took approximately 1.23 s total.
+- C) Correct — `%timeit` executes `number` loops per run and `repeat` runs. Each run measures `number` executions and divides to get per-loop time. It reports the mean and std dev across the `repeat` runs. Choosing `number` automatically ensures each run takes long enough to be meaningful (typically ≥200 ms).
+- D) Incorrect — `%timeit` adaptively selects `number` based on how long the code takes. For fast code it might use 1,000,000 loops; for slow code it might use just 1 loop per run. The 100,000 figure is not fixed.
+
+---
+
+## Q27 — memory_profiler Granularity
+
+> **Week reference:** Week 2
+
+**Mental Model:** `memory_profiler` (used via `@profile` decorator and `mprof run` or `python -m memory_profiler`) provides **line-by-line memory usage** expressed in MiB, not function-level aggregates. Each line shows current RSS (Mem usage) and the delta (Increment) since the previous line. This is in contrast to cProfile which is function-level, and line_profiler which is time-based line-level.
+
+Which statement correctly describes `memory_profiler`'s output granularity?
+
+- A) `memory_profiler` reports total heap allocation per function, similar to how cProfile reports tottime per function
+- B) `memory_profiler` reports memory usage and increment per source line for decorated functions, expressed in MiB
+- C) `memory_profiler` reports peak GPU memory usage per kernel launch, in MB
+- D) `memory_profiler` and `line_profiler` produce identical output — only the metric column differs (memory vs time)
+
+**Answer: B**
+
+- A) Incorrect — `memory_profiler` does not provide per-function aggregates. It shows the RSS at each line, so you see memory go up when an allocation occurs and stay the same (or decrease after a GC) at other lines. Function-level memory cost must be inferred from the first and last line of the function.
+- B) Correct — `memory_profiler` outputs a table with columns: Line #, Mem usage (current process RSS in MiB), Increment (change from previous line in MiB), Occurrences (how many times the line ran), and Line Contents. Each decorated function gets its own table.
+- C) Incorrect — `memory_profiler` profiles CPU-side (host) memory only. GPU memory is tracked by NVIDIA tools such as `nsys` or `nvidia-smi`. `memory_profiler` has no GPU awareness.
+- D) Incorrect — while both tools produce line-level tables, the columns differ fundamentally. `line_profiler` shows Hits, Time, Per Hit, and % Time. `memory_profiler` shows Mem usage, Increment, and Occurrences. They are complementary tools, not equivalent ones.
+
+---
+
+## Q28 — memory_profiler vs cProfile Decorator Clash
+
+> **Week reference:** Week 2
+
+**Mental Model:** Both `memory_profiler` and `line_profiler` use a `@profile` decorator, but they are imported from different packages and cannot be applied to the same function simultaneously without careful management. When profiling with `kernprof`, the `@profile` decorator is injected into the global namespace; when profiling with `memory_profiler`, it is injected differently. Mixing them causes a `NameError` or incorrect results.
+
+A developer wants to profile both the memory usage AND the line-level execution time of a function simultaneously. They write:
+
+```python
+from line_profiler import profile as lp
+from memory_profiler import profile as mp
+
+@lp
+@mp
+def my_func():
+    ...
+```
+
+What is the most likely outcome when running this under `kernprof -l -v`?
+
+- A) Both profilers work correctly; stacking decorators is the supported way to profile with multiple tools simultaneously
+- B) Only `line_profiler` captures data because it wraps `mp`; `memory_profiler` sees a wrapped callable, not the original function, and may report incorrect line numbers or no data
+- C) A `SyntaxError` is raised immediately because two `@profile` decorators cannot be stacked in Python
+- D) `memory_profiler` takes precedence and silently disables `line_profiler`
+
+**Answer: B**
+
+- A) Incorrect — stacking profiling decorators is not officially supported and leads to instrumentation interference. The inner decorator wraps the function; the outer decorator wraps the wrapper. Line number mapping in the inner tool may break because it sees a `wrapper` object rather than the original function's `__code__`.
+- B) Correct — `line_profiler` wraps the already-wrapped function returned by `@mp`. The `line_profiler` records timing for the `mp`-wrapped callable, which is correct. However, `memory_profiler` instruments the original function's bytecode for line tracking; when that function is further wrapped by `line_profiler`, the bytecode-level tracking may be disrupted or show incorrect line references. In practice, the tools should be run in separate profiling sessions, not stacked.
+- C) Incorrect — Python allows stacking any number of decorators; there is no syntax restriction. The issue is semantic, not syntactic.
+- D) Incorrect — decorators are applied bottom-up (inner first); `@lp` is outermost and is applied last, so `line_profiler` wraps `memory_profiler`'s output, not the reverse. Neither "takes precedence" in a meaningful sense.
+
+---
+
+## Q29 — sys.getsizeof Shallow Measurement
+
+> **Week reference:** Week 2
+
+**Mental Model:** `sys.getsizeof(obj)` returns the **shallow** size of the object in bytes — the size of the object header and its immediate fields, but NOT the size of any objects it references. For containers like lists, it counts the list's internal array of pointers but not the pointed-to objects. To get total (deep) size, you must recursively call `getsizeof` on all referenced objects.
+
+What does `sys.getsizeof([1, 2, 3, 4, 5])` return?
+
+- A) The total memory occupied by the list and all five integer objects it contains
+- B) The size of the list object's internal structure (header + pointer array for 5 elements), excluding the memory occupied by the integer objects themselves
+- C) Always 8 bytes, since Python stores all objects as 64-bit pointers
+- D) 40 bytes, since each Python integer occupies 8 bytes and there are 5 of them
+
+**Answer: B**
+
+- A) Incorrect — `getsizeof` is explicitly shallow. It counts only the bytes the list object itself uses (not its contents). To get the deep size, you would use a recursive approach or a library like `pympler.asizeof`.
+- B) Correct — for a list of 5 elements, `getsizeof` returns approximately 120 bytes on CPython 3.x (56 bytes for the list object header + 8 bytes × 5 for the pointer array + over-allocation padding). The five integer objects (each ~28 bytes) are not counted.
+- C) Incorrect — `getsizeof` does not return a fixed value. It varies by type: an empty list is ~56 bytes, an empty dict ~248 bytes, a small integer ~28 bytes. The 8-byte pointer size is an implementation detail, not what `getsizeof` reports.
+- D) Incorrect — 40 bytes would be 8 bytes × 5 integers, which conflates the C-level pointer size with the full Python integer object size, and also ignores the list header overhead. CPython integers are ~28 bytes each (not 8), and `getsizeof` on the list does not count them at all.
+
+---
+
+## Q30 — pstats: Programmatic cProfile Analysis
+
+> **Week reference:** Week 2
+
+**Mental Model:** `pstats.Stats` loads a `.prof` binary file produced by cProfile and lets you sort, filter, and print the profiling data programmatically. The two most important sort keys are `'cumulative'` (for finding call-tree bottlenecks) and `'tottime'` (for finding functions with expensive own-code). `stats.print_stats(N)` limits output to the top N functions.
+
+Which `pstats` code correctly loads a profile file and prints the top 10 functions sorted by cumulative time?
+
+- A) `pstats.Stats('out.prof').sort_stats('tottime').print_stats(10)`
+- B) `pstats.Stats('out.prof').sort_stats('cumulative').print_stats(10)`
+- C) `pstats.Stats('out.prof').print_stats('cumulative', 10)`
+- D) `pstats.Stats('out.prof', sort='cumulative').print_stats(10)`
+
+**Answer: B**
+
+- A) Incorrect — `sort_stats('tottime')` sorts by own-code time, not cumulative time. This would show the functions whose own instructions are most expensive, not the highest-cost call trees. Use this when you want to identify "who is doing the work," not "what path costs the most."
+- B) Correct — `sort_stats('cumulative')` sets the sort key to cumulative time; `print_stats(10)` limits output to the top 10 rows. This is the standard idiom for bottleneck hunting via the call tree. The equivalent shell command is `python -m cProfile -s cumulative script.py`.
+- C) Incorrect — `print_stats` does not accept a sort key as its first argument. The sort key must be set separately via `sort_stats()`. `print_stats(N)` only accepts an integer (limit) or a regex string (filter by function name), not a sort key name.
+- D) Incorrect — `pstats.Stats()` does not accept a `sort=` keyword argument. The constructor accepts filenames (strings) or `cProfile.Profile` objects to merge. Sorting is done via the `sort_stats()` method chained afterwards.
+
+---
+
+## Q31 — cProfile Overhead on Short Functions
+
+> **Week reference:** Week 2
+
+**Mental Model:** cProfile is a **deterministic profiler** — it hooks into every function call and return using Python's `sys.setprofile` mechanism. Each hook invocation adds a small but fixed overhead (~1–5 µs per call). For functions called millions of times with sub-microsecond bodies, the profiler overhead can exceed the actual function cost, making the measured times unreliable and the optimisation ranking misleading.
+
+A developer profiles a tight inner loop that calls a 0.5 µs helper function 10 million times. The cProfile output shows the helper with `tottime = 15 s` but the un-profiled run completes in 5 s. What is the best explanation?
+
+- A) The developer made an arithmetic error; cProfile cannot add more than 10% overhead
+- B) cProfile's deterministic per-call hook adds fixed overhead (≈1–5 µs) per function call; at 10 million calls the profiler overhead (≈10–50 s) dominates the actual 5 s runtime, making the measurement unreliable
+- C) The helper function has a memory leak that only manifests under the profiler's memory tracking
+- D) cProfile disables CPU caches during profiling, causing the 3× slowdown
+
+**Answer: B**
+
+- A) Incorrect — cProfile can add substantial overhead for call-intensive code. There is no 10% cap; the overhead is proportional to ncalls, not to the function's own runtime. For a 0.5 µs function called 10M times, even 1 µs of profiler overhead per call doubles the measured time.
+- B) Correct — cProfile intercepts every `call` and `return` event. Each interception carries a constant overhead of roughly 1–5 µs (depending on platform). At 10 million calls: 10M × 1 µs = 10 s overhead, dwarfing the real 5 s runtime. The profiled result (15 s) is the real time plus profiler overhead. For such code, a statistical profiler (e.g., `py-spy`) or `timeit` is more appropriate.
+- C) Incorrect — cProfile does not track memory at all. It has no memory profiling capability. Memory leaks would not be exposed or caused by cProfile.
+- D) Incorrect — cProfile does not interact with CPU caches. The overhead is purely software-level Python interpreter hooks, not hardware cache invalidation.
+
+---
+
+## Q32 — dis Module: What It Reveals
+
+> **Week reference:** Week 2
+
+**Mental Model:** The `dis` module disassembles Python bytecode and shows the sequence of CPython virtual machine instructions for a function or code object. It is useful for understanding why two semantically equivalent Python expressions have different performance — e.g., why `x * x` can be faster than `x ** 2` (the `**` operator may invoke `pow()` with an extra `BINARY_OP` dispatch vs a simpler `BINARY_OP` for `*`).
+
+What does `import dis; dis.dis(f)` reveal about function `f`?
+
+- A) The x86 machine-code instructions that the CPU executes when `f` is called
+- B) The CPython bytecode instructions (opcodes) for `f`, showing exactly which virtual machine operations execute and in what order
+- C) The memory addresses of all objects referenced by `f` at the time of the call
+- D) The call graph of all functions that `f` calls, equivalent to a single-level cProfile output
+
+**Answer: B**
+
+- A) Incorrect — `dis` disassembles Python bytecode, not native machine code. CPython compiles Python source to bytecode (.pyc), and `dis` shows that intermediate representation. To see machine code, you would need a JIT compiler (Numba, PyPy) and its own disassembly tools.
+- B) Correct — `dis.dis(f)` prints the bytecode of `f` as a sequence of opcodes (e.g., `LOAD_FAST`, `BINARY_OP`, `CALL`, `RETURN_VALUE`) with their arguments and source-line annotations. This lets you compare the bytecode cost of two equivalent Python expressions to understand micro-performance differences.
+- C) Incorrect — `dis` operates on the function's code object (static bytecode), not on runtime objects. It knows nothing about which specific objects are in memory during execution; that is the domain of `gc.get_objects()`, `id()`, or a memory profiler.
+- D) Incorrect — `dis` does not trace function calls or produce call graphs. It is a static bytecode disassembler, not a dynamic profiler. Viewing call graphs is the role of cProfile with `pstats` or visualisation tools like `snakeviz`.
+
+---
+
+## Q33 — Choosing tottime Sort for Own-Code Bottleneck Hunt
+
+> **Week reference:** Week 2
+
+**Mental Model:** The workflow for profiling is: (1) sort by `cumtime` descending to find the expensive call trees, (2) identify the deepest leaf functions in those trees, (3) switch to `tottime` descending to confirm which leaf is actually doing the most raw work in its own code. Skipping to `tottime` first risks missing a wrapper chain; starting with `cumtime` first risks misidentifying orchestrators as bottlenecks.
+
+After running `python -m cProfile -s cumtime script.py`, a developer sees that `pipeline()` tops the list with `cumtime=120s` but `tottime=0.001s`. She drills in and eventually finds `matrix_ops()` with `tottime=95s` and `cumtime=95s`. She now wants to confirm there are no other expensive own-code functions she may have missed. What should she do next?
+
+- A) Re-run with `python -m cProfile -s tottime script.py` to see all functions ranked by own-code cost, confirming whether `matrix_ops` is the unique top entry
+- B) Re-run with `python -m cProfile -s ncalls script.py` to find functions called most frequently
+- C) Switch to `line_profiler` immediately, since cProfile has already confirmed the bottleneck
+- D) There is nothing more to check; `cumtime` sort always exposes all bottlenecks
+
+**Answer: A**
+
+- A) Correct — sorting by `tottime` produces a definitive ranking of functions by their own-code cost, independently of call-tree depth. This surfaces any other functions that may be doing significant work but appear low in the `cumtime` list (because they are called from a non-top-level path). It is the correct next step to confirm `matrix_ops` is the unique bottleneck.
+- B) Incorrect — `ncalls` sorts by call frequency, not cost. A function called 10 million times with 0.0001 s tottime each contributes 1000 s and would appear low in a `tottime` sort unless that sort is used. Sorting by `ncalls` does not reveal cost; it only reveals call frequency.
+- C) Incorrect — while `line_profiler` is the natural next step after identifying the bottleneck function, the developer has not yet confirmed that no other expensive function exists at the same depth. Switching to `line_profiler` before completing the `tottime` survey risks missing a second bottleneck of comparable cost.
+- D) Incorrect — `cumtime` sort reveals which call trees are expensive, but deep leaf functions with high `tottime` can appear anywhere in the sorted list depending on their callers' cumtime. For example, a leaf called directly from `main()` may have `cumtime = tottime = 90s` but appear 5 rows down because `main`'s cumtime is 120s. Sorting by `cumtime` alone does not guarantee the leaf's `tottime` is immediately visible.
 
 ---

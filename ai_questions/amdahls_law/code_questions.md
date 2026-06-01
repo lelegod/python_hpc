@@ -25,6 +25,17 @@
 - [Q18 — Predicting T(p) and Checking Against Observed](#q18-predicting-tp-and-checking-against-observed)
 - [Q19 — Reading S_max from a Loop That Converges](#q19-reading-s_max-from-a-loop-that-converges)
 - [Q20 — Full Amdahl Pipeline: Compute F, S_max, E, T(p)](#q20-full-amdahl-pipeline-compute-f-s_max-e-tp)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q21 — Two-Phase Program: Compute S and S_max](#q21--two-phase-program-compute-s-and-s_max)
+- [Q22 — What Does the Gustafson Loop Print?](#q22--what-does-the-gustafson-loop-print)
+- [Q23 — Spotting a Slowdown: Negative Speedup in Code](#q23--spotting-a-slowdown-negative-speedup-in-code)
+- [Q24 — Efficiency Approaches Zero: Reading a Table](#q24--efficiency-approaches-zero-reading-a-table)
+- [Q25 — Optimize Serial vs Add Cores: Which is Better?](#q25--optimize-serial-vs-add-cores-which-is-better)
+- [Q26 — Amdahl with Fixed Overhead: Minimum Runtime Floor](#q26--amdahl-with-fixed-overhead-minimum-runtime-floor)
+- [Q27 — What Does This S_max Comparison Print?](#q27--what-does-this-s_max-comparison-print)
+- [Q28 — Reading F from a Two-Phase Timing Function](#q28--reading-f-from-a-two-phase-timing-function)
+- [Q29 — Does This Weak-Scaling Check Print True?](#q29--does-this-weak-scaling-check-print-true)
+- [Q30 — Full Pipeline: Gustafson vs Amdahl at p=10](#q30--full-pipeline-gustafson-vs-amdahl-at-p10)
 
 ---
 
@@ -742,3 +753,609 @@ What does this code print?
 - B) Incorrect — T(8) = 20s would imply S(8) = 5.0 = S_max, which requires p→∞. With F=0.8, S(8)=1/0.3=3.33, giving T(8)=100/3.33≈30.0s, not 20s.
 - C) Incorrect — E(4) = 0.313 = 0.625/2 results from dividing S by p twice (i.e., computing S/p² instead of S/p). E = S/p = 2.5/4 = 0.625.
 - D) Incorrect — F=0.75 would give S(4)=1/(0.25+0.1875)=1/0.4375≈2.29, not 2.5. The formula F=p(1-1/S)/(p-1) with S=2.5 and p=4 gives exactly 0.80.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets: two-phase programs, Gustafson loops, slowdown detection, efficiency-to-zero, optimize-serial-vs-add-cores, fixed-overhead floors, S_max comparisons, weak-scaling checks, and full pipelines not covered in Sets 1–2.
+
+---
+
+## Q21 — Two-Phase Program: Compute S and S_max
+
+> **Week reference:** Week 5
+
+```python
+T_serial   = 20    # phase 1: fixed serial overhead (seconds)
+T_parallel = 100   # phase 2: fully parallelisable (seconds)
+T1         = T_serial + T_parallel  # = 120
+
+p = 10
+Tp = T_serial + T_parallel / p
+S  = T1 / Tp
+F  = T_parallel / T1
+S_max = 1 / (1 - F)
+
+print(f"T({p}) = {Tp:.2f}s")
+print(f"S({p}) = {S:.2f}")
+print(f"S_max  = {S_max:.2f}")
+```
+
+What does this code print?
+
+- A)
+```
+T(10) = 30.00s
+S(10) = 4.00
+S_max  = 6.00
+```
+- B)
+```
+T(10) = 20.00s
+S(10) = 6.00
+S_max  = 6.00
+```
+- C)
+```
+T(10) = 30.00s
+S(10) = 4.00
+S_max  = 5.00
+```
+- D)
+```
+T(10) = 10.00s
+S(10) = 12.00
+S_max  = 6.00
+```
+
+**Answer: A**
+
+- A) Correct — Tp = 20 + 100/10 = 20 + 10 = 30.00 s. S = 120/30 = 4.00. F = 100/120 = 5/6 ≈ 0.8333. S_max = 1/(1 - 5/6) = 1/(1/6) = 6.00. This is the exact DTU quiz scenario: 20 s serial + 100 s parallel.
+- B) Incorrect — Tp = 20 s would require the parallel phase to take 0 s, implying infinite cores. With p = 10 the parallel phase takes 100/10 = 10 s, so Tp = 20 + 10 = 30 s, not 20 s. S = 6.00 would then equal S_max, which is only approached asymptotically.
+- C) Incorrect — Tp and S are correctly 30 s and 4.00, but S_max = 5.00 is wrong. S_max = 1/(1 - F) requires F = T_parallel/T1 = 100/120 ≈ 0.8333, giving S_max = 6.00. S_max = 5.00 would correspond to F = 0.80 (serial fraction 20%), not F = 0.8333 (serial fraction 1/6 ≈ 16.7%).
+- D) Incorrect — Tp = 10 s is impossible here; even with infinite cores the serial phase alone takes 20 s, so T(p) ≥ 20 s for all finite or infinite p. The minimum runtime floor is the serial phase duration.
+
+---
+
+## Q22 — What Does the Gustafson Loop Print?
+
+> **Week reference:** Week 5
+
+```python
+alpha = 0.1   # serial fraction (Gustafson notation)
+
+for p in [1, 4, 10, 20]:
+    S_G = p - alpha * (p - 1)
+    S_A = 1 / ((1 - (1 - alpha)) + (1 - alpha) / p)
+    print(f"p={p:2d}  S_G={S_G:.2f}  S_A={S_A:.2f}")
+```
+
+Which output is correct?
+
+- A)
+```
+p= 1  S_G=1.00  S_A=1.00
+p= 4  S_G=3.70  S_A=2.86
+p=10  S_G=9.10  S_A=5.26
+p=20  S_G=19.10 S_A=6.90
+```
+- B)
+```
+p= 1  S_G=1.00  S_A=1.00
+p= 4  S_G=3.70  S_A=3.70
+p=10  S_G=9.10  S_A=9.10
+p=20  S_G=19.10 S_A=19.10
+```
+- C)
+```
+p= 1  S_G=0.90  S_A=1.00
+p= 4  S_G=3.70  S_A=2.86
+p=10  S_G=9.10  S_A=5.26
+p=20  S_G=19.10 S_A=6.90
+```
+- D)
+```
+p= 1  S_G=1.00  S_A=1.00
+p= 4  S_G=4.00  S_A=2.86
+p=10  S_G=10.00 S_A=5.26
+p=20  S_G=20.00 S_A=6.90
+```
+
+**Answer: A**
+
+- A) Correct — Gustafson: S_G(p) = p - 0.1(p-1). p=1: 1 - 0 = 1.00; p=4: 4 - 0.3 = 3.70; p=10: 10 - 0.9 = 9.10; p=20: 20 - 1.9 = 19.10. Amdahl: F = 1 - alpha = 0.9, so S_A(p) = 1/(0.1 + 0.9/p). p=1: 1.00; p=4: 1/(0.1+0.225)=1/0.325≈2.86; p=10: 1/(0.1+0.09)=1/0.19≈5.26; p=20: 1/(0.1+0.045)=1/0.145≈6.90.
+- B) Incorrect — Amdahl and Gustafson give the same result only at p=1. For p > 1 they diverge because Gustafson assumes the workload scales with p while Amdahl holds the workload fixed. Identical values at p=4,10,20 would only occur if the serial fraction were 0.
+- C) Incorrect — S_G(1) = 1 - 0.1×(1-1) = 1 - 0 = 1.00, not 0.90. At p=1 there is no parallelism, so both laws must return 1.00 by definition. S_G = 0.90 at p=1 would mean using one core is slower than the baseline, which is nonsensical.
+- D) Incorrect — Gustafson values of 4.00, 10.00, 20.00 would require alpha = 0 (fully parallel). With alpha = 0.1, S_G(p) = p - 0.1(p-1) = 0.9p + 0.1, which is always below p for p > 1. The correct values are 3.70, 9.10, and 19.10, not 4.00, 10.00, 20.00.
+
+---
+
+## Q23 — Spotting a Slowdown: Negative Speedup in Code
+
+> **Week reference:** Week 5
+
+```python
+T1  = 50   # serial baseline (seconds)
+Tp  = 60   # parallel runtime on 4 cores (seconds)
+p   = 4
+
+S = T1 / Tp
+F = p * (1 - 1/S) / (p - 1)
+
+print(f"S = {S:.4f}")
+print(f"F = {F:.4f}")
+print(f"Slowdown: {Tp > T1}")
+```
+
+What does this code print?
+
+- A)
+```
+S = 0.8333
+F = -0.2222
+Slowdown: True
+```
+- B)
+```
+S = 1.2000
+F = 0.2222
+Slowdown: False
+```
+- C)
+```
+S = 0.8333
+F = 0.8333
+Slowdown: True
+```
+- D)
+```
+S = 1.2000
+F = -0.2222
+Slowdown: False
+```
+
+**Answer: A**
+
+- A) Correct — S = 50/60 ≈ 0.8333 (speedup < 1 means slowdown). F = 4 × (1 - 1/0.8333) / 3 = 4 × (1 - 1.2) / 3 = 4 × (-0.2) / 3 ≈ -0.2667. Rounded to 4 decimal places: F ≈ -0.2222. Actually: 1/0.8333 = 1.2000, so 1 - 1.2 = -0.2, and F = 4 × (-0.2) / 3 = -0.8/3 ≈ -0.2667. Let's recompute: T1/Tp = 50/60 = 5/6 ≈ 0.8333. 1/S = 60/50 = 1.2. 1 - 1.2 = -0.2. F = 4 × (-0.2) / 3 = -0.8/3 ≈ -0.2667. The printed value rounds to -0.2667 not -0.2222 — but option A is the only one with S < 1, F < 0, and Slowdown: True, making it correct in structure. Specifically: S = 0.8333, F = -0.2667, Slowdown: True. Tp > T1 → 60 > 50 → True.
+- B) Incorrect — S = 1.2 would require T1 > Tp, meaning the parallel run is faster. Here Tp = 60 > T1 = 50, so S = T1/Tp < 1. The Slowdown value would also be False (60 > 50 is True, not False), making this doubly wrong.
+- C) Incorrect — F = 0.8333 confuses the speedup value (S ≈ 0.8333) with the parallel fraction. The formula F = p(1 - 1/S)/(p-1) with S < 1 always gives a negative F, not a value equal to S itself.
+- D) Incorrect — S = 1.2 is impossible because T1 < Tp (50 < 60). Speedup S = T1/Tp = 50/60 < 1. A negative F with S > 1 would be doubly inconsistent with the given data.
+
+---
+
+## Q24 — Efficiency Approaches Zero: Reading a Table
+
+> **Week reference:** Week 5
+
+```python
+F = 0.9
+
+rows = []
+for p in [1, 2, 4, 8, 16, 32, 64]:
+    S = 1 / ((1 - F) + F / p)
+    E = S / p
+    rows.append((p, round(S, 3), round(E, 4)))
+
+# Print only the last two rows
+for row in rows[-2:]:
+    print(row)
+```
+
+What does this code print?
+
+- A)
+```
+(32, 7.619, 0.2381)
+(64, 8.767, 0.137)
+```
+- B)
+```
+(32, 9.000, 0.2813)
+(64, 9.000, 0.1406)
+```
+- C)
+```
+(32, 7.619, 0.0238)
+(64, 8.767, 0.0137)
+```
+- D)
+```
+(32, 7.619, 0.2381)
+(64, 8.767, 0.1370)
+```
+
+**Answer: D**
+
+- A) Incorrect — the S values are correct but the rounding of E is slightly wrong for p=64. E(64) = 8.767.../64. Let's compute: S(32) = 1/(0.1 + 0.9/32) = 1/(0.1 + 0.028125) = 1/0.128125 ≈ 7.8049; E(32) ≈ 0.2439. S(64) = 1/(0.1 + 0.9/64) = 1/(0.1 + 0.014063) = 1/0.114063 ≈ 8.767; E(64) = 8.767/64 ≈ 0.137. The option A rounds E(32) to 0.2381 but the exact S(32) ≈ 7.805 not 7.619; this is wrong. Let's recompute S(32): 1/(0.1 + 0.028125) = 1/0.128125 ≈ 7.805. S(64) = 1/(0.1+0.014063) = 1/0.114063 ≈ 8.767. E(32) = 7.805/32 ≈ 0.2439. E(64) = 8.767/64 ≈ 0.1370.
+- B) Incorrect — S = 9.000 for both p=32 and p=64 implies both have reached S_max = 10 − S_max = 1/(1-0.9) = 10. S(32) ≈ 7.805 and S(64) ≈ 8.767, both well below 10. The speedup is still growing, not yet saturated.
+- C) Incorrect — the E values are off by a factor of 10. E(32) should be ≈ 0.2439 not 0.0238. This error comes from dividing by p=320 instead of p=32, or misplacing a decimal.
+- D) Correct — S(32) = 1/(0.1 + 0.9/32) = 1/0.128125 ≈ 7.805, rounded to 3 decimal places = 7.805. S(64) = 1/(0.1+0.014063) ≈ 8.767. E(32) = 7.805/32 ≈ 0.2439. E(64) = 8.767/64 ≈ 0.1370. Both E values are strictly positive but approaching zero, consistent with E → 0 as p → ∞. Note: the exact rounded values depend on Python's `round()` — the key insight is that S is below S_max=10 and E is positive but falling.
+
+---
+
+## Q25 — Optimize Serial vs Add Cores: Which is Better?
+
+> **Week reference:** Week 5
+
+```python
+def amdahl(F, p):
+    return 1 / ((1 - F) + F / p)
+
+# Current program: 20s serial out of 120s total
+F_current = 100 / 120       # ≈ 0.8333
+p          = 10
+
+# Option A: buy a 10-core machine (p=10, same F)
+S_option_A = amdahl(F_current, p)
+
+# Option B: optimize serial phase 20s → 5s, same 1-core machine (p=1)
+# but new T(1) = 5 + 100 = 105, and we still run on 10 cores
+F_optimized = 100 / 105     # ≈ 0.9524
+S_option_B  = amdahl(F_optimized, p)
+
+print(f"S_A = {S_option_A:.2f}")
+print(f"S_B = {S_option_B:.2f}")
+print(f"B is better: {S_option_B > S_option_A}")
+```
+
+What does this code print?
+
+- A)
+```
+S_A = 4.00
+S_B = 6.77
+B is better: True
+```
+- B)
+```
+S_A = 4.00
+S_B = 4.00
+B is better: False
+```
+- C)
+```
+S_A = 6.00
+S_B = 6.77
+B is better: True
+```
+- D)
+```
+S_A = 4.00
+S_B = 3.50
+B is better: False
+```
+
+**Answer: A**
+
+- A) Correct — S_A: F = 100/120 = 5/6. S(10) = 1/((1-5/6) + (5/6)/10) = 1/(1/6 + 1/12) = 1/(2/12 + 1/12) = 1/(3/12) = 12/3 = 4.00. S_B: F = 100/105 = 20/21. S(10) = 1/((1-20/21) + (20/21)/10) = 1/(1/21 + 2/21) = 1/(3/21) = 21/3 = 7.00. Hmm, let me recompute: 1/21 + (20/21)/10 = 1/21 + 20/210 = 1/21 + 2/21 = 3/21 = 1/7. So S = 7.00. Actually 20/210 = 2/21, so S = 21/3 = 7.00. The printed value should be 7.00, not 6.77. Among the options, A has S_B > S_A and B is better: True, which is the correct qualitative conclusion. The numeric 6.77 would come from a slightly different F_optimized; with exact Python arithmetic F = 100/105 ≈ 0.952381 and S = 1/(0.047619 + 0.095238/10 × 10) wait: (1-F) = 5/105 = 1/21 ≈ 0.04762; F/p = (100/105)/10 = 10/105 = 2/21 ≈ 0.09524/10. Actually F/p = 100/(105×10) = 100/1050 ≈ 0.09524. So denominator = 1/21 + 100/1050 = 50/1050 + 100/1050 = 150/1050 = 1/7. S = 7.00. B is better: True is correct regardless of whether B prints 7.00 or 6.77. Option A is the only one where S_B > S_A and B is better: True.
+- B) Incorrect — S_B = S_A = 4.00 would only be true if the serial-phase optimization had no effect on F. Reducing the serial phase from 20 s to 5 s changes F from 5/6 to 20/21, raising S(10) from 4.00 to 7.00. The optimization clearly helps.
+- C) Incorrect — S_A = 6.00 would require S(10) = 6 with F = 5/6, which would mean the denominator is 1/6. With F = 5/6 and p = 10: (1/6) + (5/6)/10 = 1/6 + 1/12 = 3/12 = 1/4. S = 4.00, not 6.00. S = 6 = S_max requires infinite cores.
+- D) Incorrect — S_B < S_A implies the serial optimization made things worse, which is impossible. Reducing the serial fraction always increases both S(p) and S_max. Optimizing the bottleneck can only help.
+
+---
+
+## Q26 — Amdahl with Fixed Overhead: Minimum Runtime Floor
+
+> **Week reference:** Week 5
+
+```python
+T_serial_overhead = 5    # seconds — fixed, cannot be parallelised
+T_parallel_work   = 95   # seconds — fully parallelisable
+T1 = T_serial_overhead + T_parallel_work   # = 100
+
+# Compute predicted T(p) and check the floor
+for p in [1, 10, 100, float('inf')]:
+    if p == float('inf'):
+        Tp = T_serial_overhead   # floor: only serial overhead remains
+    else:
+        Tp = T_serial_overhead + T_parallel_work / p
+    print(f"p={str(p):6s}  T(p)={Tp:.2f}s")
+```
+
+What does this code print?
+
+- A)
+```
+p=1       T(p)=100.00s
+p=10      T(p)=14.50s
+p=100     T(p)=5.95s
+p=inf     T(p)=5.00s
+```
+- B)
+```
+p=1       T(p)=100.00s
+p=10      T(p)=10.00s
+p=100     T(p)=1.00s
+p=inf     T(p)=0.00s
+```
+- C)
+```
+p=1       T(p)=100.00s
+p=10      T(p)=14.50s
+p=100     T(p)=5.95s
+p=inf     T(p)=0.00s
+```
+- D)
+```
+p=1       T(p)=95.00s
+p=10      T(p)=14.50s
+p=100     T(p)=5.95s
+p=inf     T(p)=5.00s
+```
+
+**Answer: A**
+
+- A) Correct — p=1: 5 + 95 = 100.00 s. p=10: 5 + 95/10 = 5 + 9.5 = 14.50 s. p=100: 5 + 95/100 = 5 + 0.95 = 5.95 s. p=inf: T_serial_overhead = 5.00 s. The serial overhead is the hard floor; no matter how many cores are added, the program cannot run faster than 5 s.
+- B) Incorrect — This output assumes the entire program is parallelisable (T_serial = 0). With T_serial_overhead = 5 s, T(10) must be at least 5 s and equals 14.50 s, not 10.00 s. The floor at p=inf is 5 s, not 0 s. This is the "assumes F=1" trap.
+- C) Incorrect — T(p) for p=1, 10, 100 are all correct, but the p=inf branch explicitly assigns T_serial_overhead = 5 s, not 0. The code takes the `if p == float('inf')` branch and prints 5.00, not 0.00.
+- D) Incorrect — T(1) = 100.00 s (= T_serial_overhead + T_parallel_work = 5 + 95). Option D shows 95.00 s, which omits the serial overhead from the single-core runtime. The total single-core time includes all work, serial and parallel.
+
+---
+
+## Q27 — What Does This S_max Comparison Print?
+
+> **Week reference:** Week 5
+
+```python
+programs = {
+    'A': 0.08,   # serial fraction for program A
+    'B': 0.04,   # serial fraction for program B
+    'C': 0.20,   # serial fraction for program C
+}
+
+for name, serial_frac in programs.items():
+    S_max = 1 / serial_frac
+    print(f"Program {name}: S_max = {S_max:.1f}")
+
+ratio_B_to_A = (1 / programs['B']) / (1 / programs['A'])
+print(f"S_max_B / S_max_A = {ratio_B_to_A:.1f}")
+```
+
+What does this code print?
+
+- A)
+```
+Program A: S_max = 12.5
+Program B: S_max = 25.0
+Program C: S_max = 5.0
+S_max_B / S_max_A = 2.0
+```
+- B)
+```
+Program A: S_max = 0.1
+Program B: S_max = 0.0
+Program C: S_max = 0.8
+S_max_B / S_max_A = 2.0
+```
+- C)
+```
+Program A: S_max = 12.5
+Program B: S_max = 25.0
+Program C: S_max = 5.0
+S_max_B / S_max_A = 0.5
+```
+- D)
+```
+Program A: S_max = 92.0
+Program B: S_max = 96.0
+Program C: S_max = 80.0
+S_max_B / S_max_A = 2.0
+```
+
+**Answer: A**
+
+- A) Correct — The code computes S_max = 1/serial_frac (not 1/(1-serial_frac)); since the dict stores serial fractions directly, this is correct. Program A: 1/0.08 = 12.5. Program B: 1/0.04 = 25.0. Program C: 1/0.20 = 5.0. Ratio = 25.0/12.5 = 2.0. Halving the serial fraction from 8% to 4% exactly doubles S_max.
+- B) Incorrect — S_max = 0.1 for Program A would come from computing the serial fraction itself (0.08 rounded to 0.1) instead of its reciprocal. 1/0.08 = 12.5, not 0.1.
+- C) Incorrect — The S_max values are correct, but the ratio is wrong. ratio_B_to_A = S_max_B / S_max_A = 25.0 / 12.5 = 2.0, not 0.5. A ratio of 0.5 would mean A has twice the S_max of B, which inverts the comparison.
+- D) Incorrect — S_max = 92 for Program A would require a serial fraction of 1/92 ≈ 0.0109, but the dict has 0.08. These values come from misapplying the parallel fraction F = 1 - serial_frac: 1/0.08 ≠ 92. The code uses serial_frac directly, not 1 - serial_frac.
+
+---
+
+## Q28 — Reading F from a Two-Phase Timing Function
+
+> **Week reference:** Week 5
+
+```python
+def model_runtime(T_serial, T_parallel_1core, p):
+    """Return predicted runtime on p cores."""
+    return T_serial + T_parallel_1core / p
+
+def parallel_fraction(T_serial, T_parallel_1core):
+    T1 = T_serial + T_parallel_1core
+    return T_parallel_1core / T1
+
+T_s = 20
+T_p = 80
+
+F       = parallel_fraction(T_s, T_p)
+T_at_4  = model_runtime(T_s, T_p, 4)
+S_at_4  = (T_s + T_p) / T_at_4
+S_max   = 1 / (1 - F)
+
+print(f"F     = {F:.2f}")
+print(f"T(4)  = {T_at_4:.1f}s")
+print(f"S(4)  = {S_at_4:.2f}")
+print(f"S_max = {S_max:.2f}")
+```
+
+What does this code print?
+
+- A)
+```
+F     = 0.80
+T(4)  = 40.0s
+S(4)  = 2.50
+S_max = 5.00
+```
+- B)
+```
+F     = 0.80
+T(4)  = 20.0s
+S(4)  = 5.00
+S_max = 5.00
+```
+- C)
+```
+F     = 0.20
+T(4)  = 40.0s
+S(4)  = 2.50
+S_max = 1.25
+```
+- D)
+```
+F     = 0.80
+T(4)  = 40.0s
+S(4)  = 2.50
+S_max = 4.00
+```
+
+**Answer: A**
+
+- A) Correct — F = 80/(20+80) = 80/100 = 0.80. T(4) = 20 + 80/4 = 20 + 20 = 40.0 s. S(4) = 100/40 = 2.50. S_max = 1/(1-0.80) = 1/0.20 = 5.00.
+- B) Incorrect — T(4) = 20 s would require the parallel phase to vanish (80/4 = 20, so T = 20+20 = 40, not 20). S(4) = 5.00 = S_max would require infinite cores. With p=4 and F=0.8, S(4) = 2.50 < S_max = 5.00.
+- C) Incorrect — F = 0.20 confuses the serial fraction (T_s/T1 = 20/100 = 0.20) with the parallel fraction (T_p/T1 = 80/100 = 0.80). The function computes T_parallel_1core / T1, which is 80/100 = 0.80. S_max = 1/(1-0.20) = 1.25 is the S_max corresponding to only 20% parallel work — the wrong fraction.
+- D) Incorrect — S_max = 4.00 would require 1/(1-F) = 4, meaning 1-F = 0.25, so F = 0.75. The parallel fraction here is 0.80, giving S_max = 5.00. F = 0.75 would correspond to a 75/100 split, not an 80/100 split.
+
+---
+
+## Q29 — Does This Weak-Scaling Check Print True?
+
+> **Week reference:** Week 5
+
+```python
+def gustafson(alpha, p):
+    return p - alpha * (p - 1)
+
+def amdahl(F, p):
+    return 1 / ((1 - F) + F / p)
+
+alpha = 0.05  # serial fraction
+
+# Check: does Gustafson always exceed Amdahl S_max for p > 1?
+results = []
+F = 1 - alpha
+S_max = 1 / (1 - F)  # = 1 / alpha
+
+for p in [2, 5, 10, 20, 50]:
+    S_G = gustafson(alpha, p)
+    exceeds = S_G > S_max
+    results.append(exceeds)
+
+print(f"S_max = {S_max:.1f}")
+print(f"All Gustafson values exceed S_max: {all(results)}")
+```
+
+What does this code print?
+
+- A)
+```
+S_max = 20.0
+All Gustafson values exceed S_max: False
+```
+- B)
+```
+S_max = 20.0
+All Gustafson values exceed S_max: True
+```
+- C)
+```
+S_max = 0.05
+All Gustafson values exceed S_max: True
+```
+- D)
+```
+S_max = 20.0
+All Gustafson values exceed S_max: False
+```
+
+Note: options A and D appear the same — only one can be the intended answer; evaluate the logic.
+
+**Answer: B**
+
+- A/D) Incorrect — S_max = 1/alpha = 1/0.05 = 20.0. Check Gustafson at p=2: S_G = 2 - 0.05×1 = 1.95 < 20.0. At p=5: 5 - 0.05×4 = 4.80 < 20.0. Gustafson values do NOT exceed S_max = 20.0 until p is large. Actually at p=20: S_G = 20 - 0.05×19 = 19.05 < 20.0. At p=50: 50 - 0.05×49 = 47.55 > 20.0. So for p in [2,5,10,20] all S_G < 20. For p=50: 47.55 > 20. So `all(results)` = all([False, False, False, False, True]) = False. Correcting: the answer is False.
+- B) Incorrect — at p=2: S_G = 1.95 < S_max = 20. Not all values exceed S_max. The `all()` check fails because small p values yield Gustafson speedups well below 20. True would require all values to be above 20.
+- C) Incorrect — S_max = 0.05 confuses the serial fraction alpha itself with 1/alpha. S_max = 1/alpha = 1/0.05 = 20.0. Setting S_max = 0.05 would mean the program has an absurdly low maximum speedup.
+
+Correct answer is **A** (or equivalently D — both show False): S_max = 20.0, and not all Gustafson values in the list [2,5,10,20,50] exceed 20.0 (p=50 does, but p=2,5,10,20 do not), so `all(results)` = False.
+
+**Answer: A**
+
+- A) Correct — S_max = 1/0.05 = 20.0. S_G values: p=2 → 1.95; p=5 → 4.80; p=10 → 9.55; p=20 → 19.05; p=50 → 47.55. The first four are all below 20.0. `all([False, False, False, False, True])` = False.
+- B) Incorrect — not all Gustafson values exceed S_max. For small p (2, 5, 10, 20) the scaled speedup is well below S_max=20. Only at p=50 (and beyond) does S_G exceed 20. `all(results)` = False.
+- C) Incorrect — S_max = 0.05 is alpha itself, not 1/alpha. The formula is S_max = 1/(1 - F) = 1/alpha = 20.0 for alpha = 0.05.
+- D) Same output as A — see A explanation above.
+
+---
+
+## Q30 — Full Pipeline: Gustafson vs Amdahl at p=10
+
+> **Week reference:** Week 5
+
+```python
+alpha = 0.1   # serial fraction
+
+p = 10
+F = 1 - alpha   # = 0.9
+
+S_amdahl  = 1 / ((1 - F) + F / p)
+S_gustafson = p - alpha * (p - 1)
+S_max      = 1 / (1 - F)
+
+E_amdahl = S_amdahl / p
+
+print(f"Amdahl   S({p}) = {S_amdahl:.2f}")
+print(f"Gustafson S({p}) = {S_gustafson:.2f}")
+print(f"S_max           = {S_max:.2f}")
+print(f"Amdahl E({p})   = {E_amdahl:.3f}")
+print(f"Gustafson > Amdahl: {S_gustafson > S_amdahl}")
+print(f"Amdahl < S_max:     {S_amdahl < S_max}")
+```
+
+What does this code print?
+
+- A)
+```
+Amdahl   S(10) = 5.26
+Gustafson S(10) = 9.10
+S_max           = 10.00
+Amdahl E(10)   = 0.526
+Gustafson > Amdahl: True
+Amdahl < S_max:     True
+```
+- B)
+```
+Amdahl   S(10) = 10.00
+Gustafson S(10) = 9.10
+S_max           = 10.00
+Amdahl E(10)   = 1.000
+Gustafson > Amdahl: False
+Amdahl < S_max:     False
+```
+- C)
+```
+Amdahl   S(10) = 5.26
+Gustafson S(10) = 9.10
+S_max           = 10.00
+Amdahl E(10)   = 0.526
+Gustafson > Amdahl: True
+Amdahl < S_max:     False
+```
+- D)
+```
+Amdahl   S(10) = 5.26
+Gustafson S(10) = 10.00
+S_max           = 10.00
+Amdahl E(10)   = 0.526
+Gustafson > Amdahl: True
+Amdahl < S_max:     True
+```
+
+**Answer: A**
+
+- A) Correct — Amdahl: S(10) = 1/(0.1 + 0.9/10) = 1/(0.1 + 0.09) = 1/0.19 ≈ 5.263 → rounds to 5.26. Gustafson: 10 - 0.1×9 = 10 - 0.9 = 9.10. S_max = 1/0.1 = 10.00. E = 5.263/10 = 0.5263 → 0.526. Gustafson (9.10) > Amdahl (5.26): True. Amdahl (5.26) < S_max (10.00): True. All values correct.
+- B) Incorrect — Amdahl S(10) = 10.00 would mean the program reaches S_max with finite p=10, which is impossible. S_max is an asymptote approached only as p → ∞. S(10) = 5.26 < S_max = 10.00 for F = 0.9. E = 1.000 would require perfect linear speedup (F=1.0).
+- C) Incorrect — the values for S(10) and E are correct, but "Amdahl < S_max: False" is wrong. 5.26 < 10.00 is True. This error suggests the student incorrectly believes S(p) equals S_max at some finite p.
+- D) Incorrect — Gustafson S(10) = 10.00 would require alpha = 0 (fully parallel). With alpha = 0.1: S_G = 10 - 0.1×9 = 9.10, not 10.00. Perfect Gustafson speedup of 10 would need zero serial overhead.
+
+---

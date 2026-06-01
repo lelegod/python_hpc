@@ -25,6 +25,17 @@
 - [Q18 — nsys: Diagnosing PCIe Bottleneck](#q18-nsys-diagnosing-pcie-bottleneck)
 - [Q19 — line_profiler: Hits Column Disambiguation](#q19-line_profiler-hits-column-disambiguation)
 - [Q20 — cProfile: Sorting Strategy for Optimisation](#q20-cprofile-sorting-strategy-for-optimisation)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q21 — timeit: What Does the Return Value Mean?](#q21--timeit-what-does-the-return-value-mean)
+- [Q22 — perf_counter: Spot the Bug](#q22--perf_counter-spot-the-bug)
+- [Q23 — timeit: Number Parameter Effect](#q23--timeit-number-parameter-effect)
+- [Q24 — memory_profiler: Reading the Increment Column](#q24--memory_profiler-reading-the-increment-column)
+- [Q25 — memory_profiler: Peak Memory from Output](#q25--memory_profiler-peak-memory-from-output)
+- [Q26 — sys.getsizeof: List vs Contents](#q26--sysgetsizeof-list-vs-contents)
+- [Q27 — pstats: Programmatic Sort and Print](#q27--pstats-programmatic-sort-and-print)
+- [Q28 — cProfile.run() vs -m cProfile](#q28--cprofilerun-vs--m-cprofile)
+- [Q29 — dis: Comparing Two Expressions](#q29--dis-comparing-two-expressions)
+- [Q30 — timeit: GC Disabled Effect on Result](#q30--timeit-gc-disabled-effect-on-result)
 
 ---
 
@@ -631,5 +642,353 @@ A developer has a cProfile report with 50 functions. She wants to find the funct
 - B) Incorrect — tottime is useful for finding where CPU instructions live, but a wrapper with low tottime and high cumtime hides the real opportunity. You could miss an entire slow call tree.
 - C) Correct — sort by cumtime descending to identify the highest-cost call trees first. The top entries show where wall-clock time is actually going. Then drill into those entries with tottime to distinguish wrappers from actual work.
 - D) Incorrect — percall (tottime) is useful when comparing functions called different numbers of times, but it ignores total impact. A function with 0.1 s/call called 1000 times (100 s total) is a better target than one with 1 s/call called once.
+
+---
+
+## Set 3 — Extended Practice
+
+- [Q21 — timeit: What Does the Return Value Mean?](#q21--timeit-what-does-the-return-value-mean)
+- [Q22 — perf_counter: Spot the Bug](#q22--perf_counter-spot-the-bug)
+- [Q23 — timeit: Number Parameter Effect](#q23--timeit-number-parameter-effect)
+- [Q24 — memory_profiler: Reading the Increment Column](#q24--memory_profiler-reading-the-increment-column)
+- [Q25 — memory_profiler: Peak Memory from Output](#q25--memory_profiler-peak-memory-from-output)
+- [Q26 — sys.getsizeof: List vs Contents](#q26--sysgetsizeof-list-vs-contents)
+- [Q27 — pstats: Programmatic Sort and Print](#q27--pstats-programmatic-sort-and-print)
+- [Q28 — cProfile.run() vs -m cProfile](#q28--cprofilerun-vs--m-cprofile)
+- [Q29 — dis: Comparing Two Expressions](#q29--dis-comparing-two-expressions)
+- [Q30 — timeit: GC Disabled Effect on Result](#q30--timeit-gc-disabled-effect-on-result)
+
+---
+
+## Q21 — timeit: What Does the Return Value Mean?
+
+> **Week reference:** Week 2
+
+What does the following code print?
+
+```python
+import timeit
+
+result = timeit.timeit("x = [i**2 for i in range(1000)]", number=500)
+print(result)
+```
+
+- A) The time in seconds for a single execution of the list comprehension
+- B) The total time in seconds for 500 executions of the list comprehension
+- C) The average time in seconds per execution (total / 500)
+- D) The time in milliseconds for 500 executions
+
+**Answer: B**
+
+- A) Incorrect — `timeit.timeit()` with `number=500` runs the statement 500 times and returns the TOTAL elapsed time for all 500 runs. To get per-execution time, divide the result by `number`.
+- B) Correct — `timeit.timeit(stmt, number=N)` returns the total wall-clock time in seconds for N executions of `stmt`. To get the average per-call time, you compute `result / 500` yourself. The return value is always the raw total, not a per-iteration average.
+- C) Incorrect — `timeit` does not divide by `number`; the division is left to the caller. The IPython `%timeit` magic does display the per-loop time, but the raw `timeit.timeit()` function returns the total.
+- D) Incorrect — `timeit.timeit()` always returns time in seconds (a float), never milliseconds. If `result` is 0.85, that means 850 ms total, not 850 ms per call.
+
+---
+
+## Q22 — perf_counter: Spot the Bug
+
+> **Week reference:** Week 2
+
+What does the following code print, and is there a bug?
+
+```python
+from time import perf_counter
+import numpy as np
+
+A = np.random.rand(500, 500)
+p = 11
+
+start = perf_counter()
+np.save("saved.npy", np.linalg.matrix_power(A, p + 1))
+end = perf_counter()
+
+print(f"{start - end}")
+```
+
+- A) Prints a positive float — the elapsed time in seconds; no bug
+- B) Prints a negative float — the expression `start - end` is backwards; the correct expression is `end - start`
+- C) Prints `0.0` because `perf_counter` is not precise enough for NumPy operations
+- D) Raises a `TypeError` because `perf_counter` timestamps cannot be subtracted
+
+**Answer: B**
+
+- A) Incorrect — `start` is recorded before the operation and `end` after, so `start < end`. The expression `start - end` produces a negative value, not a positive elapsed time.
+- B) Correct — this is a real bug present in `week2/numpy5.py`. The correct idiom is `end - start` (later minus earlier), which gives a positive elapsed time. `start - end` gives a negative number with the same magnitude. This is an exam-style trap: the code runs without error but silently reports negative time.
+- C) Incorrect — `perf_counter()` has nanosecond resolution and is more than sufficient for NumPy operations. A 500×500 matrix power computation typically takes tens to hundreds of milliseconds, well within perf_counter's measurement range.
+- D) Incorrect — `perf_counter()` returns a plain Python `float`. Floating-point subtraction is always valid. No exception is raised; the expression simply yields a negative result.
+
+---
+
+## Q23 — timeit: Number Parameter Effect
+
+> **Week reference:** Week 2
+
+Consider the following two `timeit` calls:
+
+```python
+import timeit
+
+t1 = timeit.timeit("sum(range(10000))", number=1)
+t2 = timeit.timeit("sum(range(10000))", number=10000)
+```
+
+Which statement is TRUE?
+
+- A) `t1` and `t2` will be approximately equal because the per-call time is constant
+- B) `t2 / 10000` is a more reliable estimate of the per-call time than `t1`, because averaging over many repetitions reduces the effect of OS scheduling noise
+- C) `t2` is always exactly 10000 × `t1` because Python execution is perfectly deterministic
+- D) `t1` is the preferred measurement because running only once avoids the garbage collector overhead that accumulates over 10000 runs
+
+**Answer: B**
+
+- A) Incorrect — `t1` measures a single execution (susceptible to OS jitter); `t2` measures 10,000 executions. `t2` is approximately 10,000 × `t1`, not approximately equal to `t1`.
+- B) Correct — `t2 / 10000` averages out transient noise from OS scheduler preemptions, cache cold-starts, and branch predictor misses that affect any individual run. A single measurement (`t1`) can vary by ±20–50% for fast operations; the mean of 10,000 runs is far more stable. This is precisely the rationale behind `timeit`'s `number` parameter.
+- C) Incorrect — Python execution is not perfectly deterministic; OS scheduling, branch prediction, and CPU frequency scaling introduce variation. `t2` will be close to 10,000 × `t1` but not exactly equal. The variance of `t2` is much lower than 10,000 × `t1`'s variance, which is the point.
+- D) Incorrect — `timeit` disables the garbage collector by default (regardless of `number`), so GC accumulation is not a factor in the comparison. Additionally, single-shot timing is less reliable, not more reliable, for microbenchmarks.
+
+---
+
+## Q24 — memory_profiler: Reading the Increment Column
+
+> **Week reference:** Week 2
+
+The following `memory_profiler` output is from a function that builds a large list (timer unit: MiB):
+
+```
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+     3     52.3 MiB     52.3 MiB           1   def build_data(n):
+     4     52.3 MiB      0.0 MiB           1       result = []
+     5    814.6 MiB    762.3 MiB           1       result = [i * 1.5 for i in range(n)]
+     6    814.6 MiB      0.0 MiB           1       return result
+```
+
+How much memory did the list comprehension on line 5 allocate?
+
+- A) 814.6 MiB — the current RSS after line 5 executes
+- B) 762.3 MiB — the Increment column shows how much was newly allocated on that line
+- C) 52.3 MiB — the baseline memory before the function ran
+- D) 0.0 MiB — line 6 shows no increment, so the allocation must be on line 6
+
+**Answer: B**
+
+- A) Incorrect — 814.6 MiB is the total process RSS (resident set size) after line 5 completes, which includes all memory allocated before the function was called (52.3 MiB) plus the new allocation. The RSS is cumulative, not the allocation for this line alone.
+- B) Correct — the Increment column records the change in RSS relative to the previous line. Line 5's Increment of 762.3 MiB means the list comprehension caused approximately 762 MiB of new memory to be allocated. This is the correct column to read for per-line allocation cost.
+- C) Incorrect — 52.3 MiB is the process baseline before `build_data` ran. It includes the Python interpreter and any previously imported modules. It is not related to line 5's allocation.
+- D) Incorrect — line 6 (`return result`) has Increment = 0.0 MiB because returning a reference to an existing object does not allocate new memory. The allocation happened on line 5 where the list comprehension created all the float objects and the list structure.
+
+---
+
+## Q25 — memory_profiler: Peak Memory from Output
+
+> **Week reference:** Week 2
+
+Consider this `memory_profiler` output for a pipeline function:
+
+```
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+     1     48.0 MiB     48.0 MiB           1   def pipeline():
+     2    548.0 MiB    500.0 MiB           1       data = load_dataset()
+     3    798.0 MiB    250.0 MiB           1       features = extract(data)
+     4    548.0 MiB   -250.0 MiB           1       del data
+     5    798.0 MiB    250.0 MiB           1       model = train(features)
+     6    548.0 MiB   -250.0 MiB           1       del features
+     7    548.0 MiB      0.0 MiB           1       return model
+```
+
+What is the peak memory usage of this function, and on which line does it occur?
+
+- A) 548.0 MiB — line 2, when the dataset is first loaded
+- B) 798.0 MiB — lines 3 and 5, where both intermediate objects are allocated before the previous one is deleted
+- C) 1596.0 MiB — line 5, when `data`, `features`, and `model` all coexist in memory
+- D) 250.0 MiB — the largest single Increment value
+
+**Answer: B**
+
+- A) Incorrect — line 2 shows 548.0 MiB RSS, but line 3 reaches 798.0 MiB. The peak is not at the first large allocation.
+- B) Correct — the peak RSS is 798.0 MiB, reached on both line 3 (data + features coexist) and line 5 (features + model coexist). The `del data` on line 4 frees 250 MiB, bringing it back to 548 MiB before `train` allocates another 250 MiB. The peak is 798 MiB, not the sum of all allocations.
+- C) Incorrect — 1596.0 MiB would only occur if `data`, `features`, and `model` all coexisted simultaneously. But `del data` on line 4 removes `data` before `model` is created on line 5. The memory profiler output confirms the RSS never exceeds 798 MiB.
+- D) Incorrect — 250.0 MiB is the size of the largest single allocation (on line 3 and line 5 individually), but the peak RSS includes the cumulative effect of all prior allocations still in memory. Peak = base + all live allocations = 48 + 500 + 250 = 798 MiB.
+
+---
+
+## Q26 — sys.getsizeof: List vs Contents
+
+> **Week reference:** Week 2
+
+What is the output of the following code? (Assume CPython 3.12, 64-bit)
+
+```python
+import sys
+
+data = [1, 2, 3]
+print(sys.getsizeof(data))
+print(sys.getsizeof(data) == sys.getsizeof(data[0]) * 3)
+```
+
+- A) Prints `88` then `True` — the list size is exactly 3 × the size of one integer
+- B) Prints a number around 88 (list overhead + 3 pointers) then `False` — list size includes header bytes and 8-byte pointers, not the integer objects themselves
+- C) Prints `84` then `True` — each integer is 28 bytes and 3 × 28 = 84
+- D) Prints `24` then `False` — Python stores only the 3 integer values (8 bytes each) without a header
+
+**Answer: B**
+
+- A) Incorrect — the list size is NOT simply 3 × the integer size. `sys.getsizeof(1)` is approximately 28 bytes (Python int header), but the list stores 8-byte pointers (references) to those objects, not the objects inline. The list structure also has its own header (~56 bytes). The list size and the integer size measure different things.
+- B) Correct — `sys.getsizeof([1, 2, 3])` returns approximately 88 bytes on CPython 3.12 (56-byte list header + 3 × 8-byte pointers = 80 bytes, plus over-allocation buffer). `sys.getsizeof(1)` is approximately 28 bytes. Since 88 ≠ 28 × 3 = 84, the second print is `False`. This demonstrates that `getsizeof` on a list does NOT measure the memory occupied by the elements.
+- C) Incorrect — 84 = 3 × 28 would mean the list size equals the sum of its integer sizes, which ignores the list header and the fact that lists store pointers, not embedded objects.
+- D) Incorrect — Python objects always have a header (type pointer, reference count, value). A small Python integer takes ~28 bytes, not 8. The 8-byte figure would apply to a NumPy int64 array element, not a Python int.
+
+---
+
+## Q27 — pstats: Programmatic Sort and Print
+
+> **Week reference:** Week 2
+
+What does the following code do, and what is the correct interpretation of its output?
+
+```python
+import cProfile
+import pstats
+import io
+
+pr = cProfile.Profile()
+pr.enable()
+result = sum(i**2 for i in range(100_000))
+pr.disable()
+
+stream = io.StringIO()
+stats = pstats.Stats(pr, stream=stream)
+stats.sort_stats('tottime')
+stats.print_stats(5)
+print(stream.getvalue())
+```
+
+- A) Profiles the `sum()` call only; `sort_stats('tottime')` sorts by total wall-clock time; prints 5 lines of output
+- B) Profiles the generator expression and `sum()` call; `sort_stats('tottime')` sorts by own-code time excluding callees; `print_stats(5)` prints the top 5 functions by that metric
+- C) Raises a `ValueError` because `pstats.Stats` cannot accept a `cProfile.Profile` object — it only accepts filenames
+- D) Profiles only the code inside `cProfile.Profile()`, not the code between `enable()` and `disable()`
+
+**Answer: B**
+
+- A) Incorrect — cProfile profiles everything between `pr.enable()` and `pr.disable()`, which includes the entire generator expression and `sum()` call, not just `sum()`. Also, `sort_stats('tottime')` sorts by own-code time, not total wall-clock time (that would be `'cumulative'`).
+- B) Correct — `cProfile.Profile` used as a context-manager-equivalent (enable/disable) records all function calls between the two calls. `sort_stats('tottime')` ranks functions by time spent in their own code (excluding callees). `print_stats(5)` limits output to the top 5 most expensive functions by that sort key. The `io.StringIO` stream captures the output as a string instead of printing to stdout.
+- C) Incorrect — `pstats.Stats` can accept either a filename string (path to a `.prof` file) OR a `cProfile.Profile` object directly. Passing a `Profile` instance is a common in-memory workflow when you do not want to save a file.
+- D) Incorrect — `pr.enable()` starts recording; `pr.disable()` stops it. All Python function calls between these two lines are captured. The `cProfile.Profile()` constructor itself does not start profiling.
+
+---
+
+## Q28 — cProfile.run() vs -m cProfile
+
+> **Week reference:** Week 2
+
+What is the difference between the following two approaches to profiling the same script?
+
+```python
+# Approach A — in script.py
+import cProfile
+cProfile.run('main()', 'output.prof')
+```
+
+```bash
+# Approach B — shell command
+python -m cProfile -o output.prof script.py
+```
+
+- A) Approach A profiles only the `main()` function and its callees; Approach B profiles the entire script including module-level import and initialisation code
+- B) Approach A saves to a binary `.prof` file; Approach B can only print to stdout and cannot save to a file
+- C) Both approaches are identical in every respect; the `-o` flag and `cProfile.run()` second argument produce the same binary output
+- D) Approach B disables the garbage collector; Approach A does not
+
+**Answer: A**
+
+- A) Correct — `cProfile.run('main()')` starts profiling when `main()` is called and stops when it returns. Module-level code (imports, global variable definitions) that executes before `main()` is called is NOT profiled. Approach B (`python -m cProfile script.py`) profiles the entire execution from the first bytecode instruction, including all imports and top-level statements. For scripts with expensive import-time initialisation, this distinction matters.
+- B) Incorrect — Approach B with `-o output.prof` does save to a binary file in the same format as `cProfile.run(stmt, 'output.prof')`. Without `-o`, Approach B prints to stdout. The `-o` flag is explicitly for saving the binary profile.
+- C) Incorrect — as explained in A, the scope of profiling differs. Approach A misses module-level setup cost; Approach B captures the whole execution. They produce different `.prof` files when module-level cost is non-trivial.
+- D) Incorrect — neither approach modifies garbage collector behaviour. GC is only disabled by `timeit.timeit()`, not by cProfile. Both cProfile approaches run with the normal GC active.
+
+---
+
+## Q29 — dis: Comparing Two Expressions
+
+> **Week reference:** Week 2
+
+A developer runs `dis.dis` on two equivalent functions:
+
+```python
+import dis
+
+def f1(x): return x * x
+def f2(x): return x ** 2
+
+dis.dis(f1)
+# LOAD_FAST   x
+# LOAD_FAST   x
+# BINARY_OP   *
+# RETURN_VALUE
+
+dis.dis(f2)
+# LOAD_FAST   x
+# LOAD_CONST  2
+# BINARY_OP   **
+# RETURN_VALUE
+```
+
+Both produce the same mathematical result. What does this bytecode comparison reveal about their performance?
+
+- A) `f1` and `f2` are identical in performance; bytecode opcodes always execute in the same time
+- B) `f1` (`x * x`) may be faster than `f2` (`x ** 2`) because `BINARY_OP **` (power) involves a more general computation path (potentially calling `__pow__` with type dispatch) whereas `BINARY_OP *` (multiply) is a simpler operation for numeric types
+- C) `f2` is always faster because `x ** 2` is a CPython-optimised special case that avoids the double `LOAD_FAST` in `f1`
+- D) The bytecode difference is irrelevant; Python JIT-compiles both to equivalent machine code at runtime
+
+**Answer: B**
+
+- A) Incorrect — different opcodes have different execution costs. `BINARY_OP *` for numeric types dispatches to a highly optimised multiplication routine; `BINARY_OP **` must handle the general case of exponentiation, including non-integer exponents, large integers, and `__pow__` protocol dispatch, making it slower for the simple `x**2` case.
+- B) Correct — `x * x` compiles to two `LOAD_FAST` operations followed by a multiply, which is a direct C-level multiplication. `x ** 2` uses the power operator, which in CPython invokes a more general code path that checks whether the exponent is a small positive integer (as an optimisation) but still carries more overhead than a plain multiply. Benchmarking typically shows `x * x` is faster than `x ** 2` for floats and small integers.
+- C) Incorrect — CPython does have a special-case optimisation for `x ** 2` in some versions, but this optimisation still produces equivalent or slightly slower code than `x * x` because the power path has more overhead. Additionally, `x ** 2` with a literal `2` does use `LOAD_CONST` (one fewer `LOAD_FAST`) but the power dispatch overhead dominates.
+- D) Incorrect — CPython is a bytecode interpreter, not a JIT compiler (in standard CPython 3.x). Each bytecode instruction is interpreted separately at runtime. There is no JIT compilation in CPython that would equate these two paths. Pypy or Numba would JIT-compile them, but standard CPython does not.
+
+---
+
+## Q30 — timeit: GC Disabled Effect on Result
+
+> **Week reference:** Week 2
+
+Consider the following two timing approaches:
+
+```python
+import timeit
+import gc
+
+# Approach A — default timeit (GC disabled during timing)
+t_a = timeit.timeit(
+    "result = [Node() for _ in range(10000)]",
+    setup="from __main__ import Node",
+    number=1000
+)
+
+# Approach B — timeit with GC enabled
+t_b = timeit.timeit(
+    "result = [Node() for _ in range(10000)]",
+    setup="import gc; gc.enable(); from __main__ import Node",
+    number=1000
+)
+```
+
+Assuming `Node` is a class that creates cyclic references, which statement is TRUE?
+
+- A) `t_a` and `t_b` will be identical because GC state has no effect on timing
+- B) `t_a` will be smaller than `t_b` because Approach A disables the GC, removing periodic GC pause overhead that Approach B incurs; however `t_a` underestimates real-world cost when GC is active
+- C) `t_b` will be smaller than `t_a` because enabling GC allows memory to be freed sooner, reducing allocation pressure
+- D) `t_a` will be larger than `t_b` because disabling GC causes memory to accumulate, increasing allocation time
+
+**Answer: B**
+
+- A) Incorrect — GC state directly affects timing when objects with cyclic references are being created. Periodic GC collection pauses (which happen when generation thresholds are exceeded) can add milliseconds to the total time. Disabling GC eliminates these pauses, making `t_a` smaller.
+- B) Correct — `timeit` disables GC by default to produce more reproducible results. Without GC, `Node` objects accumulate in memory (since cyclic references prevent reference-counting from freeing them), but no collection pauses occur. Approach B allows GC to run, which periodically collects the cyclic garbage but introduces collection pauses. `t_a < t_b` for cyclic-reference-heavy code. The tradeoff is that `t_a` underestimates real production cost where GC runs normally.
+- C) Incorrect — while GC does free cyclic garbage sooner, the collection pause itself takes time. For code that creates many cyclic objects, GC pauses increase total time, not decrease it. Allocation pressure from accumulating unreachable objects would be an issue if memory is exhausted, but the GC overhead of collection is what dominates timing.
+- D) Incorrect — memory accumulation from disabled GC does not increase allocation time significantly unless the system runs out of memory. The effect of GC being disabled is to remove collection pauses, which decreases (not increases) measured time. The direction of the effect in B is correct.
 
 ---

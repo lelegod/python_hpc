@@ -23,13 +23,24 @@
 - [Q16 — clevel Comparison: lz4 vs zstd](#q16--clevel-comparison-lz4-vs-zstd)
 - [Q17 — Thread Count at Compress vs Decompress](#q17--thread-count-at-compress-vs-decompress)
 - [Q18 — Zeros vs Random Compression Ratio Thresholds](#q18--zeros-vs-random-compression-ratio-thresholds)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q19 — Wrong typesize Degrades Compression](#q19--wrong-typesize-degrades-compression)
+- [Q20 — clevel=0 Stores Uncompressed Data](#q20--clevel0-stores-uncompressed-data)
+- [Q21 — set_nthreads Return Value](#q21--set_nthreads-return-value)
+- [Q22 — pack_array Return Type Trap](#q22--pack_array-return-type-trap)
+- [Q23 — Tiled vs Zeros File Size Ordering](#q23--tiled-vs-zeros-file-size-ordering)
+- [Q24 — blosc.compress with typesize=1 and SHUFFLE](#q24--blosccompress-with-typesize1-and-shuffle)
+- [Q25 — unpack_array After compress Raises Error](#q25--unpack_array-after-compress-raises-error)
+- [Q26 — nthreads Does Not Affect Compressed Length](#q26--nthreads-does-not-affect-compressed-length)
+- [Q27 — zstd Read vs Write Speed Ordering](#q27--zstd-read-vs-write-speed-ordering)
+- [Q28 — blosc.compress clevel vs Decompression Time](#q28--blosccompress-clevel-vs-decompression-time)
 
 ---
 
 > Format: Each question shows Blosc Python code with a specific behaviour to predict.
 > Exam frequency: **Week 3 topic**.
 
-**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#question-1)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)
+**Navigate:** &nbsp;[▶ Set 1 — Original Questions](#question-1)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 2 — New Practice](#set-2--generated-practice-questions-exam-day-focus)&nbsp;&nbsp;|&nbsp;&nbsp;[▶ Set 3 — Extended Practice](#set-3--extended-practice)
 
 ---
 
@@ -719,5 +730,382 @@ Which output is most likely?
 - B) Incorrect — zeros compress far better than 50%. LZ4 represents the entire array as "N repetitions of 0x00" in essentially a constant number of bytes.
 - C) Incorrect — random data is incompressible for any lossless codec. LZ4 cannot achieve meaningful compression for maximum-entropy data regardless of its efficiency.
 - D) Incorrect — a 1 GiB all-zeros array easily compresses below 0.1% of raw size. The Blosc frame overhead is tiny (a few hundred bytes vs ~1 GiB raw), so the first threshold is easily met. The second part is correct (random > 95%), making this answer incorrect overall.
+
+---
+
+## Set 3 — Extended Practice
+
+---
+
+## Q19 — Wrong typesize Degrades Compression
+
+```python
+import blosc
+import numpy as np
+
+arr = np.linspace(0, 1000, 1_000_000, dtype='float64')
+
+# Correct typesize
+c_correct = blosc.compress(arr.tobytes(), typesize=8,
+                           shuffle=blosc.SHUFFLE, cname='lz4')
+
+# Wrong typesize
+c_wrong = blosc.compress(arr.tobytes(), typesize=1,
+                         shuffle=blosc.SHUFFLE, cname='lz4')
+
+print(len(c_correct) < len(c_wrong))
+```
+
+What does this code most likely print?
+
+**A)** `False` — typesize=1 produces a smaller file because it treats each byte individually
+
+**B)** `True` — correct typesize=8 allows SHUFFLE to properly group the 8 bytes of each float64 element, yielding better compression than the mis-strided typesize=1
+
+**C)** `False` — SHUFFLE is a no-op for float64 regardless of typesize
+
+**D)** A `ValueError` because typesize must equal the dtype's itemsize or Blosc raises an error
+
+**Answer: B**
+
+- A) Incorrect — `typesize=1` effectively disables byte-level shuffling for float64. Each byte is treated as its own independent 1-byte element, so SHUFFLE with typesize=1 is a no-op (nothing to transpose within a 1-byte element). The resulting byte stream sent to LZ4 is the original raw bytes with no grouping of significance levels.
+- B) Correct — `typesize=8` tells SHUFFLE to stride through the data in 8-byte chunks, collecting byte 0 of all elements, then byte 1, etc. For `np.linspace(0, 1000, ...)`, the sign and exponent bytes change slowly, so SHUFFLE creates long runs of similar bytes. LZ4 compresses these runs heavily. `typesize=1` skips this beneficial reordering, so `len(c_correct) < len(c_wrong)` is `True`.
+- C) Incorrect — SHUFFLE with the correct typesize (8) is very effective for float64 data with structured values like linspace. The statement is false.
+- D) Incorrect — Blosc does not validate that `typesize` matches the array's actual dtype. It accepts any value from 1 to 255 and uses it as-is. Wrong values produce worse compression silently, not an error.
+
+---
+
+## Q20 — clevel=0 Stores Uncompressed Data
+
+```python
+import blosc
+import numpy as np
+
+arr = np.zeros((1024, 1024), dtype='float32')
+
+c_zero  = blosc.compress(arr.tobytes(), typesize=4, cname='lz4', clevel=0)
+c_one   = blosc.compress(arr.tobytes(), typesize=4, cname='lz4', clevel=1)
+
+print(len(c_zero) > len(c_one))
+```
+
+What does this code most likely print?
+
+**A)** `False` — `clevel=0` uses minimum compression like `clevel=1`, producing the same size
+
+**B)** `True` — `clevel=0` stores data uncompressed inside the Blosc frame; `clevel=1` applies LZ4 compression to the all-zeros data, yielding a much smaller output
+
+**C)** `True` — `clevel=0` applies BITSHUFFLE which expands the data before the frame is written
+
+**D)** `False` — both `clevel=0` and `clevel=1` produce an empty Blosc frame for all-zeros data
+
+**Answer: B**
+
+- A) Incorrect — `clevel=0` is not minimum compression; it is explicitly "no compression." The codec is bypassed entirely and the (possibly shuffled) bytes are stored verbatim in the Blosc frame. For an all-zeros float32 array, `clevel=1` compresses to near-zero bytes using LZ4's run-length detection. The uncompressed frame (`clevel=0`) is far larger.
+- B) Correct — with `clevel=0`, Blosc stores the raw data (after any shuffle transformation) without codec compression. For a 4 MiB all-zeros array, `c_zero` is approximately 4 MiB (plus frame overhead), while `c_one` compresses all the zeros to a tiny handful of bytes. `len(c_zero) > len(c_one)` is `True`.
+- C) Incorrect — `clevel=0` does not change the shuffle mode. The shuffle parameter is independent of clevel. BITSHUFFLE must be requested explicitly and does not expand data to a larger size before the codec.
+- D) Incorrect — a Blosc frame always contains at least the raw data bytes (when `clevel=0`) or the compressed bytes (when `clevel > 0`). An empty frame would not be a valid Blosc frame and would not allow decompression.
+
+---
+
+## Q21 — set_nthreads Return Value
+
+```python
+import blosc
+
+blosc.set_nthreads(1)
+prev1 = blosc.set_nthreads(4)
+prev2 = blosc.set_nthreads(2)
+
+print(prev1, prev2)
+```
+
+What does this code print?
+
+**A)** `4 2` — `set_nthreads` returns the value it was just set to
+
+**B)** `1 4` — `set_nthreads` returns the previous thread count before the change
+
+**C)** `None None` — `set_nthreads` is a void function and returns `None`
+
+**D)** `1 1` — `set_nthreads` always returns the initial default value of 1
+
+**Answer: B**
+
+- A) Incorrect — `set_nthreads` returns the old (previous) value, not the new value being set. This follows the common Python/C pattern of "set and return old."
+- B) Correct — `blosc.set_nthreads(n)` sets the thread count to `n` and returns whatever the thread count was before the call. After `set_nthreads(1)`, the count is 1. `set_nthreads(4)` sets it to 4 and returns the old value `1`, so `prev1 = 1`. `set_nthreads(2)` sets it to 2 and returns the old value `4`, so `prev2 = 4`. Output: `1 4`.
+- C) Incorrect — `set_nthreads` has a documented return value (the previous thread count). It does not return `None`.
+- D) Incorrect — `set_nthreads` returns the thread count that was active immediately before the call, not always the initial default of 1. After the first call changes the count, subsequent calls return the most recently set value.
+
+---
+
+## Q22 — pack_array Return Type Trap
+
+```python
+import blosc
+import numpy as np
+
+arr = np.arange(100, dtype='int32')
+result = blosc.pack_array(arr, cname='lz4')
+
+print(type(result).__name__)
+print(isinstance(result, np.ndarray))
+print(len(result) == arr.nbytes)
+```
+
+What do the three lines print?
+
+**A)** `ndarray`, `True`, `True`
+
+**B)** `bytes`, `False`, `False`
+
+**C)** `bytes`, `False`, `True`
+
+**D)** `bytearray`, `False`, `False`
+
+**Answer: B**
+
+- A) Incorrect — `pack_array` returns a Python `bytes` object, not a NumPy array. `type(result).__name__` is `'bytes'`, and `isinstance(result, np.ndarray)` is `False`.
+- B) Correct — `blosc.pack_array` returns a Python `bytes` object. `type(result).__name__` is `'bytes'`; `isinstance(result, np.ndarray)` is `False`. The length of the `bytes` object is not equal to `arr.nbytes` (400 bytes for 100 int32 values) — it is smaller because the data is compressed, plus there is a Blosc frame header and a pickle header. All three lines print `bytes`, `False`, `False`.
+- C) Incorrect — the third print `len(result) == arr.nbytes` is also `False`. The compressed bytes object is smaller than the raw array (for compressible data), plus the Blosc and pickle frame headers add overhead in a different direction. The total is unlikely to equal exactly `arr.nbytes`.
+- D) Incorrect — `pack_array` returns `bytes`, not `bytearray`. These are distinct types in Python.
+
+---
+
+## Q23 — Tiled vs Zeros File Size Ordering
+
+```python
+import blosc
+import numpy as np
+
+n = 256
+zeros = np.zeros((n, n, n), dtype='uint8')
+tiled = np.tile(np.arange(256, dtype='uint8'),
+                (n // 256) * n * n).reshape(n, n, n)
+
+c_zeros = blosc.pack_array(zeros, cname='lz4')
+c_tiled = blosc.pack_array(tiled, cname='lz4')
+
+print(len(c_zeros) < len(c_tiled))
+```
+
+What does this code print?
+
+**A)** `False` — both arrays are equally compressible because they are both structured uint8 data
+
+**B)** `True` — all-zeros compresses to a smaller Blosc frame than the 256-byte tiled pattern
+
+**C)** `False` — the tiled pattern compresses better because it contains more distinct values
+
+**D)** `True` — LZ4 cannot handle repeating tiles longer than 1 byte, so tiled data is incompressible
+
+**Answer: B**
+
+- A) Incorrect — both are highly structured, but they are not equally compressible. An all-zeros array has a single unique value and zero entropy. The tiled pattern requires at least one full tile (256 bytes) to be stored, then back-references — more bytes than the single-symbol description of all-zeros.
+- B) Correct — an all-zeros array compresses to a tiny constant (near-zero bytes) because the entire content is one repeated value. The tiled array requires the compressor to store one complete 256-byte period and then encode back-references to it. This is much more compact than the raw data but still larger than the all-zeros output. `len(c_zeros) < len(c_tiled)` is `True`.
+- C) Incorrect — having more distinct values generally means higher entropy and worse compressibility, not better. The tiled array's 256 distinct values compress well due to periodicity, but not as well as a single-value (all-zeros) array.
+- D) Incorrect — LZ4 handles repeating tiles of any length via its sliding window back-reference mechanism. A 256-byte tile repeating millions of times is near-ideal for LZ4. The tiled data is very compressible.
+
+---
+
+## Q24 — blosc.compress with typesize=1 and SHUFFLE
+
+```python
+import blosc
+import numpy as np
+
+arr = np.arange(1000, dtype='uint8')  # 1-byte elements
+raw = arr.tobytes()
+
+c_shuffle   = blosc.compress(raw, typesize=1,
+                             shuffle=blosc.SHUFFLE, cname='lz4')
+c_noshuffle = blosc.compress(raw, typesize=1,
+                             shuffle=blosc.NOSHUFFLE, cname='lz4')
+
+print(len(c_shuffle) == len(c_noshuffle))
+```
+
+What does this code most likely print?
+
+**A)** `False` — SHUFFLE always produces a different (usually smaller) output than NOSHUFFLE
+
+**B)** `True` — for `typesize=1`, SHUFFLE is a no-op and the codec receives identical byte streams for both calls
+
+**C)** `False` — SHUFFLE expands 1-byte elements by adding per-element metadata
+
+**D)** A `TypeError` — `typesize=1` is invalid because SHUFFLE requires at least 2 bytes per element
+
+**Answer: B**
+
+- A) Incorrect — for `typesize=1`, SHUFFLE transposes bytes within each 1-byte element. A 1-byte element has only one byte — there is nothing to transpose. The output of the SHUFFLE step is identical to the input, so the codec receives the same byte stream in both cases.
+- B) Correct — `typesize=1` means each logical element is 1 byte. SHUFFLE reorders bytes at `typesize` granularity: it groups byte 0 of all elements, then byte 1, etc. For 1-byte elements, there is only byte 0 — no reordering occurs. The shuffle step is a mathematical identity for `typesize=1`. Both `c_shuffle` and `c_noshuffle` are compressed from the same byte stream, so their lengths are equal (or differ only by minor implementation details of the header).
+- C) Incorrect — SHUFFLE never expands data. It is a lossless byte-level transposition that does not add any bytes to the stream before the codec.
+- D) Incorrect — `typesize=1` is valid. Blosc accepts it and silently applies a no-op shuffle. No error is raised.
+
+---
+
+## Q25 — unpack_array After compress Raises Error
+
+```python
+import blosc
+import numpy as np
+
+arr = np.ones((100,), dtype='float64')
+compressed = blosc.compress(arr.tobytes(), typesize=8, cname='lz4')
+
+try:
+    recovered = blosc.unpack_array(compressed)
+    print("success:", type(recovered).__name__)
+except Exception as e:
+    print("error:", type(e).__name__)
+```
+
+What does this code print?
+
+**A)** `success: ndarray` — `unpack_array` can reconstruct arrays from `compress` output
+
+**B)** `success: bytes` — `unpack_array` falls back to returning bytes when no pickle header is found
+
+**C)** `error: UnpicklingError` (or similar) — `unpack_array` calls `pickle.loads` on the decompressed bytes, which are raw float64 data, not a valid pickle stream
+
+**D)** `error: ValueError` — the Blosc frame magic bytes differ between `compress` and `pack_array` output
+
+**Answer: C**
+
+- A) Incorrect — `unpack_array` is the inverse of `pack_array`, not of `compress`. It decompresses the Blosc frame to get raw bytes, then calls `pickle.loads` on those bytes. The raw float64 data from `arr.tobytes()` is not a valid pickle stream, so `pickle.loads` raises an exception.
+- B) Incorrect — `unpack_array` does not check for a pickle header and fall back gracefully. It unconditionally calls `pickle.loads`, which will raise an exception on non-pickle data.
+- C) Correct — `blosc.unpack_array` works by calling `blosc.decompress` to get the raw bytes, then `pickle.loads` on the result. Since `compress` stores `arr.tobytes()` (raw IEEE 754 float64 bytes, not a pickle stream), `pickle.loads` raises a `pickle.UnpicklingError` (a subclass of `Exception`). The `except` block catches it and prints `error: UnpicklingError`.
+- D) Incorrect — `compress` and `pack_array` both write valid Blosc frames with the same magic bytes. The difference is in the uncompressed payload, not the outer Blosc frame header.
+
+---
+
+## Q26 — nthreads Does Not Affect Compressed Length
+
+```python
+import blosc
+import numpy as np
+
+arr = np.tile(np.arange(256, dtype='uint8'), 256 * 256).reshape(256, 256, 256)
+
+blosc.set_nthreads(1)
+c1 = blosc.pack_array(arr, cname='zstd', clevel=5)
+
+blosc.set_nthreads(4)
+c2 = blosc.pack_array(arr, cname='zstd', clevel=5)
+
+print(len(c1) == len(c2))
+print(c1 == c2)
+```
+
+What does this code print?
+
+**A)** `True` then `True` — thread count does not change the compressed content; output is deterministic
+
+**B)** `True` then `False` — sizes match but byte content differs due to parallel chunk ordering
+
+**C)** `False` then `False` — more threads produce a differently ordered Blosc frame
+
+**D)** `True` then `True` only if ZSTD is not used; ZSTD is non-deterministic across thread counts
+
+**Answer: A**
+
+- A) Correct — Blosc splits data into fixed-size chunks and compresses each chunk independently with the same parameters. The chunk boundaries, order, and compression of each chunk are identical regardless of how many threads perform the work. Both size and byte content are deterministic. Both prints are `True`.
+- B) Incorrect — parallel chunk processing in Blosc does not reorder chunks. Each thread handles specific chunks in the same positions, and the assembled frame is always identical. Byte content matches.
+- C) Incorrect — thread count is purely a performance parameter. The Blosc frame format is content-addressed by chunk position, not by which thread compressed which chunk. Output is identical.
+- D) Incorrect — ZSTD compression in Blosc is deterministic for a given input, codec, and clevel. The non-determinism concern applies to some ZSTD streaming modes in other contexts, but Blosc's chunk-based use of ZSTD is deterministic.
+
+---
+
+## Q27 — zstd Read vs Write Speed Ordering
+
+```python
+import blosc
+import numpy as np
+from time import perf_counter
+
+blosc.set_nthreads(1)
+n = 512
+arr = np.zeros((n, n, n), dtype='uint8')
+
+t0 = perf_counter()
+c_lz4 = blosc.pack_array(arr, cname='lz4')
+t1 = perf_counter()
+c_zstd = blosc.pack_array(arr, cname='zstd')
+t2 = perf_counter()
+
+t3 = perf_counter()
+_ = blosc.unpack_array(c_lz4)
+t4 = perf_counter()
+_ = blosc.unpack_array(c_zstd)
+t5 = perf_counter()
+
+write_lz4  = t1 - t0
+write_zstd = t2 - t1
+read_lz4   = t4 - t3
+read_zstd  = t5 - t4
+
+print(write_zstd > write_lz4)   # zstd compression slower?
+print(abs(read_zstd - read_lz4) < read_lz4 * 0.5)  # read speeds similar?
+```
+
+Based on the course quiz results, which output is most likely?
+
+**A)** `True` then `True` — zstd compression is slower; decompression speeds are similar between codecs
+
+**B)** `False` then `True` — zstd compression is faster; reads are similar
+
+**C)** `True` then `False` — zstd compression is slower and decompression is also significantly slower
+
+**D)** `False` then `False` — lz4 is slower to compress and both reads differ by more than 50%
+
+**Answer: A**
+
+- A) Correct — this matches the Week 3 quiz finding. ZSTD performs more exhaustive compression passes than LZ4, so `write_zstd > write_lz4` is `True`. Decompression speed for both LZ4 and ZSTD is fast (both decode at near-memory bandwidth), and the times are within the same order of magnitude. The second condition checks if the difference in read times is less than 50% of `read_lz4`; for zeros data that both codecs decompress quickly, this is `True`.
+- B) Incorrect — LZ4 is specifically designed for maximum compression throughput. It is always faster to compress than ZSTD. `write_zstd > write_lz4` is `True`, not `False`.
+- C) Incorrect — ZSTD decompression is not significantly slower than LZ4 decompression. Both codecs decompress at roughly memory-bandwidth speeds. The decompression speeds are similar, making the second print `True`, not `False`.
+- D) Incorrect — LZ4 is faster to compress than ZSTD, so the first print is `True` (zstd is slower). The read times are similar, so the second print is also `True`.
+
+---
+
+## Q28 — blosc.compress clevel vs Decompression Time
+
+```python
+import blosc
+import numpy as np
+from time import perf_counter
+
+blosc.set_nthreads(1)
+arr = np.tile(np.arange(256, dtype='uint8'), 512 * 512).reshape(512, 512, 512)
+raw = arr.tobytes()
+
+c1 = blosc.compress(raw, typesize=1, cname='lz4', clevel=1)
+c9 = blosc.compress(raw, typesize=1, cname='lz4', clevel=9)
+
+t0 = perf_counter(); blosc.decompress(c1); t1 = perf_counter()
+t2 = perf_counter(); blosc.decompress(c9); t3 = perf_counter()
+
+decomp_1 = t1 - t0
+decomp_9 = t3 - t2
+
+print(len(c9) < len(c1))           # zstd at 9 is smaller?
+print(abs(decomp_9 - decomp_1) < decomp_1 * 0.5)  # decompression times similar?
+```
+
+What does this code most likely print for a tiled uint8 array?
+
+**A)** `True` then `True` — higher clevel produces smaller output; decompression times are approximately equal
+
+**B)** `True` then `False` — higher clevel produces smaller output; decompression is significantly slower at clevel=9
+
+**C)** `False` then `True` — clevel does not affect size; decompression times are always equal
+
+**D)** `False` then `False` — tiled data compresses identically at any clevel and decompression times differ widely
+
+**Answer: A**
+
+- A) Correct — for structured tiled data, `clevel=9` makes LZ4 search harder, finding more or longer back-references, so `len(c9) < len(c1)` is `True`. The LZ4 decompressor's execution path is identical regardless of clevel — it reads literal copies and back-references with the same logic. Decompression times for `c1` and `c9` are therefore similar (within 50% of each other), making the second print `True`.
+- B) Incorrect — LZ4 decompression speed is not significantly affected by clevel. The decompressor always executes the same read-and-copy loop; it does not redo the pattern search. Decompression at clevel=9 is approximately as fast as at clevel=1.
+- C) Incorrect — for structured (tiled) data, `clevel=9` does produce a smaller compressed output than `clevel=1` because LZ4 at higher levels finds longer or more distant matches. The first print is `True`, not `False`.
+- D) Incorrect — clevel does affect compressed size for structured data (first print is `True`). Decompression times are similar, not widely different.
 
 ---

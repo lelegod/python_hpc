@@ -27,6 +27,17 @@
 - [Q20 — Haversine All-Pairs Pattern](#q20-haversine-all-pairs-pattern)
 - [Q21 — Three-Way Broadcasting](#q21-three-way-broadcasting)
 - [Q22 — Fixing a Row-Mean Subtraction Bug](#q22-fixing-a-row-mean-subtraction-bug)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q23 — In-Place Broadcasting Restriction](#q23--in-place-broadcasting-restriction)
+- [Q24 — np.broadcast_to Read-Only View](#q24--npbroadcast_to-read-only-view)
+- [Q25 — Zero-Dimensional Array Broadcasting](#q25--zero-dimensional-array-broadcasting)
+- [Q26 — Which newaxis Pattern Computes a 2D Outer Product?](#q26--which-newaxis-pattern-computes-a-2d-outer-product)
+- [Q27 — Haversine cosprod Intermediate Shape](#q27--haversine-cosprod-intermediate-shape)
+- [Q28 — ufunc Broadcasting vs Explicit Loop](#q28--ufunc-broadcasting-vs-explicit-loop)
+- [Q29 — np.broadcast_shapes with Incompatible Inputs](#q29--npbroadcast_shapes-with-incompatible-inputs)
+- [Q30 — Stacking newaxis at Different Positions](#q30--stacking-newaxis-at-different-positions)
+- [Q31 — In-Place Op Output Shape Constraint](#q31--in-place-op-output-shape-constraint)
+- [Q32 — Rank-0 vs Rank-1 Shape Difference](#q32--rank-0-vs-rank-1-shape-difference)
 
 ---
 
@@ -525,5 +536,231 @@ The code raises a `ValueError`. Which fix is correct, and why?
 - B) Correct — `row_mean[:,None]` gives `(100, 1)`. Dim 0 matches exactly (100), dim 1 broadcasts (1 → 50). Each row gets its row mean subtracted.
 - C) Incorrect — `X.T` has shape `(50, 100)`. Subtracting `row_mean` of shape `(100,)` pads to `(1, 100)`. Dim 0: 50 vs 1 → 50, dim 1: 100 vs 100 → 100. This gives a transposed `(50, 100)` result — not the desired `(100, 50)` row-centered matrix.
 - D) Incorrect — `row_mean.reshape(1, 100)` gives shape `(1, 100)`. Against `(100, 50)`: dim 1 is 100 vs 50 — still incompatible, same as option A.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets in-place restrictions, np.broadcast_to read-only semantics, 0-D arrays, ufunc broadcasting, haversine internals, and advanced shape-manipulation traps.
+
+---
+
+## Q23 — In-Place Broadcasting Restriction
+
+> **Week reference:** Week 4
+
+**Mental Model:** An in-place operation (`+=`, `-=`, `*=`, etc.) is only legal when the broadcast output shape exactly equals the shape of the left-hand operand. You cannot use in-place ops to silently enlarge an array — NumPy raises a ValueError if the broadcast result would be bigger than the target.
+
+Which of the following in-place operations raises a `ValueError`?
+
+- A) `a = np.ones((3, 4)); a += np.ones((4,))`
+- B) `a = np.ones((3, 4)); a += np.ones((1, 4))`
+- C) `a = np.ones((3, 4)); a += np.ones((3, 1))`
+- D) `a = np.ones((3, 4)); a += np.ones((3,))`
+
+**Answer: D**
+
+- A) Incorrect (valid) — `(4,)` pads to `(1, 4)`. Broadcasting `(3,4)` and `(1,4)` → `(3,4)`, which matches `a`'s shape. In-place is allowed.
+- B) Incorrect (valid) — `(1, 4)` broadcasts against `(3, 4)` → `(3, 4)`, exactly `a`'s shape. In-place is allowed.
+- C) Incorrect (valid) — `(3, 1)` broadcasts against `(3, 4)` → `(3, 4)`, exactly `a`'s shape. In-place is allowed; this is the column-vector pattern.
+- D) Correct (raises ValueError) — `(3,)` pads to `(1, 3)`. Last dims: 4 vs 3 — incompatible. NumPy raises `ValueError: operands could not be broadcast together with shapes (3,4) (3,)`. This is the right-alignment trap applied to in-place ops; the 3 in `(3,)` aligns against the 4, not the 3 in `a`.
+
+---
+
+## Q24 — np.broadcast_to Read-Only View
+
+> **Week reference:** Week 4
+
+**Mental Model:** `np.broadcast_to(arr, shape)` returns a read-only view with stride 0 in all expanded dimensions. No data is copied. Attempting to write to the result raises a `ValueError` because the underlying storage is shared and writing would corrupt the source array.
+
+What is true about `b = np.broadcast_to(np.ones((1, 4)), (3, 4))`?
+
+- A) `b` is a new `(3, 4)` array with the row physically copied three times
+- B) `b` is a read-only view; `b[0, 0] = 5` raises a `ValueError`
+- C) `b` is writable because broadcast_to always returns a copy
+- D) `b.shape` is `(1, 4)` — broadcast_to only changes strides, not the reported shape
+
+**Answer: B**
+
+- A) Incorrect — `np.broadcast_to` never copies data. The entire point of the function is to produce a view where repeated dimensions are read by setting their stride to 0. Memory usage stays at the size of the original `(1, 4)` array.
+- B) Correct — `np.broadcast_to` always returns a read-only view (`b.flags.writeable == False`). Any attempt to assign to an element raises `ValueError: assignment destination is read-only`. To get a writable copy, call `.copy()` on the result.
+- C) Incorrect — `np.broadcast_to` explicitly guarantees it returns a view, not a copy. If a copy were always made, the memory-efficiency benefit of broadcasting would be lost.
+- D) Incorrect — `np.broadcast_to` does update the reported `.shape` to the target shape. The strides in the broadcast dimensions are 0, but `.shape` correctly reports the new shape.
+
+---
+
+## Q25 — Zero-Dimensional Array Broadcasting
+
+> **Week reference:** Week 4
+
+**Mental Model:** A 0-D (scalar) array has shape `()`. When broadcast, it is treated as if it has as many leading 1-dims as needed, then expanded to match every dimension of the other array. A 0-D array broadcasts against any shape without error — it is the ultimate "stretch to fit" operand.
+
+What is the shape of `np.array(7.0) + np.ones((2, 3, 5))`?
+
+- A) ValueError — a 0-D array has no dimensions to broadcast
+- B) `(1,)`
+- C) `(2, 3, 5)`
+- D) `()`
+
+**Answer: C**
+
+- A) Incorrect — a 0-D array is the most flexible broadcasting operand. It has no fixed dimension constraints and expands to match any shape unconditionally.
+- B) Incorrect — `(1,)` would imply the scalar was first reshaped to a 1-element 1-D array, but broadcasting does not reshape the 0-D array to `(1,)` — it directly expands to match the full target shape.
+- C) Correct — a 0-D array is treated as shape `()`, which left-pads to `(1,1,1)` and then broadcasts to `(2,3,5)`. The output shape equals the shape of the non-scalar operand: `(2,3,5)`.
+- D) Incorrect — `()` is the shape of the 0-D array itself, not the broadcast result. Broadcasting always produces the shape of the larger operand when one operand can expand to match the other.
+
+---
+
+## Q26 — Which newaxis Pattern Computes a 2D Outer Product?
+
+> **Week reference:** Week 4
+
+**Mental Model:** For an outer product of `u` (shape `(m,)`) and `v` (shape `(n,)`), you need a `(m,1)` times `(1,n)` arrangement. The `[:, None]` on `u` gives `(m,1)`, and the bare `v` is implicitly treated as `(1,n)`. Alternatively `u[None,:]` would give `(1,m)`, flipping the role.
+
+`u` has shape `(5,)` and `v` has shape `(4,)`. Which expression produces a `(5, 4)` outer product where `result[i, j] = u[i] * v[j]`?
+
+- A) `u[None, :] * v[:, None]`
+- B) `u[:, None] * v[None, :]`
+- C) `u * v[:, None]`
+- D) `u[None, :] * v`
+
+**Answer: B**
+
+- A) Incorrect — `u[None,:]` is `(1,5)` and `v[:,None]` is `(4,1)`. Broadcasting: dim 0: 4 vs 1 → 4, dim 1: 1 vs 5 → 5. Result shape is `(4,5)`, not `(5,4)`. Entry `[i,j]` is `u[j] * v[i]` — the roles of i and j are transposed.
+- B) Correct — `u[:,None]` is `(5,1)` and `v[None,:]` is `(1,4)`. Broadcasting: dim 0: 5 vs 1 → 5, dim 1: 1 vs 4 → 4. Result shape is `(5,4)`. Entry `[i,j]` = `u[i] * v[j]`, which is exactly the outer product definition.
+- C) Incorrect — `u` is `(5,)` and `v[:,None]` is `(4,1)`. Right-aligned: `(1,5)` vs `(4,1)`. Dim 0: 4 vs 1 → 4, dim 1: 1 vs 5 → 5. Result is `(4,5)` — wrong shape and wrong index ordering.
+- D) Incorrect — `u[None,:]` is `(1,5)` and `v` is `(4,)` which pads to `(1,4)`. Dim 1: 5 vs 4 — incompatible, raises ValueError.
+
+---
+
+## Q27 — Haversine cosprod Intermediate Shape
+
+> **Week reference:** Week 4
+
+**Mental Model:** In the vectorized haversine, `p1` and `p2` both have shape `(N, 2)` (lat, lon pairs). The expression `p1[:, None, 0]` selects column 0 (latitudes) and inserts a middle axis, giving shape `(N, 1)`. Multiplied with `p2[None, :, 0]` of shape `(1, N)`, the result is the `(N, N)` cosine-product matrix needed for the haversine formula.
+
+In the vectorized haversine, `p1` and `p2` both have shape `(N, 2)`. What is the shape of `np.cos(p1[:, None, 0]) * np.cos(p2[None, :, 0])`?
+
+- A) `(N, N, 2)`
+- B) `(N, 2)`
+- C) `(N, N)`
+- D) `(N,)`
+
+**Answer: C**
+
+- A) Incorrect — the index `[:, None, 0]` selects column 0 (a scalar per row) and inserts a middle axis. The final integer index 0 collapses the last dimension entirely, leaving no size-2 axis in the output.
+- B) Incorrect — after applying `[:, None, 0]`, the result has shape `(N, 1)`, not `(N, 2)`. The `0` index removes the coordinate dimension.
+- C) Correct — `p1[:, None, 0]` selects latitude values and inserts a middle axis: shape `(N, 1)`. `p2[None, :, 0]` selects latitude values and inserts a leading axis: shape `(1, N)`. Broadcasting `(N,1) * (1,N)` → `(N,N)`. This is the all-pairs cosine product used in the haversine formula.
+- D) Incorrect — a `(N,)` result would require the broadcasting to collapse both extra axes, which does not happen. The `[:, None]` and `[None, :]` patterns are specifically designed to produce a 2D result.
+
+---
+
+## Q28 — ufunc Broadcasting vs Explicit Loop
+
+> **Week reference:** Week 4
+
+**Mental Model:** NumPy universal functions (ufuncs) like `np.sin`, `np.cos`, `np.sqrt` apply broadcasting rules identically to arithmetic operators. They operate element-wise on arrays of any shape and broadcast inputs when needed. There is no need for explicit loops; the ufunc handles all dimensions.
+
+Which statement about NumPy ufuncs and broadcasting is correct?
+
+- A) Ufuncs like `np.sin` only operate on 1-D arrays; higher-dimensional arrays must be looped over manually
+- B) Ufuncs apply broadcasting rules to their inputs, so `np.sin(a) + np.cos(b)` follows the same shape rules as `a + b`
+- C) Ufuncs always return an array with the same shape as their first argument, regardless of broadcasting
+- D) Ufuncs bypass broadcasting and always operate element-wise on flattened arrays
+
+**Answer: B**
+
+- A) Incorrect — ufuncs operate on N-dimensional arrays natively. One of their core advantages is eliminating manual loops over dimensions. `np.sin(arr)` applies the sine function to every element of `arr` regardless of its shape.
+- B) Correct — ufuncs fully support broadcasting. `np.sin(a)` produces an array with the same shape as `a`, and binary ufuncs like `np.add(a, b)` (equivalently `a + b`) apply the broadcasting rules to their input shapes to determine the output shape. This is what makes vectorized code like the haversine formula possible.
+- C) Incorrect — binary ufuncs return an array with the broadcast result shape, which may differ from the first argument's shape. For example, `np.add(np.ones((3,1)), np.ones((1,4)))` returns shape `(3,4)`, not `(3,1)`.
+- D) Incorrect — ufuncs never flatten inputs. Flattening would destroy the shape information that broadcasting relies on. The operation is always multi-dimensional and shape-preserving.
+
+---
+
+## Q29 — np.broadcast_shapes with Incompatible Inputs
+
+> **Week reference:** Week 4
+
+**Mental Model:** `np.broadcast_shapes` applies the same compatibility rules as actual broadcasting, but returns the result shape without creating any arrays. If any dimension pair is incompatible (both > 1 and unequal), it raises a `ValueError`. It is useful for validating shapes before doing expensive computations.
+
+What does `np.broadcast_shapes((4, 3), (3, 4))` return?
+
+- A) `(4, 4)`
+- B) `(4, 3, 4)`
+- C) ValueError
+- D) `(4, 4, 3)`
+
+**Answer: C**
+
+- A) Incorrect — `(4,4)` would require both inputs to have shapes compatible with a `(4,4)` output. For `(4,3)` and `(3,4)`: dim 0 is 4 vs 3 (incompatible), dim 1 is 3 vs 4 (incompatible). There is no valid broadcast output.
+- B) Incorrect — `np.broadcast_shapes` never increases the rank beyond the maximum rank of its inputs. Both inputs are rank 2, so the output must also be rank 2 (if valid).
+- C) Correct — right-align (same rank): dim 0 is 4 vs 3, neither is 1 and they are unequal — incompatible. `np.broadcast_shapes` raises `ValueError`. This is a common exam-style trap: the numbers 3 and 4 appear in both shapes but in different positions, making both dims incompatible simultaneously.
+- D) Incorrect — same reason as B: rank cannot increase beyond max input rank.
+
+---
+
+## Q30 — Stacking newaxis at Different Positions
+
+> **Week reference:** Week 4
+
+**Mental Model:** Each `None`/`np.newaxis` in an index expression inserts exactly one size-1 axis at that position. Multiple `None`s insert multiple axes. The position of each `None` relative to `:` (or other indices) determines exactly where the new axis lands in the resulting shape.
+
+`x` has shape `(6, 4)`. What is the shape of `x[:, None, :, None]`?
+
+- A) `(6, 4, 1, 1)`
+- B) `(6, 1, 4, 1)`
+- C) `(1, 6, 1, 4)`
+- D) `(6, 4)`
+
+**Answer: B**
+
+- A) Incorrect — the `None`s are inserted between and after the existing axes, not appended together at the end. The position of each `None` in the index expression directly controls where each new axis appears.
+- B) Correct — parse left to right: `:` selects axis 0 (size 6), `None` inserts a new axis (size 1), `:` selects axis 1 (size 4), `None` inserts another new axis (size 1). Final shape: `(6, 1, 4, 1)`. This pattern is common for broadcasting a `(6, 4)` matrix against a `(1, C, 1, D)` tensor.
+- C) Incorrect — `(1, 6, 1, 4)` would result from `None, :, None, :`, i.e., both `None`s placed before their corresponding slice, not interleaved.
+- D) Incorrect — two `None`s are inserted, increasing the rank by 2. The result must be rank 4, not the original rank 2.
+
+---
+
+## Q31 — In-Place Op Output Shape Constraint
+
+> **Week reference:** Week 4
+
+**Mental Model:** For `a += b`, the broadcast result of `a` and `b` must have the same shape as `a`. If broadcasting would produce a larger shape than `a`, NumPy refuses the in-place operation. This rule prevents accidental in-place expansion of an array's shape, which would require reallocating memory.
+
+`a = np.ones((1, 5))`. Which operation raises a `ValueError`?
+
+- A) `a += np.ones((3, 5))`
+- B) `a += np.ones((1, 1))`
+- C) `a += np.ones((5,))`
+- D) `a += np.ones((1, 5))`
+
+**Answer: A**
+
+- A) Correct — `(1,5)` and `(3,5)` broadcast to `(3,5)`. But the output shape `(3,5)` does not match `a`'s shape `(1,5)` — in-place ops cannot expand the array. NumPy raises `ValueError: non-broadcastable output operand with shape (1,5) doesn't match the broadcast shape (3,5)`.
+- B) Incorrect (valid) — `(1,5)` and `(1,1)` broadcast to `(1,5)`, which matches `a`'s shape. In-place is allowed; the single value in `(1,1)` is added to all 5 elements.
+- C) Incorrect (valid) — `(5,)` pads to `(1,5)`. Broadcasting `(1,5)` and `(1,5)` → `(1,5)`, which matches `a`'s shape. In-place is allowed.
+- D) Incorrect (valid) — same shape `(1,5)` and `(1,5)`. Trivially compatible and the output shape matches.
+
+---
+
+## Q32 — Rank-0 vs Rank-1 Shape Difference
+
+> **Week reference:** Week 4
+
+**Mental Model:** `np.array(5)` is a 0-D array with shape `()` and 0 axes. `np.array([5])` is a 1-D array with shape `(1,)` and 1 axis. Although both hold a single value, their broadcasting behaviour differs: `()` broadcasts against any shape, while `(1,)` has an explicit axis that must align from the right.
+
+`a = np.ones((3,))`. What are the shapes of `a + np.array(5)` and `a + np.array([5])` respectively?
+
+- A) Both `(3,)` — scalars always broadcast to any shape
+- B) `(3,)` and `(3,)` — but for different reasons
+- C) `(3,)` and ValueError
+- D) ValueError and `(3,)`
+
+**Answer: B**
+
+- A) Partially correct but misleading — both results are `(3,)`, but `np.array([5])` is NOT a scalar (it is a 1-D array of shape `(1,)`). The explanation "scalars always broadcast" only applies to the 0-D case.
+- B) Correct — `np.array(5)` has shape `()`. It broadcasts to `(3,)` because a 0-D array left-pads with 1s as needed, giving `(1,)` → `(3,)`. `np.array([5])` has shape `(1,)`. Right-aligned against `(3,)`: 1 vs 3 → 3 (broadcasts). Both produce `(3,)` — but the first is 0-D broadcasting and the second is 1-D size-1 broadcasting. Understanding the difference matters for in-place op rules.
+- C) Incorrect — `np.array([5])` has shape `(1,)` which is fully compatible with `(3,)` via the size-1 stretch rule. No error occurs.
+- D) Incorrect — `np.array(5)` is the universally compatible 0-D case; it never raises a ValueError in broadcasting.
 
 ---

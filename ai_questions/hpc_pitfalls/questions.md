@@ -27,6 +27,17 @@
 - [Q20 — Choosing the Right Parallelism Strategy](#q20--choosing-the-right-parallelism-strategy)
 - [Q21 — Combining ThreadPool and Single-Threaded NumPy](#q21--combining-threadpool-and-single-threaded-numpy)
 - [Q22 — Recognising Multiple Pitfalls in One Script](#q22--recognising-multiple-pitfalls-in-one-script)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q23 — rusage Memory Is Per Core, Not Per Job](#q23--rusage-memory-is-per-core-not-per-job)
+- [Q24 — Wall Time vs CPU Time in the time Command](#q24--wall-time-vs-cpu-time-in-the-time-command)
+- [Q25 — time.perf_counter vs time.time for Benchmarking](#q25--timeperf_counter-vs-timetime-for-benchmarking)
+- [Q26 — Deriving Parallel Fraction from Observed Speedup](#q26--deriving-parallel-fraction-from-observed-speedup)
+- [Q27 — GIL Not Released for Pure Python Loops](#q27--gil-not-released-for-pure-python-loops)
+- [Q28 — Over-Requesting Memory Consequences](#q28--over-requesting-memory-consequences)
+- [Q29 — Under-Requesting Wall Time Consequence](#q29--under-requesting-wall-time-consequence)
+- [Q30 — ProcessPool Pickle Overhead as a Pitfall](#q30--processpool-pickle-overhead-as-a-pitfall)
+- [Q31 — MPI_NUM_THREADS Purpose and Scope](#q31--mpi_num_threads-purpose-and-scope)
+- [Q32 — Cold Cache vs Warm Cache Timing Distortion](#q32--cold-cache-vs-warm-cache-timing-distortion)
 
 ---
 
@@ -538,5 +549,248 @@ A colleague's job script: (1) requests 8 cores but sets thread vars without `exp
 - B) Incorrect — The env vars in point (1) without `export` are indeed a pitfall, but note that point (2) separately exports correctly — making (2) itself the oversubscription pitfall. And point (3) adds a third distinct pitfall. Count carefully: (1) is the export pitfall, (2) is the oversubscription pitfall, (3) is the I/O pitfall.
 - C) Correct — Three distinct pitfalls: (1) thread count variables set without `export` are invisible to Python; (2) combining `ThreadPool(8)` with `OMP_NUM_THREADS=8` creates 64 threads on 8 cores; (3) routing 200,000 output lines through LSF's `-o` channel could take many minutes instead of seconds.
 - D) Incorrect — The script contains multiple serious performance bugs; it is far from correct.
+
+---
+
+## Set 3 — Extended Practice
+
+---
+
+## Q23 — rusage Memory Is Per Core, Not Per Job
+
+> **Week reference:** Week 13
+
+**Mental Model:** On DTU's LSF cluster, `rusage[mem=XGB]` specifies memory *per core*, not per job. If you request `-n 4` cores and need 100 GB total, you must request 100/4 = 25 GB per core. This is a common source of both OOM kills (under-requesting) and wasted resources (over-requesting).
+
+A job script requests `#BSUB -n 4` and `#BSUB -R "rusage[mem=100GB]"`. The Python program actually needs 100 GB of RAM in total. What happens when this job runs?
+
+- A) The job is allocated 100 GB in total, which is exactly enough
+- B) The job is allocated 400 GB in total (100 GB × 4 cores), far more than needed
+- C) The job is killed immediately because 100 GB per core exceeds the node memory limit
+- D) LSF ignores the `rusage` value when more than 1 core is requested
+
+**Answer: B**
+
+- A) Incorrect — `rusage[mem=100GB]` means 100 GB *per core*. With 4 cores, the total reservation is 400 GB. The job will likely wait a long time or never run because no node may have 400 GB free for a single job.
+- B) Correct — On DTU's LSF cluster (and most LSF deployments), `rusage[mem=X]` is a per-slot (per-core) specification. With 4 cores, total reserved memory = 4 × 100 GB = 400 GB. The correct request for 100 GB total across 4 cores is `rusage[mem=25GB]`.
+- C) Incorrect — LSF does not immediately kill jobs for large memory requests; it simply holds them in the queue until a node with sufficient memory is available, which may be never.
+- D) Incorrect — LSF always respects `rusage[mem=X]` for placement decisions; it does not ignore it regardless of core count.
+
+---
+
+## Q24 — Wall Time vs CPU Time in the time Command
+
+> **Week reference:** Week 13
+
+**Mental Model:** The Unix `time` command reports three values: `real` (wall clock time — how long you waited), `user` (CPU time spent in user space), and `sys` (CPU time spent in kernel space). For a perfectly parallelised program on N cores, `real` drops by ~N× while `user + sys` stays roughly constant because the same total CPU work is done — just split across cores.
+
+A single-threaded Python program is timed with `real 0m12.03s, user 0m12.00s, sys 0m0.034s`. It is then perfectly parallelised and run on 2 cores. What should the output look like?
+
+- A) `real 0m6.03s, user 0m6.00s, sys 0m0.034s`
+- B) `real 0m6.03s, user 0m12.00s, sys 0m0.034s`
+- C) `real 0m12.03s, user 0m6.00s, sys 0m0.034s`
+- D) `real 0m12.03s, user 0m12.00s, sys 0m0.034s`
+
+**Answer: B**
+
+- A) Incorrect — `user` time should not halve. The same total CPU work is performed; it is only spread across 2 cores simultaneously. `user` time reports summed CPU time, not wall time.
+- B) Correct — With perfect parallelism on 2 cores, wall time (`real`) halves to ~6 s because you wait half as long. But `user` time stays ~12 s because the total amount of CPU computation is unchanged — both cores spend ~6 s each, summing to ~12 s of user CPU time. This is the correct F25-exam understanding of the `time` command.
+- C) Incorrect — If `real` stays the same, no wall-clock speedup occurred. That would mean parallelism had no effect.
+- D) Incorrect — This shows no change whatsoever, which would mean the parallel version ran at identical speed to the serial version.
+
+---
+
+## Q25 — time.perf_counter vs time.time for Benchmarking
+
+> **Week reference:** Week 13
+
+**Mental Model:** `time.time()` returns the system clock in seconds and is subject to NTP adjustments and lower resolution on some platforms. `time.perf_counter()` uses the highest-resolution timer available, is monotonic, and is the standard choice for benchmarking short code segments. The Week 13 `matmul.py` uses `perf_counter` for exactly this reason.
+
+Which timing function should be used to measure the run time of a 1.28-second NumPy matrix multiplication loop, and why?
+
+- A) `time.time()` — it is simpler and the 1-second scale makes precision irrelevant
+- B) `time.perf_counter()` — it provides the highest-resolution monotonic clock, unaffected by system clock adjustments, making it reliable for sub-second and multi-second benchmarks alike
+- C) `time.process_time()` — it measures only CPU time, which is the most relevant metric for compute-bound work
+- D) `time.monotonic()` — it is the only timer that accounts for multi-core CPU time correctly
+
+**Answer: B**
+
+- A) Incorrect — Even at the 1-second scale, `time.time()` can jump backward or skip forward due to NTP synchronisation. For reproducible benchmarks this is unacceptable; the matmul exercise specifically imports `perf_counter as time` to avoid this.
+- B) Correct — `time.perf_counter()` is the Python standard for benchmarking. It is monotonic (never goes backward), has nanosecond resolution on modern platforms, and is unaffected by wall-clock adjustments. This is exactly what `matmul.py` uses: `from time import perf_counter as time`.
+- C) Incorrect — `time.process_time()` excludes time spent sleeping or waiting for I/O and other processes. For a wall-clock benchmark of a computation that actively uses CPUs, it would also exclude time when other system activity interfered — giving a misleadingly optimistic result.
+- D) Incorrect — `time.monotonic()` is monotonic but has lower resolution than `perf_counter` on most platforms, and it does not specifically account for multi-core time; that is not what any of these clocks do.
+
+---
+
+## Q26 — Deriving Parallel Fraction from Observed Speedup
+
+> **Week reference:** Week 13
+
+**Mental Model:** Amdahl's law: S(p) = 1 / ((1 - F) + F/p), where F is the parallel fraction and p is the number of cores. Given an observed speedup at a known core count, you can solve for F and then predict the theoretical maximum speedup (S(∞) = 1/(1-F)). This is an exam-standard calculation.
+
+A program achieves a speedup of 2.5× on 3 cores. Using Amdahl's law, what is the approximate parallel fraction F, and what is the theoretical maximum speedup with infinite cores?
+
+- A) F = 0.5; maximum speedup = 2×
+- B) F = 0.75; maximum speedup = 4×
+- C) F = 0.9; maximum speedup = 10×
+- D) F = 0.8; maximum speedup = 5×
+
+**Answer: C**
+
+- A) Incorrect — Plugging F=0.5, p=3: S = 1/(0.5 + 0.5/3) = 1/0.667 ≈ 1.5×, not 2.5×.
+- B) Incorrect — Plugging F=0.75, p=3: S = 1/(0.25 + 0.75/3) = 1/(0.25+0.25) = 1/0.5 = 2×, not 2.5×.
+- C) Correct — From Amdahl's law: 1/S(p) = (1-F) + F/p → 1/2.5 = (1-F) + F/3 → 0.4 = 1 - F + F/3 → 0.4 = 1 - 2F/3 → 2F/3 = 0.6 → F = 0.9. Maximum speedup = 1/(1-0.9) = 10×. This matches the F25 exam Q8 solution method exactly.
+- D) Incorrect — Plugging F=0.8, p=3: S = 1/(0.2 + 0.8/3) = 1/(0.2+0.267) = 1/0.467 ≈ 2.14×, not 2.5×.
+
+---
+
+## Q27 — GIL Not Released for Pure Python Loops
+
+> **Week reference:** Week 13
+
+**Mental Model:** Python's GIL prevents two threads from executing Python bytecode simultaneously. C extensions like NumPy's BLAS *can* release the GIL. But a pure Python loop (no C extension involved) holds the GIL throughout, so a ThreadPool provides no speedup for such work — you need ProcessPool instead.
+
+A developer wants to parallelise the following function using `ThreadPool(8)` on 8 cores:
+
+```python
+def process_number(n):
+    s = 0
+    for i in range(n):
+        s += i
+    return s
+```
+
+Why will `ThreadPool` provide little to no speedup for this function?
+
+- A) `ThreadPool` cannot call functions that return integers
+- B) This function does not release the GIL because it is pure Python bytecode; all 8 threads contend for the GIL and execute mostly serially
+- C) The loop contains a data dependency (`s += i`) that prevents any form of parallelism
+- D) `ThreadPool` is limited to 4 workers on LSF nodes regardless of the `n` argument
+
+**Answer: B**
+
+- A) Incorrect — `ThreadPool` can call any Python callable, regardless of its return type.
+- B) Correct — `process_number` is pure Python: integer addition, a range iterator, and variable assignment — all Python bytecode, all holding the GIL. With 8 threads all executing Python bytecode, only one runs at a time. The overhead of thread switching makes performance equal to or worse than serial. This contrasts directly with `np.matmul`, which releases the GIL during its BLAS call. For pure Python CPU-bound work, `ProcessPool` is required.
+- C) Incorrect — The data dependency within a single call (`s += i`) prevents *intra*-call parallelism, but `ThreadPool` would parallelize *across* 8 independent calls to `process_number` with different `n` values. The GIL is the actual limiting factor.
+- D) Incorrect — `ThreadPool` has no LSF-imposed worker limit; the limit is whatever you pass to `ThreadPool(n)`.
+
+---
+
+## Q28 — Over-Requesting Memory Consequences
+
+> **Week reference:** Week 13
+
+**Mental Model:** LSF uses memory requests for both job placement (finding a node with enough free RAM) and fairness (accounting). Over-requesting memory is not harmless: it inflates the job's "resource consumption" in LSF's fair-share scheduler, reduces your priority for future jobs, forces LSF to find nodes with more free memory (potentially longer queue waits), and wastes cluster resources other users could use.
+
+A job only needs 800 MB of RAM but the developer lazily requests `#BSUB -R "rusage[mem=100GB]"`. What are the consequences?
+
+- A) No consequences — LSF only uses the `rusage` value for monitoring; it does not affect scheduling
+- B) The job will run faster because LSF gives higher priority to jobs requesting more memory
+- C) The job may wait much longer in the queue (LSF must find a node with 100 GB free), wastes cluster resources, and reduces the user's fair-share priority for future jobs
+- D) The job will be rejected immediately because the requested memory exceeds the actual usage
+
+**Answer: C**
+
+- A) Incorrect — LSF uses `rusage[mem=X]` for both placement decisions (finding a node with enough free memory) and fair-share accounting. It directly affects scheduling.
+- B) Incorrect — LSF does not reward over-requesting. Jobs requesting excessive resources may actually wait longer because fewer nodes qualify for placement.
+- C) Correct — Over-requesting memory has three concrete costs: (1) the scheduler must find a node with 100 GB free, which is harder than finding one with 800 MB free, increasing queue wait; (2) the "allocated but unused" memory is unavailable to other jobs, wasting cluster resources; (3) fair-share schedulers penalise users who consume large amounts of resources, lowering their priority for future submissions.
+- D) Incorrect — LSF does not validate that requested memory matches actual usage; the job is queued and run. The mismatch is only discovered after the fact through accounting.
+
+---
+
+## Q29 — Under-Requesting Wall Time Consequence
+
+> **Week reference:** Week 13
+
+**Mental Model:** `#BSUB -W HH:MM` sets the maximum wall-clock time a job may run. If the job exceeds this limit, LSF kills it immediately with no warning and no partial output is saved (unless the program explicitly checkpoints). Under-requesting wall time is therefore a silent data-loss risk.
+
+A job script specifies `#BSUB -W 00:05` (5 minutes) for a program that actually takes 8 minutes. What happens?
+
+- A) LSF extends the wall time automatically to accommodate the longer run
+- B) LSF sends a warning email at 5 minutes and then gives the job an extra 5 minutes
+- C) LSF kills the job at exactly 5 minutes; any results not yet written to disk are lost
+- D) The job continues running but is moved to a lower-priority queue after 5 minutes
+
+**Answer: C**
+
+- A) Incorrect — LSF does not extend wall time automatically. The `-W` limit is a hard ceiling enforced by the scheduler.
+- B) Incorrect — LSF does not provide a grace period after the wall time limit. The SIGKILL signal is sent immediately when the limit is reached.
+- C) Correct — When a job hits its `-W` wall time limit, LSF sends SIGKILL to the process group. The job terminates immediately. Any in-memory results, partial output files that were not flushed, or incomplete computations are lost. This is why the Week 13 job scripts request generous wall times (e.g., `00:10`) even for runs expected to take ~1.5 seconds.
+- D) Incorrect — LSF does not demote jobs to lower-priority queues based on wall-time overruns; it terminates them.
+
+---
+
+## Q30 — ProcessPool Pickle Overhead as a Pitfall
+
+> **Week reference:** Week 13
+
+**Mental Model:** `multiprocessing.pool.Pool` (process pool) communicates between the main process and workers via IPC (pipes/sockets). All arguments and return values must be serialised with `pickle`. For large NumPy arrays, pickling is slow and doubles memory use (one copy in the parent, one in each worker). This overhead can eliminate any parallelism benefit for large data workloads.
+
+A developer uses `Pool(8)` to parallelise 100 `np.matmul` calls on 1000×1000 float64 matrices. Each matrix is 8 MB. Why might the `Pool` approach be significantly slower than `ThreadPool` for this workload?
+
+- A) `Pool` workers cannot import NumPy due to import system restrictions in child processes
+- B) Each 8 MB matrix slice must be pickled and sent through an IPC pipe to each worker and back, adding ~160 MB of data serialisation overhead per batch of 100 calls
+- C) `Pool` uses a different CPU scheduler than `ThreadPool`, which causes more context switches
+- D) `Pool` does not inherit `OMP_NUM_THREADS` from the parent process, so BLAS uses 1 thread per worker regardless
+
+**Answer: B**
+
+- A) Incorrect — Child processes created by `Pool` can import NumPy (and any other package) normally; each worker imports its own copy of the module.
+- B) Correct — Each argument passed to a `Pool` worker is pickled in the parent process, written to a pipe, and unpickled in the worker. For 100 pairs of 1000×1000 float64 matrices (8 MB each), this means serialising ~1.6 GB of data through IPC. Return values must also be pickled back. `ThreadPool` workers share the same memory address space, so array slices are just pointer views — no copying at all. This is the core reason `ThreadPool` is preferred for NumPy workloads.
+- C) Incorrect — Both `Pool` and `ThreadPool` are subject to the same OS CPU scheduler; the scheduler does not distinguish between them in terms of context-switching policy.
+- D) Incorrect — `Pool` workers inherit the parent's exported environment including `OMP_NUM_THREADS`. BLAS respects the thread count directive in each worker.
+
+---
+
+## Q31 — MPI_NUM_THREADS Purpose and Scope
+
+> **Week reference:** Week 13
+
+**Mental Model:** The Week 13 reference job script exports four thread-count variables: `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and `MPI_NUM_THREADS`. The first three are the critical ones for NumPy BLAS. `MPI_NUM_THREADS` controls threading behaviour in some MPI implementations (like OpenMPI's internal thread pool) and is included defensively. It does not replace the BLAS variables.
+
+A job script exports only `MPI_NUM_THREADS=8` and nothing else. The script runs a pure NumPy matrix multiplication loop with no MPI calls. What is the outcome?
+
+- A) NumPy uses 8 threads because `MPI_NUM_THREADS` is an alias for `OMP_NUM_THREADS` in modern NumPy
+- B) NumPy still runs with 1 thread; `MPI_NUM_THREADS` controls MPI thread behaviour, not NumPy's BLAS backend
+- C) The script fails with an ImportError because MPI is not installed in the conda environment
+- D) NumPy uses 8 threads on Intel nodes and 1 thread on AMD nodes, depending on the BLAS backend
+
+**Answer: B**
+
+- A) Incorrect — `MPI_NUM_THREADS` is not an alias for `OMP_NUM_THREADS`. They are separate variables read by separate libraries. NumPy's BLAS does not check `MPI_NUM_THREADS`.
+- B) Correct — `MPI_NUM_THREADS` is read by MPI implementations (e.g., OpenMPI's internal threading) to control how many threads the MPI runtime itself may use. It has no effect on NumPy's BLAS thread count. Without `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, or `OPENBLAS_NUM_THREADS`, NumPy defaults to 1 BLAS thread. The script would produce the same ~5.87 s run time as the no-thread-vars baseline.
+- C) Incorrect — Setting `MPI_NUM_THREADS` does not require MPI to be installed; it is simply an unused environment variable if no MPI runtime is present. The Python script runs normally.
+- D) Incorrect — The BLAS backend choice (MKL vs OpenBLAS) depends on how NumPy was compiled, not the CPU vendor. Neither backend reads `MPI_NUM_THREADS` for its thread count.
+
+---
+
+## Q32 — Cold Cache vs Warm Cache Timing Distortion
+
+> **Week reference:** Week 13
+
+**Mental Model:** The first time a computation runs, data must be fetched from RAM (cold cache). Subsequent runs find data in the CPU cache (warm cache) and run faster. If you time only one run, you may be measuring cold-cache performance. If you want to measure steady-state (production) throughput, you should run the code at least once before timing, or average over multiple runs.
+
+A developer times their NumPy code like this:
+
+```python
+t0 = perf_counter()
+C = np.matmul(A, B)  # first ever call with these arrays
+t1 = perf_counter()
+print(t1 - t0)
+```
+
+Why might this measurement be pessimistic (slower than typical production performance)?
+
+- A) `perf_counter()` has a warm-up cost on the first call that inflates the measurement
+- B) The first call fetches `A` and `B` from RAM into cache (cold cache miss); subsequent calls would find the data already cached, running faster
+- C) `np.matmul` compiles JIT code on the first call, making it slower than later calls
+- D) Python's import system is still loading NumPy on the first call, adding import time to the measurement
+
+**Answer: B**
+
+- A) Incorrect — `perf_counter()` has negligible per-call overhead (nanoseconds) and no warm-up cost. It does not inflate measurements.
+- B) Correct — On the first call, `A` and `B` must be loaded from RAM into CPU cache (L2/L3). For two 1000×1000 float64 matrices that is 16 MB of data — larger than most L2 caches. Subsequent calls with the same arrays find the data already warm in cache and run faster. For the Week 13 matmul exercise (100 independent matrix pairs), each pair is only used once, so every call is effectively cold. This means the 5.87 s baseline already reflects cold-cache conditions and subsequent runs would not improve it — but for smaller repeated workloads, this pitfall matters greatly.
+- C) Incorrect — Standard NumPy (`np.matmul`) uses pre-compiled BLAS routines; there is no JIT compilation. Numba JIT has a warm-up cost, but plain NumPy does not.
+- D) Incorrect — NumPy is imported at the top of the script, long before the timing block. The import cost is not included in the `t0`/`t1` measurement.
 
 ---

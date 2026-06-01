@@ -23,6 +23,17 @@
 - [Q16 — Which LSF Flag Keeps Job on One Server?](#q16--which-lsf-flag-keeps-job-on-one-server)
 - [Q17 — Memory Policy for Dataset Larger Than One Node](#q17--memory-policy-for-dataset-larger-than-one-node)
 - [Q18 — Full numactl + Pool Pattern: What Is Printed?](#q18--full-numactl--pool-pattern-what-is-printed)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q19 — What Does numactl --show Print?](#q19--what-does-numactl---show-print)
+- [Q20 — First-Touch in a Worker Process](#q20--first-touch-in-a-worker-process)
+- [Q21 — What Does os.sched_getaffinity Print Under --cpunodebind=0?](#q21--what-does-ossched_getaffinity-print-under---cpunodebind0)
+- [Q22 — Does --membind=0 Prevent Allocation on Node 1?](#q22--does---membind0-prevent-allocation-on-node-1)
+- [Q23 — Predict the Array State After One Reduction Round](#q23--predict-the-array-state-after-one-reduction-round)
+- [Q24 — What Is the NUMA Policy After fork()?](#q24--what-is-the-numa-policy-after-fork)
+- [Q25 — How Many Active Tasks in Round j of a Binary Reduction?](#q25--how-many-active-tasks-in-round-j-of-a-binary-reduction)
+- [Q26 — numactl --interleave=all With --cpunodebind=1: What Happens?](#q26--numactl---interleaveall-with---cpunodebind1-what-happens)
+- [Q27 — Identifying the First-Touch Core from Code](#q27--identifying-the-first-touch-core-from-code)
+- [Q28 — Compute-Bound vs Memory-Bound: Does numactl Help?](#q28--compute-bound-vs-memory-bound-does-numactl-help)
 
 ---
 
@@ -661,3 +672,347 @@ The data is `[0, 1, 2, 3, 4, 5, 6, 7]`. What does the code print?
 - B) Correct — The input is [0, 1, 2, 3, 4, 5, 6, 7]. sum(range(8)) = 28. Round 1 (s=1): arr[0]+=arr[1] → 1, arr[2]+=arr[3] → 5, arr[4]+=arr[5] → 9, arr[6]+=arr[7] → 13. Array: [1, 1, 5, 3, 9, 5, 13, 7]. Round 2 (s=2): arr[0]+=arr[2] → 6, arr[4]+=arr[6] → 22. Array: [6, 1, 5, 3, 22, 5, 13, 7]. Round 3 (s=4): arr[0]+=arr[4] → 28. `arr[0] = 28.0`, matching the expected sum.
 - C) Incorrect — The final round accumulates arr[4] (which already holds the partial sum 22) into arr[0], not arr[7]. The result is 6 + 22 = 28, not 7.
 - D) Incorrect — All 8 elements participate in the reduction. After 3 rounds, arr[0] accumulates contributions from all 8 input values through the tree structure.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets numactl --show output, first-touch in forked workers, sched_getaffinity under cpunodebind, membind strict failure, reduction state tracing, fork policy inheritance, active task count per round, composing interleave with cpunodebind, identifying first-touch from code structure, and compute-bound vs memory-bound numactl effects.
+
+---
+
+## Q19 — What Does numactl --show Print?
+
+```bash
+$ numactl --interleave=all numactl --show
+```
+
+On a 32-core dual-socket machine (node 0: cores 0-15, node 1: cores 16-31), what does the inner `numactl --show` print about the memory policy?
+
+**A)** `policy: default` — `--interleave=all` has no effect on what `--show` reports.
+**B)** `policy: interleave` with `nodes (0-1)` — the interleave policy is active and `--show` confirms it.
+**C)** `policy: bind` with `nodes (0)` — interleaving converts to a bind policy on node 0.
+**D)** `policy: preferred` with `nodes (0)` — interleaving sets a preference for node 0.
+
+**Answer: B**
+
+- A) Incorrect — `numactl --interleave=all` sets the interleave memory policy for the launched process. `numactl --show` (run as a child of the outer numactl) inherits that policy and reports it faithfully, not the default.
+- B) Correct — `numactl --show` prints the current NUMA memory and CPU policy of the running process. When launched under `numactl --interleave=all`, it reports `policy: interleave` and lists the nodes being interleaved across (in this case nodes 0 and 1). This is the correct way to verify that interleaving is active.
+- C) Incorrect — `--interleave=all` sets policy type "interleave", not "bind". `--membind` sets a bind policy. These are different `set_mempolicy()` modes and are reported distinctly by `--show`.
+- D) Incorrect — A preferred policy (`--preferred=N`) is set by a different numactl flag. `--interleave=all` sets the interleave mode, not a preference. `--show` would report `policy: preferred` only if `--preferred` had been used.
+
+---
+
+## Q20 — First-Touch in a Worker Process
+
+```python
+import ctypes
+import multiprocessing as mp
+import numpy as np
+
+def worker_fill(args):
+    shared_arr, start, end = args
+    arr = np.frombuffer(shared_arr, dtype='float32')
+    arr[start:end] = 1.0   # <-- first write to these pages
+
+if __name__ == '__main__':
+    N = 10_000_000
+    shared_arr = mp.RawArray(ctypes.c_float, N)
+    # Do NOT write to shared_arr here in the main process
+
+    pool = mp.Pool(4)
+    chunk = N // 4
+    pool.map(worker_fill,
+             [(shared_arr, i*chunk, (i+1)*chunk) for i in range(4)])
+    pool.close()
+```
+
+On a dual-socket NUMA machine without numactl, with 2 workers on socket 0 (cores 0-1) and 2 workers on socket 1 (cores 16-17), where do the pages of `shared_arr` land?
+
+**A)** All on NUMA node 0 — the main process created `mp.RawArray`, so all pages are first-touched by the main process on node 0.
+**B)** Approximately half on node 0 and half on node 1 — each worker first-touches its own chunk, so pages land on the node of the filling worker.
+**C)** All on NUMA node 1 — shared memory always allocates on the secondary node.
+**D)** Evenly split regardless of worker placement — `mp.RawArray` uses interleaved allocation by default.
+
+**Answer: B**
+
+- A) Incorrect — The main process does NOT write to `shared_arr` after creating it (note the comment "Do NOT write to shared_arr here"). `mp.RawArray` creation reserves the virtual mapping but does not first-touch the pages. The first writes happen in the workers.
+- B) Correct — Workers 0 and 1 run on socket 0 (cores 0-1) and first-touch the first and second chunks. Workers 2 and 3 run on socket 1 (cores 16-17) and first-touch the third and fourth chunks. Because Linux first-touch places pages on the touching core's local node, approximately half the array lands on node 0 and half on node 1. This is effectively manual interleaving via worker placement.
+- C) Incorrect — There is no policy that puts shared memory on the secondary node. Placement is determined by first-touch, which in this case is split across both nodes based on worker assignment.
+- D) Incorrect — `mp.RawArray` uses the default NUMA policy (first-touch), not automatic interleaving. Pages are placed based on which core writes to them first, not by any built-in round-robin mechanism in `RawArray`.
+
+---
+
+## Q21 — What Does os.sched_getaffinity Print Under --cpunodebind=0?
+
+```bash
+numactl --cpunodebind=0 python -c "
+import os
+aff = os.sched_getaffinity(0)
+print(f'CPU count: {len(aff)}')
+print(f'Min CPU: {min(aff)}, Max CPU: {max(aff)}')
+"
+```
+
+On a 32-core dual-socket machine where node 0 owns cores 0–15 and node 1 owns cores 16–31, what does this script print?
+
+**A)** `CPU count: 32 / Min CPU: 0, Max CPU: 31` — `--cpunodebind=0` has no effect on affinity.
+**B)** `CPU count: 1 / Min CPU: 0, Max CPU: 0` — `--cpunodebind=0` pins to a single core (core 0).
+**C)** `CPU count: 16 / Min CPU: 0, Max CPU: 15` — `--cpunodebind=0` restricts to all 16 cores of node 0.
+**D)** `CPU count: 16 / Min CPU: 16, Max CPU: 31` — `--cpunodebind=0` moves all cores to node 1.
+
+**Answer: C**
+
+- A) Incorrect — `--cpunodebind=0` explicitly sets the CPU affinity mask to the set of cores belonging to NUMA node 0. `os.sched_getaffinity(0)` reads that affinity mask and will show only the node-0 cores.
+- B) Incorrect — `--cpunodebind=0` binds to all cores of NUMA node 0, not to core 0 alone. Binding to a single core requires `--physcpubind=0`. The `cpunodebind` flag operates at the node (socket) granularity, not the individual-core granularity.
+- C) Correct — Node 0 has cores 0–15 (16 cores). `--cpunodebind=0` sets the affinity mask to exactly those 16 cores. `os.sched_getaffinity(0)` returns that set, so `len(aff)` is 16, `min(aff)` is 0, and `max(aff)` is 15.
+- D) Incorrect — `--cpunodebind=0` binds to node 0's cores (0–15), not node 1's cores (16–31). Swapping to node 1 would require `--cpunodebind=1`.
+
+---
+
+## Q22 — Does --membind=0 Prevent Allocation on Node 1?
+
+```python
+import numpy as np
+import subprocess, sys
+
+# Run this script under: numactl --membind=0 python script.py
+# Node 0 has 8 GB free. This allocation requests 12 GB.
+
+try:
+    arr = np.zeros((3_000_000_000,), dtype='float32')   # ~12 GB
+    print("Allocation succeeded")
+except MemoryError:
+    print("MemoryError: allocation failed")
+```
+
+On a machine where NUMA node 0 has 8 GB free and node 1 has 16 GB free, running `numactl --membind=0 python script.py`, what is printed?
+
+**A)** `Allocation succeeded` — `--membind=0` tries node 0 first but falls back to node 1 automatically.
+**B)** `MemoryError: allocation failed` — `--membind=0` is a strict policy; if node 0 cannot satisfy the allocation, it fails rather than using node 1.
+**C)** `Allocation succeeded` — numpy bypasses NUMA policies and allocates wherever memory is available.
+**D)** `Allocation succeeded` — the OS uses swap on node 0 instead of allocating on node 1.
+
+**Answer: B**
+
+- A) Incorrect — `--membind=0` (corresponding to `MPOL_BIND` in the kernel) is a strict binding policy, not a preference. It does not silently fall back to node 1. The flag to use for "prefer node 0, fall back if needed" is `--preferred=0`.
+- B) Correct — With `--membind=0`, if node 0 cannot satisfy the 12 GB allocation (only 8 GB free), the kernel returns `ENOMEM`. NumPy's allocator propagates this as a Python `MemoryError`. The 16 GB free on node 1 is irrelevant; `--membind` strictly prohibits any allocation on node 1.
+- C) Incorrect — NumPy uses standard C `malloc`/`mmap` calls that go through the kernel's memory allocator, which respects the process's NUMA policy. NumPy has no NUMA-bypass mechanism.
+- D) Incorrect — Swap is a last resort when physical memory across all nodes is exhausted. With `--membind=0`, the kernel enforces the bind policy before consulting swap. The allocation fails on the policy check, not on a general OOM condition.
+
+---
+
+## Q23 — Predict the Array State After One Reduction Round
+
+```python
+import numpy as np
+
+# Initial shared array (simplified to 1D for illustration)
+arr = np.array([3.0, 7.0, 2.0, 5.0, 1.0, 4.0, 6.0, 8.0], dtype='float32')
+
+# Round j=0, stride s=1
+# Tasks: i in range(0, 8, 2*1) = [0, 2, 4, 6]
+# Each task: arr[i] += arr[i + 1]
+s = 1
+for i in range(0, len(arr), 2*s):
+    if i + s < len(arr):
+        arr[i] += arr[i + s]
+
+print(arr[:4])
+```
+
+What does `print(arr[:4])` output?
+
+**A)** `[10.  2.  6.  6.]`
+**B)** `[ 3.  7.  2.  5.]` — the array is unchanged.
+**C)** `[10.  7.  7.  5.]`
+**D)** `[ 5.  5.  7.  5.]`
+
+**Answer: C**
+
+- A) Incorrect — arr[2] should be 2.0+5.0=7.0 (not 6.0) and arr[3] should remain 5.0 (unchanged, it is not an active index at stride 1). Check: active indices are 0, 2, 4, 6.
+- B) Incorrect — The loop does modify the array. At stride s=1, active indices (multiples of 2*1=2) are 0, 2, 4, 6. arr[0]+=arr[1] and arr[2]+=arr[3] both change.
+- C) Correct — Active indices at s=1 are {0, 2, 4, 6}. arr[0] += arr[1] → 3+7=10. arr[2] += arr[3] → 2+5=7. arr[4] += arr[5] → 1+4=5 (not printed). arr[6] += arr[7] → 6+8=14 (not printed). arr[1], arr[3] are not active so they remain 7.0 and 5.0. `arr[:4]` is `[10.  7.  7.  5.]`.
+- D) Incorrect — arr[0] = 3+7 = 10, not 5. arr[1] = 7 (unchanged). Summing adjacent pairs at even indices gives 10, not 5, for the first element.
+
+---
+
+## Q24 — What Is the NUMA Policy After fork()?
+
+```python
+import multiprocessing as mp
+import subprocess
+
+def check_policy():
+    # Run numactl --show inside the worker
+    result = subprocess.run(
+        ['numactl', '--show'],
+        capture_output=True, text=True
+    )
+    print(result.stdout.split('\n')[0])  # print first line (policy)
+
+if __name__ == '__main__':
+    # Launched as: numactl --interleave=all python policy_check.py
+    p = mp.Process(target=check_policy)
+    p.start()
+    p.join()
+```
+
+When `policy_check.py` is run as `numactl --interleave=all python policy_check.py`, what does the spawned `numactl --show` inside the worker print on its first line?
+
+**A)** `policy: default` — the forked process does not inherit the parent's NUMA policy.
+**B)** `policy: interleave` — the forked worker inherits the parent's interleave policy via `fork()`.
+**C)** `policy: bind` — `fork()` converts interleave policy to a bind policy for safety.
+**D)** The command raises an error because `numactl --show` cannot be called from a subprocess.
+
+**Answer: B**
+
+- A) Incorrect — NUMA memory policies set via `set_mempolicy()` are part of the Linux process's memory management context, which is fully copied during `fork()`. The forked worker starts with an identical copy of the parent's NUMA policy.
+- B) Correct — `mp.Process` uses `fork()` (on Linux with the default start method). `fork()` creates an exact copy of the parent process, including its NUMA memory policy. Since the parent was launched under `numactl --interleave=all`, the forked child also has `policy: interleave` with nodes (0-1). `numactl --show` inside the worker confirms this.
+- C) Incorrect — `fork()` copies the policy type faithfully; it does not transform interleave into bind. The two are distinct kernel policy modes (`MPOL_INTERLEAVE` vs `MPOL_BIND`) and `fork()` preserves the exact mode.
+- D) Incorrect — `subprocess.run(['numactl', '--show'], ...)` is a valid way to query the current process's NUMA policy. `numactl --show` reads the policy of the process running it (the subprocess itself), which has inherited the interleave policy.
+
+---
+
+## Q25 — How Many Active Tasks in Round j of a Binary Reduction?
+
+```python
+import math
+
+N = 128   # number of images
+
+for j in range(int(math.ceil(math.log2(N)))):
+    s = 2 ** j
+    active_tasks = list(range(0, N, 2 * s))
+    # Filter: only tasks where i + s < N are valid
+    valid_tasks = [i for i in active_tasks if i + s < N]
+    print(f"Round j={j}, stride s={s}: {len(valid_tasks)} active tasks")
+```
+
+What does the code print for `j=0` and `j=6` (the last round)?
+
+**A)** `j=0: 64 tasks, j=6: 0 tasks`
+**B)** `j=0: 64 tasks, j=6: 1 task`
+**C)** `j=0: 128 tasks, j=6: 1 task`
+**D)** `j=0: 64 tasks, j=6: 64 tasks`
+
+**Answer: B**
+
+- A) Incorrect — At j=6 (s=64), `range(0, 128, 128)` produces `[0]`, and since 0+64=64 < 128, the task at i=0 is valid. There is 1 valid task, not 0.
+- B) Correct — At j=0 (s=1): `range(0, 128, 2)` produces 64 indices {0,2,4,...,126}. All satisfy i+1<128, so 64 valid tasks. At j=6 (s=64): `range(0, 128, 128)` produces only `[0]`. i=0, i+s=64 < 128, so 1 valid task. The binary tree halves the active task count each round, going from N/2 down to 1 over log2(N) rounds.
+- C) Incorrect — At j=0, `range(0, 128, 2*1)` = `range(0, 128, 2)` produces 64 indices, not 128. There are N/2 active tasks in the first round, not N.
+- D) Incorrect — The number of active tasks halves each round (the defining property of a binary tree reduction). j=6 has only 1 active task; j=0 has 64. The count cannot stay constant at 64.
+
+---
+
+## Q26 — numactl --interleave=all With --cpunodebind=1: What Happens?
+
+```bash
+numactl --interleave=all --cpunodebind=1 python -c "
+import os
+import numpy as np
+
+# What NUMA policy applies here?
+arr = np.zeros(10_000_000, dtype='float32')
+aff = os.sched_getaffinity(0)
+print(f'Affinity core range: {min(aff)}-{max(aff)}')
+print(f'Affinity core count: {len(aff)}')
+"
+```
+
+On a 32-core dual-socket machine (node 0: cores 0-15, node 1: cores 16-31), what does this script print, and on which NUMA nodes does `arr` reside?
+
+**A)** Affinity core range: 0-31, count 32; arr is fully on node 0 — flags conflict, numactl uses last flag.
+**B)** Affinity core range: 16-31, count 16; arr pages are interleaved across nodes 0 and 1 — flags are independent and both apply.
+**C)** Affinity core range: 0-15, count 16; arr is fully on node 1 — `--cpunodebind=1` overrides interleave.
+**D)** The command fails with an error — `--interleave=all` and `--cpunodebind=1` cannot be used together.
+
+**Answer: B**
+
+- A) Incorrect — numactl does not use "last flag wins" semantics. `--cpunodebind` and `--interleave` are orthogonal flags controlling independent subsystems (CPU affinity vs memory policy). Both are applied simultaneously.
+- B) Correct — `--cpunodebind=1` sets CPU affinity to cores 16-31 (node 1's 16 cores). `--interleave=all` sets the memory policy to interleave across all nodes (0 and 1). These flags are independent: one controls where computation runs, the other controls where memory is allocated. The `zeros` call first-touches pages from core(s) on node 1, but under interleave policy the OS places successive pages on alternating nodes, regardless of which core is touching them.
+- C) Incorrect — `--cpunodebind=1` restricts cores to node 1 but does not override the memory policy. `--interleave=all` continues to apply, distributing pages across both nodes. CPU affinity and memory policy are orthogonal.
+- D) Incorrect — numactl allows combining any memory policy flag (`--interleave`, `--membind`, `--preferred`) with any CPU binding flag (`--cpunodebind`, `--physcpubind`). This is explicitly shown in the lecture slide listing multiple numactl flags that can be used together.
+
+---
+
+## Q27 — Identifying the First-Touch Core from Code
+
+```python
+import ctypes
+import multiprocessing as mp
+import numpy as np
+
+def fill_worker(shared_arr, start, end):
+    arr = np.frombuffer(shared_arr, dtype='float32')
+    arr[start:end] = 99.0   # first write to pages [start:end]
+
+if __name__ == '__main__':
+    N = 8_000_000
+    shared_arr = mp.RawArray(ctypes.c_float, N)
+
+    # Main process fills the first half
+    arr = np.frombuffer(shared_arr, dtype='float32')
+    arr[:N//2] = 1.0    # <-- A: main process writes pages 0 to N//2
+
+    # Worker fills the second half
+    p = mp.Process(target=fill_worker, args=(shared_arr, N//2, N))
+    p.start()
+    p.join()
+    # <-- B: worker writes pages N//2 to N
+```
+
+On a dual-socket NUMA machine without numactl, where does each half of `shared_arr` reside?
+
+**A)** Both halves on node 0 — the main process created `shared_arr` so all pages are bound to node 0.
+**B)** First half on node 0 (first-touched by main process on socket 0), second half on node 1 (first-touched by the worker, which the OS schedules on socket 1 by default).
+**C)** First half on node 0 (first-touched by main process), second half on node 0 as well — forked workers inherit the parent's CPU affinity and always run on socket 0.
+**D)** The placement is unpredictable — the OS may schedule the main process or the worker on either socket without any pattern.
+
+**Answer: C**
+
+- A) Incorrect — The main process creates `shared_arr` (virtual mapping only), but the actual physical page placement is determined by first-touch writes, not by creation. The main process does write the first half on socket 0, placing those pages on node 0. The second half is written by the worker.
+- B) Incorrect — The worker inherits the parent's CPU affinity mask via `fork()`. Without numactl, the parent's affinity is typically the full set of all cores (0-31). The OS scheduler places the worker on any available core; it is not specifically scheduled on socket 1. There is no guarantee the worker ends up on node 1.
+- C) Correct — Without any CPU affinity restriction, both the main process and the forked worker can run on any core. In practice on a lightly loaded HPC node, the scheduler tends to keep the worker near the parent (often on socket 0), so the second half is also likely first-touched on socket 0 and lands on node 0. The key insight: `fork()` inherits the parent's unrestricted affinity (all cores), and without numactl there is no mechanism guaranteeing the worker runs on socket 1.
+- D) Incorrect — While the OS scheduler does have discretion, on a lightly loaded system with a single forked process, the common outcome is socket 0 placement for both. The answer is not perfectly deterministic, but the most likely outcome is both halves on node 0 — making C the correct answer among the options.
+
+---
+
+## Q28 — Compute-Bound vs Memory-Bound: Does numactl Help?
+
+```python
+import numpy as np
+from time import perf_counter
+
+N = 10_000_000
+
+# Workload A: memory-bound — sequential read of a large array
+arr = np.random.rand(N).astype('float32')
+t0 = perf_counter()
+result = np.sum(arr)          # memory bandwidth limited
+t_mem = perf_counter() - t0
+
+# Workload B: compute-bound — repeated multiply-add on a tiny array
+tiny = np.ones(100, dtype='float32')
+t0 = perf_counter()
+for _ in range(100_000):
+    tiny = tiny * 1.0001 + 0.5   # fits entirely in L1 cache
+t_cpu = perf_counter() - t0
+
+print(f"Memory-bound time: {t_mem:.4f}s")
+print(f"Compute-bound time: {t_cpu:.4f}s")
+```
+
+If this script is re-run with `numactl --interleave=all python script.py`, which workload is more likely to change noticeably in runtime, and why?
+
+**A)** Workload B (compute-bound) — interleaving speeds up compute-intensive loops by distributing CPU load.
+**B)** Workload A (memory-bound) — interleaving affects DRAM page placement and can alter memory latency and bandwidth, impacting workloads that regularly miss cache.
+**C)** Neither — numactl only affects multiprocessing programs; single-threaded programs are unaffected.
+**D)** Both equally — numactl changes CPU frequency, which affects both workloads proportionally.
+
+**Answer: B**
+
+- A) Incorrect — `--interleave=all` is a memory policy flag that controls where physical pages are placed. It has no effect on CPU scheduling, core assignment, or the execution of compute-intensive loops that operate entirely within cache. Workload B fits in L1 cache (100 floats = 400 bytes) and never touches DRAM.
+- B) Correct — Workload A (`np.sum` on a 10M-element float32 array = 40 MB) exceeds L3 cache and repeatedly fetches data from DRAM. Changing the NUMA memory policy from first-touch (all local to socket 0) to interleave (50% remote) directly alters the latency of each cache miss. Workload A is memory-bandwidth limited and will be affected. Workload B fits in L1 cache and never issues DRAM requests, so interleaving has no measurable effect on it.
+- C) Incorrect — numactl applies to any process, including single-threaded ones. Memory policy affects every memory allocation and every cache miss that goes to DRAM, regardless of thread count.
+- D) Incorrect — numactl does not modify CPU frequency. It modifies memory placement policy only. CPU frequency is governed by the system's power management (P-states) and is not influenced by numactl.

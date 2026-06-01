@@ -27,6 +27,17 @@
 - [Q20 — Optimal Transfer Count for a Reduction Kernel](#q20-optimal-transfer-count-for-a-reduction-kernel)
 - [Q21 — Comparing Auto-Transfer vs Explicit in One Call](#q21-comparing-auto-transfer-vs-explicit-in-one-call)
 - [Q22 — Reading gpumemtimesum to Find Total Transfer Time](#q22-reading-gpumemtimesum-to-find-total-transfer-time)
+- [Set 3 — Extended Practice](#set-3--extended-practice)
+- [Q23 — to_device Copies Data, Not a View](#q23--to_device-copies-data-not-a-view)
+- [Q24 — device_array Contains Uninitialized Memory](#q24--device_array-contains-uninitialized-memory)
+- [Q25 — Pinned (Page-Locked) Memory](#q25--pinned-page-locked-memory)
+- [Q26 — Keeping Data Resident Across Multiple Kernels](#q26--keeping-data-resident-across-multiple-kernels)
+- [Q27 — Forgetting copy_to_host Before CPU Use](#q27--forgetting-copy_to_host-before-cpu-use)
+- [Q28 — PCIe Theoretical Peak Bandwidth](#q28--pcie-theoretical-peak-bandwidth)
+- [Q29 — When GPU Overhead Dominates: Small-Kernel Trap](#q29--when-gpu-overhead-dominates-small-kernel-trap)
+- [Q30 — Unified Memory Semantics](#q30--unified-memory-semantics)
+- [Q31 — Streaming to Overlap Transfers and Computation](#q31--streaming-to-overlap-transfers-and-computation)
+- [Q32 — Transfer Cost for a Pipeline of Three Kernels](#q32--transfer-cost-for-a-pipeline-of-three-kernels)
 
 ---
 
@@ -540,5 +551,237 @@ Total time = HtoD + DtoH + kernel = 40 + 5 + 15 = 60 ms. Transfer time = 40 + 5 
 - B) Correct — (40 + 5) / (40 + 5 + 15) = 45 / 60 = 75% of GPU-related time is memory transfers.
 - C) Incorrect — 45% would require transfer time / total = 0.45, i.e., transfer time = 27 ms, which matches neither (40 + 5 = 45 ms) nor any simple arithmetic on the given values.
 - D) Incorrect — 55% would require transfer time = 33 ms. The actual transfer time is 45 ms (40 + 5), giving 75%, not 55%.
+
+---
+
+## Set 3 — Extended Practice
+
+> Targets copy-vs-view semantics, uninitialized memory, pinned memory, multi-kernel pipelines, PCIe limits, unified memory, CUDA streams, and common exam traps not covered in Sets 1–2.
+
+---
+
+## Q23 — to_device Copies Data, Not a View
+
+> **Week reference:** Week 9
+
+**Mental Model:** `cuda.to_device(x)` performs a full copy of `x` from host to device at the moment it is called. The resulting `DeviceNDArray` is independent of the original NumPy array — subsequent changes to the host array are not reflected on the device, and vice versa, until an explicit transfer is made.
+
+After calling `d_x = cuda.to_device(x)`, you modify `x[0] = 999` on the host. What is the value stored in `d_x[0]` on the device?
+
+- A) 999, because `d_x` is a view into `x` and reflects the change immediately.
+- B) The original value of `x[0]` before the `cuda.to_device` call, because the transfer is a copy not a view.
+- C) Undefined — modifying a host array after `to_device` corrupts the device buffer.
+- D) 0, because `cuda.to_device` always zero-initialises the device copy.
+
+**Answer: B**
+
+- A) Incorrect — `cuda.to_device(x)` is a full data copy over PCIe, not a shared-memory view. There is no mechanism for host memory writes to appear on the GPU without an explicit new transfer. If `d_x` were a live view, every host write would silently invalidate GPU-side data, which is not how PCIe-connected devices work.
+- B) Correct — at the moment `cuda.to_device(x)` is called, the current values of `x` are copied byte-for-byte to the GPU. The host array `x` and the device array `d_x` are then completely independent. Changing `x[0]` on the host has no effect on `d_x`; to propagate the change you would need to call `cuda.to_device(x)` again or use a targeted device-side write.
+- C) Incorrect — there is no corruption. Host and device memory are separate address spaces. Writing to host array `x` after a `to_device` call is perfectly legal and does not affect the device buffer in any way.
+- D) Incorrect — `cuda.to_device(x)` copies the actual data from `x`, not zeros. Zero-initialisation would defeat the entire purpose of the transfer. The only function that allocates without copying is `cuda.device_array()`.
+
+---
+
+## Q24 — device_array Contains Uninitialized Memory
+
+> **Week reference:** Week 9
+
+**Mental Model:** `cuda.device_array(n)` is the GPU analogue of `np.empty(n)` — it reserves device memory of the requested shape but does NOT initialise the contents. Reading from it before the kernel writes to it yields garbage values. This is a correctness trap when programmers assume zero-initialisation.
+
+A student writes:
+```
+d_out = cuda.device_array(1000, dtype=np.float32)
+result = d_out.copy_to_host()
+print(result[0])
+```
+No kernel has been called. What does `result[0]` contain?
+
+- A) 0.0, because `cuda.device_array` always zero-initialises the allocated buffer.
+- B) An unpredictable (garbage) value, because `cuda.device_array` allocates without initialising.
+- C) `nan`, because uninitialised GPU memory always contains IEEE NaN.
+- D) The value from the previous kernel that used the same memory region, which is always recoverable.
+
+**Answer: B**
+
+- A) Incorrect — if `cuda.device_array` zero-initialised, it would need to perform a kernel or memset operation on the GPU, adding overhead. By design it does not; it behaves like `np.empty`. Assuming zero initialisation is the exact mistake that leads to subtle, hard-to-debug correctness errors.
+- B) Correct — `cuda.device_array(n)` is analogous to `np.empty(n)`: it reserves GPU memory from the allocator's pool without writing any initial values. The bytes in that region contain whatever was previously there — unrelated data from past allocations, OS memory, or truly random bit patterns. Reading before writing is undefined behaviour from a correctness standpoint.
+- C) Incorrect — uninitialised GPU memory can contain any bit pattern. NaN is a specific bit pattern (exponent all-ones, non-zero mantissa) and there is no guarantee uninitialised memory will happen to hold it. Some runs may produce NaN by chance; others will not.
+- D) Incorrect — while the memory may contain bits from a previous allocation, this "value" is not reliably recoverable or predictable across runs, allocation orders, or GPU drivers. It cannot be treated as meaningful data from a prior kernel.
+
+---
+
+## Q25 — Pinned (Page-Locked) Memory
+
+> **Week reference:** Week 9
+
+**Mental Model:** Standard (pageable) host memory can be moved by the OS virtual memory system. Before a DMA transfer, CUDA must first stage the data into a temporary pinned buffer — adding a CPU copy step. Pinned (page-locked) memory bypasses this staging copy, allowing the DMA engine to read directly from the host allocation and achieving close to the full PCIe theoretical bandwidth.
+
+Why does allocating host memory as pinned (page-locked) improve PCIe transfer speed compared to using standard pageable memory?
+
+- A) Pinned memory is stored in the GPU's L2 cache, so it is faster to read.
+- B) Pinned memory prevents the OS from paging that region to disk, allowing the GPU's DMA engine to access it directly without an intermediate staging copy.
+- C) Pinned memory uses a wider PCIe lane allocation than pageable memory.
+- D) Pinned memory compresses data before sending it over PCIe, reducing transfer time.
+
+**Answer: B**
+
+- A) Incorrect — pinned memory lives in the host's RAM, not in any GPU cache. GPU L2 cache is an on-chip resource used for caching device memory accesses during kernel execution; it has no role in host-to-device transfers.
+- B) Correct — standard pageable memory can be swapped out by the OS at any time, so the GPU's DMA engine cannot safely read it directly (the physical address could change). CUDA handles pageable transfers by first copying data to an internal pinned staging buffer, then DMA-ing from that buffer — a two-step process. With pinned memory, the physical address is guaranteed stable, so the DMA engine reads directly from the user's buffer in one step. This eliminates the CPU copy, reduces latency, and achieves bandwidths close to the PCIe theoretical maximum.
+- C) Incorrect — PCIe lane allocation is a hardware property of the motherboard slot and is the same for all host memory transfers regardless of pinning status. The number of lanes used is fixed.
+- D) Incorrect — CUDA does not transparently compress data during PCIe transfers. Data is sent as raw bytes in both cases. Compression would require decompression on the other side and would only be beneficial for compressible data, neither of which applies here.
+
+---
+
+## Q26 — Keeping Data Resident Across Multiple Kernels
+
+> **Week reference:** Week 9
+
+**Mental Model:** The key motivation for explicit device array management is to keep data on the GPU across multiple kernel calls. If the output of kernel A feeds into kernel B, and both are invoked with the same device arrays, zero PCIe transfers are needed between the two kernel calls — all data movement is on-chip between the GPU's compute units and its own VRAM.
+
+A pipeline calls three successive kernels: `preprocess`, `compute`, and `postprocess`. Each kernel's output is the next kernel's input. What is the minimum number of PCIe transfers required for the entire pipeline?
+
+- A) 6 transfers (2 per kernel: 1 HtoD + 1 DtoH each)
+- B) 3 transfers (1 HtoD per kernel, outputs stay on device)
+- C) 2 transfers (1 HtoD for the initial input + 1 DtoH for the final output)
+- D) 0 transfers (kernels communicate through shared GPU memory)
+
+**Answer: C**
+
+- A) Incorrect — this is the auto-transfer cost if each kernel is called with plain NumPy arrays. With explicit device arrays, the intermediate results never leave the GPU, eliminating the 4 unnecessary inter-kernel transfers.
+- B) Incorrect — with explicit transfers, the initial input is uploaded once (1 HtoD). The intermediate data (`preprocess` output → `compute` input, `compute` output → `postprocess` input) travels only through GPU VRAM, never over PCIe. Only 1 HtoD is needed, not 3.
+- C) Correct — optimal pattern: upload the raw input data once (1 HtoD), chain all three kernels using device arrays so intermediate results stay in GPU VRAM, then download the final result once (1 DtoH). Total = 2 PCIe transfers regardless of how many kernels are in the chain.
+- D) Incorrect — while intermediate results stay in GPU VRAM (not PCIe transfers), the original input data must still arrive from the host (1 HtoD) and the final output must return to the host (1 DtoH). Zero transfers is only possible if all data is already on the device, which is not the case for a fresh computation.
+
+---
+
+## Q27 — Forgetting copy_to_host Before CPU Use
+
+> **Week reference:** Week 9
+
+**Mental Model:** A `DeviceNDArray` returned by `cuda.to_device()` or produced by a kernel lives in GPU VRAM. It is not a NumPy array and cannot be used in CPU-side Python operations (indexing, printing, passing to NumPy functions) without first calling `.copy_to_host()`. The exam trap is code that "works" at runtime but silently operates on the device handle rather than the actual data.
+
+After running a kernel with explicit device arrays, a student writes `print(d_result.mean())`. What actually happens?
+
+- A) Python prints the mean of the kernel's output data, just like on a NumPy array.
+- B) Python raises an `AttributeError` because `DeviceNDArray` does not have a `.mean()` method.
+- C) Python raises a `CudaDriverError` because `.mean()` triggers an illegal device memory access.
+- D) Python silently prints 0.0 because device arrays default to zero.
+
+**Answer: B**
+
+- A) Incorrect — `DeviceNDArray` is not a NumPy array. It does not implement the full NumPy array API. Calling `.mean()` on it does not trigger a DtoH transfer followed by a NumPy mean; the method simply does not exist on the device array object.
+- B) Correct — `DeviceNDArray` is a Numba CUDA device array object. It has methods for device-level operations (like `.copy_to_host()`) but it does not implement NumPy ufuncs or reduction methods such as `.mean()`. Calling `.mean()` raises `AttributeError: 'DeviceNDArray' object has no attribute 'mean'`. The correct pattern is `d_result.copy_to_host().mean()`.
+- C) Incorrect — no illegal device memory access occurs because `.mean()` is never dispatched to the GPU at all. The error is a pure Python attribute lookup failure, caught before any CUDA driver interaction.
+- D) Incorrect — `DeviceNDArray` does not silently return zero for unknown method calls. Python's attribute system raises `AttributeError` immediately on a nonexistent attribute lookup.
+
+---
+
+## Q28 — PCIe Theoretical Peak Bandwidth
+
+> **Week reference:** Week 9
+
+**Mental Model:** PCIe bandwidth is a fixed hardware constraint — a sanity-check ceiling for any nsys bandwidth calculation. PCIe 3.0 x16 peaks at ~16 GB/s per direction; PCIe 4.0 x16 doubles to ~32 GB/s. Real-world achieved bandwidth is typically 60–80% of theoretical peak due to protocol overhead. Any nsys result claiming more than the PCIe generation's theoretical peak signals a calculation error.
+
+An nsys profile of a CUDA program reports an HtoD bandwidth of 64 GB/s on a system using a PCIe 4.0 x16 slot. Which conclusion is most appropriate?
+
+- A) The result is correct — PCIe 4.0 x16 supports up to 64 GB/s per direction.
+- B) The result likely contains a measurement or unit-conversion error — PCIe 4.0 x16 peaks at ~32 GB/s per direction.
+- C) The result is correct if pinned memory was used, which doubles the PCIe bandwidth.
+- D) The result is correct — the GPU used NVLink to bypass the PCIe bottleneck.
+
+**Answer: B**
+
+- A) Incorrect — PCIe 4.0 x16 has a raw bit rate of approximately 32 GT/s × 16 lanes × 2 bits/transfer (NRZ encoding) ÷ 8 bits/byte, giving ~64 GB/s total bidirectional bandwidth. However, that 64 GB/s is *bidirectional* (32 GB/s HtoD + 32 GB/s DtoH simultaneously). The per-direction peak is ~32 GB/s. A single HtoD measurement of 64 GB/s is impossible on PCIe 4.0 x16.
+- B) Correct — PCIe 4.0 x16 provides approximately 32 GB/s of bandwidth in a single direction (HtoD or DtoH). An HtoD measurement of 64 GB/s is physically impossible on this hardware. The most likely cause is a unit-conversion mistake (e.g., dividing MB by ms giving MB/ms, then forgetting to multiply by 1000 to reach MB/s, or confusing MiB with MB).
+- C) Incorrect — pinned memory improves bandwidth utilisation by eliminating staging copies and can push achieved bandwidth closer to the theoretical peak (~32 GB/s for PCIe 4.0 x16), but it cannot exceed the hardware's physical limit. Pinned memory does not "double" PCIe bandwidth.
+- D) Incorrect — NVLink is a GPU-to-GPU (or GPU-to-CPU in specific server configurations) interconnect, not a replacement for PCIe for host memory transfers on standard workstations. Even if NVLink were present, the question specifies an HtoD transfer from host RAM, which uses PCIe.
+
+---
+
+## Q29 — When GPU Overhead Dominates: Small-Kernel Trap
+
+> **Week reference:** Week 9
+
+**Mental Model:** Every GPU invocation carries a fixed overhead: kernel launch latency (~5–50 µs), transfer setup, and driver API calls. For small arrays or fast-completing kernels, this fixed overhead can exceed the actual compute benefit. The GPU wins only when the speedup-per-iteration is large enough and/or the number of iterations is large enough to amortise the fixed overhead.
+
+A benchmark times a GPU kernel on a 1 KB array (256 float32 values). It measures: kernel execution = 0.01 ms, HtoD + DtoH transfers = 0.15 ms, CUDA context/launch overhead = 0.20 ms. A CPU implementation takes 0.02 ms. Which statement is correct?
+
+- A) The GPU is faster because its kernel executes 2× faster than the CPU.
+- B) The GPU total time is 0.36 ms, which is 18× slower than the CPU.
+- C) The GPU is faster because CUDA parallelism is always advantageous for array operations.
+- D) The GPU total time equals the CPU time because transfers and kernel time cancel out.
+
+**Answer: B**
+
+- A) Incorrect — comparing only kernel execution time (0.01 ms) to CPU time (0.02 ms) ignores the unavoidable overheads. The relevant comparison is total wall-clock time, not just the compute phase. Selecting the GPU based on kernel time alone is the classic benchmarking error from exam question Q23.
+- B) Correct — total GPU time = kernel (0.01 ms) + transfers (0.15 ms) + launch overhead (0.20 ms) = 0.36 ms. CPU time = 0.02 ms. Ratio = 0.36 / 0.02 = 18×. For very small arrays, the fixed GPU overhead completely dominates the computation, making the GPU vastly slower than the CPU. The break-even point requires a much larger array or many more repeated calls.
+- C) Incorrect — GPU parallelism is beneficial only when the amount of work is large enough to saturate the GPU and the overhead can be amortised. For tiny arrays (1 KB), the GPU spends far more time on overhead than on useful work. "Always advantageous" is false.
+- D) Incorrect — there is no cancellation. The overheads add up: 0.01 + 0.15 + 0.20 = 0.36 ms total, which is far above the CPU's 0.02 ms. The times do not cancel.
+
+---
+
+## Q30 — Unified Memory Semantics
+
+> **Week reference:** Week 9
+
+**Mental Model:** Unified memory (`cuda.managed_array()` in Numba, or `cudaMallocManaged` in C++) creates a single allocation accessible from both CPU and GPU. The CUDA runtime migrates pages automatically on demand — when the CPU accesses a page, it migrates to host; when the GPU accesses a page, it migrates to device. This simplifies code but does not eliminate PCIe traffic; it just makes transfers implicit and demand-driven.
+
+Which statement about Numba's `cuda.managed_array()` (unified memory) is most accurate?
+
+- A) Unified memory eliminates all PCIe transfers — data is accessible from both CPU and GPU with zero data movement.
+- B) Unified memory migrates pages automatically between host and device on demand, making transfers implicit rather than eliminating them.
+- C) Unified memory is always faster than explicit `cuda.to_device()` and `copy_to_host()` calls.
+- D) Unified memory requires the GPU and CPU to share the same physical DRAM chip.
+
+**Answer: B**
+
+- A) Incorrect — unified memory does not eliminate PCIe transfers. It makes them implicit: when the GPU accesses a page that currently resides on the host, the CUDA runtime migrates that page over PCIe. The transfer still happens; the programmer just does not call `to_device()` explicitly. For large datasets accessed many times, unified memory can actually perform worse than explicit transfers due to page-fault overhead.
+- B) Correct — unified memory provides a single virtual address space visible to both CPU and GPU. The hardware and CUDA runtime manage page migration transparently: when either processor faults on a page not locally resident, the page migrates over PCIe. This simplifies programming but does not change the fundamental PCIe bandwidth constraint or eliminate data movement.
+- C) Incorrect — unified memory can be slower than explicit transfers in performance-critical code because page-fault-driven migration has higher latency and less predictable behaviour than a single, batched `to_device` call. Explicit transfers allow the programmer to overlap transfers with computation using CUDA streams; unified memory's demand-driven migration is harder to overlap.
+- D) Incorrect — in a standard discrete GPU setup, the GPU has its own GDDR/HBM VRAM and the CPU uses system DRAM — two separate physical memories connected by PCIe. Unified memory is a software/hardware abstraction over this physically separate memory topology, not a requirement for shared physical DRAM. (Integrated GPUs that share physical RAM are a different hardware class.)
+
+---
+
+## Q31 — Streaming to Overlap Transfers and Computation
+
+> **Week reference:** Week 9
+
+**Mental Model:** CUDA streams allow HtoD transfers, kernel execution, and DtoH transfers to be pipelined for independent data chunks. While chunk i is being processed by the kernel, chunk i+1 is being uploaded via HtoD and chunk i-1 is being downloaded via DtoH — all concurrently on separate hardware engines. This is only possible when the operations are on independent data and use different streams.
+
+Which condition must hold for CUDA stream-based pipelining to successfully overlap an HtoD transfer with kernel execution?
+
+- A) The kernel and the HtoD transfer must operate on the same data, so the GPU can prefetch while computing.
+- B) The kernel and the HtoD transfer must operate on independent data (different buffers), so neither has to wait for the other to complete.
+- C) Stream pipelining only works with pinned memory for the kernel input; standard pageable memory cannot be streamed.
+- D) The HtoD transfer and the kernel must both be submitted to the same CUDA stream in order to overlap.
+
+**Answer: B**
+
+- A) Incorrect — if the kernel reads from the same buffer that the HtoD transfer is writing, the GPU must wait for the transfer to complete before the kernel can begin. Overlapping requires independence: the kernel processes already-resident data while new data arrives in a separate buffer.
+- B) Correct — the fundamental requirement for transfer/compute overlap is that the kernel and the concurrent HtoD transfer touch different buffers. A typical double-buffering pattern: buffer A is currently on device and being processed by the kernel; buffer B (the next chunk) is being uploaded via HtoD in a separate stream. Once the kernel finishes with A, the DtoH for A and HtoD for C start, while the kernel begins on B. No operation depends on another in-flight operation.
+- C) Incorrect — while pinned memory is required for asynchronous (non-blocking) transfers (`cudaMemcpyAsync`), it is not an additional condition for overlap beyond what the stream API already requires. The assertion that "standard pageable memory cannot be streamed" conflates two separate issues. Overlap does require pinned memory for the async copy path, but the fundamental condition for overlap is data independence (option B), not the memory type per se.
+- D) Incorrect — placing both operations in the same stream serialises them (all operations in a stream execute in order). To overlap a transfer and a kernel, they must be in different streams so the CUDA runtime can schedule them concurrently on separate hardware engines (copy engine vs. SM compute engine).
+
+---
+
+## Q32 — Transfer Cost for a Pipeline of Three Kernels
+
+> **Week reference:** Week 9
+
+**Mental Model:** Each kernel in a pipeline shares data with its neighbours. With auto-transfer (NumPy args), every kernel call incurs a full 2k-transfer round-trip even for data that was just computed on the GPU in the previous call. With explicit device arrays, intermediate results travel only through GPU VRAM — they never cross PCIe. The total PCIe cost for a k-kernel pipeline with explicit transfers is always 2 transfers (1 HtoD + 1 DtoH), regardless of the number of kernels.
+
+A pipeline has 3 kernels: `K1(inp, mid1)`, `K2(mid1, mid2)`, `K3(mid2, out)` where `inp` is the initial input and `out` is the final output. All arrays are 100 MB. With Numba auto-transfer (all NumPy arrays), how many total PCIe transfers and how many MB of data cross the PCIe bus?
+
+- A) 3 transfers, 300 MB total
+- B) 6 transfers, 600 MB total
+- C) 12 transfers, 1,200 MB total
+- D) 18 transfers, 1,800 MB total
+
+**Answer: C**
+
+- A) Incorrect — auto-transfer moves every argument of every kernel call both HtoD before and DtoH after. There are 3 kernels with 2 arguments each → 6 transfers per kernel direction. Counting only 3 (one per kernel) ignores both the DtoH direction and the second argument.
+- B) Incorrect — 6 transfers would correspond to 1 HtoD + 1 DtoH per kernel (only one argument counted). Each kernel has 2 array arguments, each transferred in both directions: 4 transfers per kernel × 3 kernels = 12 transfers.
+- C) Correct — each kernel call with 2 NumPy arguments triggers 2 HtoD + 2 DtoH = 4 transfers per call. Over 3 kernel calls: 4 × 3 = 12 transfers. Each transfer moves 100 MB, so total data moved = 12 × 100 MB = 1,200 MB. With explicit device arrays, this collapses to 2 transfers and 200 MB total — a 6× improvement.
+- D) Incorrect — 18 transfers would imply 6 transfers per kernel (3 arguments in both directions). Each kernel has exactly 2 arguments, not 3. Counting 18 means either adding a ghost argument or mistakenly counting 3 arguments per kernel.
 
 ---
