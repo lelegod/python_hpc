@@ -192,6 +192,22 @@ For float64: 1 element = 8 bytes. For float32: 4 bytes. For uint8: 1 byte.
 
 **Matrix size in bytes:** `rows * cols * dtype_bytes`
 
+### SI Prefixes
+
+| Prefix | Symbol | Factor | Example |
+|--------|--------|--------|---------|
+| kilo   | k      | 10³    | 1 KB = 1,000 bytes |
+| mega   | M      | 10⁶    | 1 MB = 1,000,000 bytes |
+| giga   | G      | 10⁹    | 1 GHz = 1 billion cycles/s |
+| tera   | T      | 10¹²   | 1 TB/s = peak memory bandwidth |
+| peta   | P      | 10¹⁵   | 1 PFLOP/s = top supercomputer |
+| milli  | m      | 10⁻³   | 1 ms = 0.001 s |
+| micro  | µ      | 10⁻⁶   | 1 µs = 0.000001 s |
+| nano   | n      | 10⁻⁹   | 1 ns ≈ 1 CPU clock cycle at 1 GHz |
+| pico   | p      | 10⁻¹²  | 1 pJ = energy per GPU operation |
+
+> **Binary vs decimal:** KB/MB/GB are loosely used — strictly 1 KiB = 1024 bytes, 1 GiB = 1024³ bytes. OS tools often report in GiB but label it GB.
+
 ### Profiling Tools
 
 ```bash

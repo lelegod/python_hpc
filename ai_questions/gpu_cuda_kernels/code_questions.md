@@ -690,16 +690,16 @@ result = out_dev.copy_to_host()
 How many HtoD and DtoH transfers occur in total?
 
 - A) 3 HtoD + 1 DtoH
-- B) 2 HtoD + 1 DtoH (1 explicit pre-load of mask + 1 auto for src; 1 explicit copy_to_host)
+- B) 2 HtoD + 1 DtoH
 - C) 0 HtoD + 1 DtoH
-- D) 1 HtoD + 0 DtoH
+- D) 2 HtoD + 2 DtoH (1 explicit pre-load of mask + 1 auto for src; 1 auto copy-back of src + 1 explicit copy_to_host)
 
-**Answer: B**
+**Answer: D**
 
 - A) Incorrect — only `src` triggers an automatic HtoD (1 auto); `mask_dev` was pre-loaded with 1 explicit HtoD; `out_dev` is device-only (0 HtoD); total HtoD = 2, not 3
-- B) Correct — `cuda.to_device(np.ones(...))` = 1 HtoD (explicit, before call); `blend(src, ...)` with `src` as NumPy = 1 auto HtoD; `mask_dev` and `out_dev` are device arrays = 0 auto; `copy_to_host()` = 1 DtoH; total = 2 HtoD + 1 DtoH
+- B) Incorrect — misses the automatic DtoH for `src`; Numba's automatic transfer for NumPy args is a round-trip (HtoD before kernel + DtoH after), so `src` triggers both directions
 - C) Incorrect — `src` is a NumPy array passed to a `@cuda.jit` kernel → automatic HtoD occurs
-- D) Incorrect — `copy_to_host()` is an explicit DtoH; it fires once
+- D) Correct — `cuda.to_device(np.ones(...))` = 1 HtoD (explicit); `blend(src, ...)` with `src` as NumPy = 1 auto HtoD + 1 auto DtoH (Numba copies it back after the kernel in case it was modified); `copy_to_host()` = 1 DtoH (explicit); total = 2 HtoD + 2 DtoH
 
 ---
 
