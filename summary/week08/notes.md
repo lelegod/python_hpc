@@ -4,32 +4,35 @@
 
 ## Contents
 
-- [Overview](#overview)
-- [Theory & Concepts](#theory-concepts)
-  - [The Problem: Data Too Large for RAM](#the-problem-data-too-large-for-ram)
-  - [Pandas Chunking](#pandas-chunking)
-  - [Memory Mapping](#memory-mapping)
-  - [numpy.memmap](#numpymemmap)
-  - [Zarr Arrays](#zarr-arrays)
-  - [When to Use What](#when-to-use-what)
-- [Key Code Examples](#key-code-examples)
-  - [Mandelbrot reference implementation (mandelbrotref.py)](#mandelbrot-reference-implementation-mandelbrotrefpy)
-  - [Creating a memmap and writing results](#creating-a-memmap-and-writing-results)
-  - [Reading a memmap (e.g., for downsampling)](#reading-a-memmap-eg-for-downsampling)
-  - [Pandas chunked CSV processing](#pandas-chunked-csv-processing)
-  - [CSV to chunked Parquet conversion](#csv-to-chunked-parquet-conversion)
-  - [Reading chunked Parquet with column pruning](#reading-chunked-parquet-with-column-pruning)
-- [Exercise Highlights](#exercise-highlights)
-  - [Exercise 1 — Dataframe Chunking (DMI precipitation data)](#exercise-1-dataframe-chunking-dmi-precipitation-data)
-  - [Exercise 2 — Mandelbrot memmap](#exercise-2-mandelbrot-memmap)
-  - [Exercise 3 — Mandelbrot Zarr](#exercise-3-mandelbrot-zarr)
-- [Key Takeaways](#key-takeaways)
+- [Week 8 — Storing Big Data](#week-8--storing-big-data)
+  - [Contents](#contents)
+  - [Overview](#overview)
+  - [Theory \& Concepts](#theory--concepts)
+    - [The Problem: Data Too Large for RAM](#the-problem-data-too-large-for-ram)
+    - [Pandas Chunking](#pandas-chunking)
+    - [Memory Mapping](#memory-mapping)
+      - [Motivation](#motivation)
+    - [numpy.memmap](#numpymemmap)
+    - [Zarr Arrays](#zarr-arrays)
+    - [When to Use What](#when-to-use-what)
+  - [Key Code Examples](#key-code-examples)
+    - [Mandelbrot reference implementation (mandelbrotref.py)](#mandelbrot-reference-implementation-mandelbrotrefpy)
+    - [Creating a memmap and writing results](#creating-a-memmap-and-writing-results)
+    - [Reading a memmap (e.g., for downsampling)](#reading-a-memmap-eg-for-downsampling)
+    - [Pandas chunked CSV processing](#pandas-chunked-csv-processing)
+    - [CSV to chunked Parquet conversion](#csv-to-chunked-parquet-conversion)
+    - [Reading chunked Parquet with column pruning](#reading-chunked-parquet-with-column-pruning)
+  - [Exercise Highlights](#exercise-highlights)
+    - [Exercise 1 — Dataframe Chunking (DMI precipitation data)](#exercise-1--dataframe-chunking-dmi-precipitation-data)
+    - [Exercise 2 — Mandelbrot memmap](#exercise-2--mandelbrot-memmap)
+    - [Exercise 3 — Mandelbrot Zarr](#exercise-3--mandelbrot-zarr)
+  - [Key Takeaways](#key-takeaways)
 
 ---
 
 ## Overview
 
-Week 8 addresses the core problem of handling data that does not fit into RAM. The lecture opens with the motivating quote: "My job was killed because it used too much memory" — and rather than simply requesting more memory, the week introduces three principled techniques for working within memory constraints: **Pandas chunking**, **NumPy memory mapping**, and **Zarr arrays**. The exercises apply all three to the running Mandelbrot and DMI weather datasets.
+Week 8 addresses the core problem of handling data that does not fit into RAM. The lecture opens with the motivating quote: "My job was killed because it used too much memory" — and rather than simply  memory, the week introduces three principled techniques for working within memory constraints: **Pandas chunking**, **NumPy memory mapping**, and **Zarr arrays**. The exercises apply all three to the running Mandelbrot and DMI weather datasets.
 
 ---
 

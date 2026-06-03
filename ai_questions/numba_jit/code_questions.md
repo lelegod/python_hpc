@@ -26,6 +26,13 @@
 - [Q16 — Loop-Carried Dependency with prange](#q16--loop-carried-dependency-with-prange)
 - [Q17 — cache=True and __pycache__ Location](#q17--cachetrue-and-__pycache__-location)
 - [Q18 — @numba.stencil Output](#q18--numbastencil-output)
+- [Q19 — dict Literal in @njit](#q19--dict-literal-in-njit)
+- [Q20 — Calling Undecorated Python Function from @njit](#q20--calling-undecorated-python-function-from-njit)
+- [Q21 — parallel=True with range vs prange](#q21--paralleltrue-with-range-vs-prange)
+- [Q22 — print() Inside @njit](#q22--print-inside-njit)
+- [Q23 — Default Arguments in @njit](#q23--default-arguments-in-njit)
+- [Q24 — fastmath=True: Purpose and Risk](#q24--fastmathtrue-purpose-and-risk)
+- [Q25 — In-Place Array Modification Return Value](#q25--in-place-array-modification-return-value)
 
 ---
 
@@ -657,6 +664,251 @@ print(result)
 - B) Correct — the stencil computes `a[i+1] - a[i-1]` at each index `i`. Boundary elements where a neighbour is out of bounds receive zero by `@stencil`'s default `const_border` policy. Results: `i=0`: left OOB → `0`; `i=1`: `a[2]-a[0]=9-1=8`; `i=2`: `a[3]-a[1]=16-4=12`; `i=3`: `a[4]-a[2]=25-9=16`; `i=4`: right OOB → `0`. Output: `[0. 8. 12. 16. 0.]`.
 - C) Incorrect — `@numba.stencil` handles out-of-bounds stencil accesses gracefully by returning the boundary value (zero by default, the `const_border` policy). No `IndexError` is raised. Automatic boundary handling is one of the main conveniences the decorator provides over a manual loop.
 - D) Incorrect — `@stencil` does not use periodic/wrap-around boundary conditions by default. Out-of-bounds accesses use the `const_border` policy (zero-fill). To use wrap-around, you would need to implement the boundary logic manually inside the kernel.
+
+---
+
+## Q19 — dict Literal in @njit
+
+```python
+from numba import njit
+
+@njit
+def histogram(data):
+    counts = {}
+    for x in data:
+        if x in counts:
+            counts[x] += 1
+        else:
+            counts[x] = 1
+    return counts
+```
+
+**What happens when this is called?**
+
+- A) Compiles and runs correctly — plain Python dicts work in nopython mode
+- B) TypingError at compilation — plain `{}` dict literals are not supported in nopython mode; use `numba.typed.Dict`
+- C) Falls back to object mode silently and runs correctly
+- D) Compiles fine but raises `KeyError` at runtime on the first new key
+
+**Answer: B**
+
+- A) Incorrect — plain Python dicts (`{}`) are not supported in `@njit` (nopython mode). Numba requires `numba.typed.Dict` for dict-like containers in compiled functions.
+- B) Correct — Numba raises a `TypingError` during JIT compilation because it cannot infer a type for a plain Python dict literal. Fix: use `numba.typed.Dict.empty(key_type, value_type)` instead.
+- C) Incorrect — `@njit` (shorthand for `@jit(nopython=True)`) never falls back to object mode; it errors immediately if compilation fails. Plain `@jit` without `nopython=True` would silently fall back, but not `@njit`.
+- D) Incorrect — the error is raised at compile time (JIT compilation on first call), not at runtime. Numba type-checks the entire function body before executing any of it.
+
+---
+
+## Q20 — Calling Undecorated Python Function from @njit
+
+```python
+import numpy as np
+from numba import njit
+
+def square(x):
+    return x * x   # plain Python, no decorator
+
+@njit
+def sum_of_squares(arr):
+    total = 0.0
+    for x in arr:
+        total += square(x)
+    return total
+
+a = np.arange(4, dtype=np.float64)   # [0., 1., 2., 3.]
+print(sum_of_squares(a))
+```
+
+**What happens?**
+
+- A) TypingError — `@njit` cannot call functions that are not decorated with `@jit` or `@njit`
+- B) Runs and prints `14.0` — Numba traces into and compiles `square` as part of the same compilation pass
+- C) Falls back to object mode for the `square(x)` call, slowing down the whole function
+- D) Prints `0.0` — undecorated calls return `None` in nopython mode, and `None` is treated as 0
+
+**Answer: B**
+
+- A) Incorrect — Numba does not require called functions to be pre-decorated. When compiling `sum_of_squares`, it traces into `square`, infers its types from the call site (`x` is float64), and compiles it inline. No decorator on `square` is needed.
+- B) Correct — Numba compiles called Python functions on demand as part of the same JIT pass. `square(x)` where `x` is float64 compiles to `x * x`. `0² + 1² + 2² + 3² = 0 + 1 + 4 + 9 = 14.0`.
+- C) Incorrect — `@njit` never silently drops to object mode; it either compiles the entire call graph in nopython mode or raises a TypingError. There is no partial object-mode fallback.
+- D) Incorrect — Numba does not substitute `None` for undecorated calls. The function is compiled and returns the correct numeric result.
+
+---
+
+## Q21 — parallel=True with range vs prange
+
+```python
+import numpy as np
+from numba import njit, prange
+
+@njit(parallel=True)
+def sum_range(arr):
+    total = 0.0
+    for i in range(len(arr)):      # regular range
+        total += arr[i]
+    return total
+
+@njit(parallel=True)
+def sum_prange(arr):
+    total = 0.0
+    for i in prange(len(arr)):     # prange
+        total += arr[i]
+    return total
+```
+
+**Which function benefits from CPU parallelization, and why?**
+
+- A) Both — `parallel=True` parallelizes all loops regardless of whether `range` or `prange` is used
+- B) Only `sum_prange` — regular `range` loops are not parallelized; only `prange` explicitly requests parallel execution
+- C) Neither — scalar reductions cannot be parallelized in Numba at all
+- D) Only `sum_range` — `prange` is reserved for GPU kernels; on CPU it has no effect
+
+**Answer: B**
+
+- A) Incorrect — `parallel=True` enables two distinct mechanisms: (1) `prange` loops for explicit parallelism, and (2) automatic parallelization of NumPy-style array expressions. A regular `range` loop with a scalar accumulator is not recognized as a parallel pattern by the auto-parallelizer.
+- B) Correct — `prange` is Numba's signal to the auto-parallelizer that loop iterations are independent. Numba detects `total += arr[i]` inside `prange` as a scalar reduction, creates private accumulators per thread, and merges them. With `range`, the same loop is compiled serially.
+- C) Incorrect — `prange` reductions on scalars are explicitly supported. Numba performs automatic parallel scalar reductions for `+=`, `*=`, etc. when used with `prange`.
+- D) Incorrect — `prange` is for CPU parallelism via Numba's threading backend. GPU kernels use `@cuda.jit` with `cuda.grid()`; `prange` is entirely unrelated to GPU execution.
+
+---
+
+## Q22 — print() Inside @njit
+
+```python
+from numba import njit
+import numpy as np
+
+@njit
+def verbose_max(arr):
+    best = arr[0]
+    for x in arr:
+        if x > best:
+            best = x
+            print("New best:", best)
+    return best
+
+a = np.array([1.0, 3.0, 2.0, 5.0, 4.0])
+result = verbose_max(a)
+```
+
+**Does `print()` work inside `@njit`, and what does it output?**
+
+- A) TypingError — `print()` is a Python built-in and is not supported in nopython mode
+- B) Compiles and prints `New best: 3.0` then `New best: 5.0` — Numba supports `print()` with numeric scalars and string literals in nopython mode
+- C) The `print()` calls compile but produce no output — stdout is suppressed inside nopython kernels
+- D) Only works if the argument is a string; `print("New best:", best)` raises TypingError because `best` is a float
+
+**Answer: B**
+
+- A) Incorrect — Numba supports `print()` in nopython mode for numeric scalars (int, float) and string literals. It maps to a low-level `printf`-style call rather than the Python built-in.
+- B) Correct — The kernel compiles. Scanning `[1.0, 3.0, 2.0, 5.0, 4.0]`: 3.0 > 1.0 → prints `New best: 3.0`; 5.0 > 3.0 → prints `New best: 5.0`. Output is two lines.
+- C) Incorrect — output is not suppressed. Numba's `print()` writes directly to stdout via printf, so output appears immediately (useful for debugging inside JIT-compiled kernels).
+- D) Incorrect — mixing a string literal and a numeric argument in `print()` IS supported in nopython mode. Numba handles the common `print("label:", value)` pattern.
+
+---
+
+## Q23 — Default Arguments in @njit
+
+```python
+from numba import njit
+
+@njit
+def clip(x, lo=0.0, hi=1.0):
+    if x < lo:
+        return lo
+    if x > hi:
+        return hi
+    return x
+
+print(clip(2.5))
+print(clip(-1.0))
+print(clip(0.5))
+```
+
+**What is printed?**
+
+- A) TypingError — `@njit` does not support default argument values
+- B) `1.0`, `0.0`, `0.5` — Numba supports default float arguments in nopython mode
+- C) `2.5`, `-1.0`, `0.5` — default values are ignored; all inputs pass through unchanged
+- D) `1.0`, `0.0`, `1.0` — `clip(0.5)` returns `hi` because 0.5 is the upper half of [0, 1]
+
+**Answer: B**
+
+- A) Incorrect — Numba supports default argument values for `@njit` functions. They behave identically to regular Python defaults.
+- B) Correct — `clip(2.5)`: 2.5 > 1.0 → return 1.0. `clip(-1.0)`: -1.0 < 0.0 → return 0.0. `clip(0.5)`: 0.5 is not < 0.0 and not > 1.0 → return 0.5.
+- C) Incorrect — the `if` branches are compiled and execute correctly. Inputs are not passed through unchanged; values outside [lo, hi] are clipped to the boundary.
+- D) Incorrect — `clip(0.5)` hits neither branch (0.5 is within [0.0, 1.0]), so it falls through to `return x`, returning 0.5 exactly.
+
+---
+
+## Q24 — fastmath=True: Purpose and Risk
+
+```python
+import numpy as np
+from numba import njit
+
+@njit(fastmath=False)
+def safe_sum(arr):
+    total = 0.0
+    for x in arr:
+        total += x
+    return total
+
+@njit(fastmath=True)
+def fast_sum(arr):
+    total = 0.0
+    for x in arr:
+        total += x
+    return total
+```
+
+**Which statement about `fastmath=True` is correct?**
+
+- A) `fast_sum` is guaranteed to return the same numeric result as `safe_sum` — `fastmath` only affects throughput, never accuracy
+- B) `fastmath=True` allows the compiler to treat floating-point addition as associative and reorder operations, potentially producing a numerically different result while enabling vectorization
+- C) `fastmath=True` enables multi-core parallelism for the loop — it is equivalent to adding `parallel=True`
+- D) `fastmath=True` is only meaningful for GPU kernels; on CPU it has no effect
+
+**Answer: B**
+
+- A) Incorrect — `fastmath=True` explicitly relaxes IEEE 754 guarantees. The compiler may reorder additions (e.g., sum in pairs, use FMA), which changes rounding behaviour and can produce different results for cancellation-heavy inputs.
+- B) Correct — `fastmath=True` passes LLVM's fast-math flags: assume no NaN/Inf, treat FP arithmetic as associative, allow contraction (FMA), etc. This enables SIMD vectorization of the reduction loop. The tradeoff is that results may differ from strict left-to-right IEEE 754 evaluation, especially with large cancellations.
+- C) Incorrect — `fastmath` and `parallel` are orthogonal flags. `fastmath=True` does not spawn threads; it only changes code generation assumptions for the existing single-threaded (or prange-parallel) loop.
+- D) Incorrect — `fastmath=True` targets the CPU LLVM backend and is fully effective on CPU. It is not GPU-specific; CUDA kernels have their own fast-math settings.
+
+---
+
+## Q25 — In-Place Array Modification Return Value
+
+```python
+import numpy as np
+from numba import njit
+
+@njit
+def fill_zeros(arr):
+    for i in range(len(arr)):
+        arr[i] = 0.0
+    # no return statement
+
+a = np.ones(4, dtype=np.float64)
+r = fill_zeros(a)
+print(r)
+print(a)
+```
+
+**What is printed?**
+
+- A) `[0. 0. 0. 0.]` then `[0. 0. 0. 0.]` — Numba automatically returns the modified array
+- B) `None` then `[0. 0. 0. 0.]` — the array is modified in-place; the function returns `None` with no explicit return
+- C) `None` then `[1. 1. 1. 1.]` — `@njit` operates on a copy; the original `a` is unchanged
+- D) TypingError — `@njit` functions must have an explicit return statement
+
+**Answer: B**
+
+- A) Incorrect — a function with no `return` statement returns `None` in Python, and `@njit` preserves this. Numba does not automatically return the first array argument.
+- B) Correct — NumPy arrays are passed by reference to `@njit` functions; in-place writes to `arr[i]` modify the original array `a`. The function has no `return`, so Python returns `None`. `print(r)` prints `None`; `print(a)` prints `[0. 0. 0. 0.]`.
+- C) Incorrect — `@njit` does NOT copy input arrays. Arrays are passed as pointers to the underlying buffer, so all writes are immediately visible in the caller's NumPy array.
+- D) Incorrect — an explicit `return` is not required. `@njit` functions can return `None` implicitly, just like regular Python functions.
 
 ---
 

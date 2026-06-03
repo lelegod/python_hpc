@@ -34,6 +34,11 @@
 - [Q26 — OMP=0 Undefined Behaviour vs OMP=1](#q26--omp0-undefined-behaviour-vs-omp1)
 - [Q27 — LSB_JOBID in Shell Redirect vs %J in BSUB](#q27--lsb_jobid-in-shell-redirect-vs-j-in-bsub)
 - [Q28 — Amdahl Calculation from Timing Output](#q28--amdahl-calculation-from-timing-output)
+- [Q29 — Process Spawn Overhead for Tiny Tasks](#q29--process-spawn-overhead-for-tiny-tasks)
+- [Q30 — @njit First-Call Timing Trap](#q30--njit-first-call-timing-trap)
+- [Q31 — time.time() Resolution for Sub-ms Benchmarks](#q31--timetime-resolution-for-sub-ms-benchmarks)
+- [Q32 — arr.tolist() in a Tight Loop](#q32--arrtolist-in-a-tight-loop)
+- [Q33 — Cold Cache vs Warm Cache in Profiling](#q33--cold-cache-vs-warm-cache-in-profiling)
 
 ---
 
@@ -1147,5 +1152,183 @@ Theoretical max speedup: 5.0x
 - B) Incorrect — F=0.75 would give S(3) = 1/(0.25 + 0.25) = 2.0×, not 2.5×.
 - C) Incorrect — F=1.0 would require `parallel_time = serial_time / p = 4.0s`, giving speedup=3.0. But 12.0/4.8=2.5, not 3.0.
 - D) Incorrect — F=0.80 gives S(3) = 1/(0.2 + 0.8/3) = 1/0.467 ≈ 2.14×, not 2.5×.
+
+---
+
+## Q29 — Process Spawn Overhead for Tiny Tasks
+
+> **Week reference:** Week 13
+
+```python
+import multiprocessing as mp
+import time
+
+def add_one(x):
+    return x + 1
+
+start = time.perf_counter()
+with mp.Pool(4) as p:
+    results = p.map(add_one, range(10))
+elapsed = time.perf_counter() - start
+```
+
+On a typical laptop, which elapsed time is most realistic, and why?
+
+- A) ~0.0001 s — `Pool.map` overhead for 10 trivial tasks is negligible
+- B) ~0.1–0.5 s — process spawning and IPC (pickle/unpickle) dominate; the actual `x + 1` computation is irrelevant
+- C) ~4.0 s — each of the 4 worker processes takes ~1 s to spawn
+- D) ~10.0 s — each of the 10 tasks takes ~1 s due to GIL contention between workers
+
+**Answer: B**
+
+- A) Incorrect — process-based `Pool` has significant fixed costs: spawning worker processes (fork or spawn), pickling arguments, sending them via IPC pipes, executing, pickling results, and returning them. For `x + 1`, this overhead is orders of magnitude larger than the computation.
+- B) Correct — on macOS (spawn start method) or Linux, `Pool` creation takes ~50–500 ms just for worker process startup. Each `p.map` call also serializes and deserializes all inputs and outputs. For 10 trivially cheap tasks, total elapsed time is dominated by this overhead, typically ~0.1–0.5 s. This is the canonical "don't use Pool for tiny tasks" pitfall from Week 13.
+- C) Incorrect — process spawn time is typically 10–100 ms per process, not 1 s. Four workers would take ~40–400 ms total, not 4 s.
+- D) Incorrect — `multiprocessing.Pool` uses separate processes, not threads. There is no GIL contention between worker processes. Each process has its own GIL.
+
+---
+
+## Q30 — @njit First-Call Timing Trap
+
+> **Week reference:** Week 9
+
+```python
+from numba import njit
+import numpy as np, time
+
+@njit
+def fast_dot(a, b):
+    s = 0.0
+    for i in range(len(a)):
+        s += a[i] * b[i]
+    return s
+
+a = np.random.rand(10**6)
+b = np.random.rand(10**6)
+
+t = time.perf_counter()
+r1 = fast_dot(a, b)
+t1 = time.perf_counter() - t
+
+t = time.perf_counter()
+r2 = fast_dot(a, b)
+t2 = time.perf_counter() - t
+
+print(t1 > t2)
+```
+
+**What is printed, and why?**
+
+- A) `False` — the first call is faster because the CPU is not yet thermally throttled
+- B) `True` — the first call includes JIT compilation time (typically 0.1–3 s); the second reuses the compiled binary
+- C) `False` — JIT compilation is cached from previous runs via `cache=True`, so both calls are equally fast
+- D) `True` — the second call is slower because the CPU cache is cold after the first call completes
+
+**Answer: B**
+
+- A) Incorrect — thermal throttling does not cause a significant speed difference between two consecutive calls on the timescale of a few seconds.
+- B) Correct — the first call to a `@njit` function triggers JIT compilation. Compilation takes 0.1–3 s depending on function complexity and NumPy imports. `t1` therefore includes compilation time and is much larger than `t2` (pure execution). `t1 > t2` is `True`.
+- C) Incorrect — `cache=True` is not set here. Without it, compiled binaries are only held in memory for the current process lifetime. No disk cache is consulted.
+- D) Incorrect — after the first call, the array `a` and `b` data is warm in L3/DRAM from the first pass. The second call is faster, not slower, than the first (ignoring compilation time). And even if caches were cold, that effect is tiny compared to compilation overhead.
+
+---
+
+## Q31 — time.time() Resolution for Sub-ms Benchmarks
+
+> **Week reference:** Week 2 / Week 13
+
+```python
+import time
+import numpy as np
+
+a = np.ones((50, 50))
+b = np.ones((50, 50))
+
+times = []
+for _ in range(100):
+    t0 = time.time()
+    c = a @ b
+    times.append(time.time() - t0)
+
+print(min(times))
+```
+
+**What is the pitfall with using `time.time()` here?**
+
+- A) `time.time()` measures CPU time, not wall time — use `time.process_time()` instead
+- B) `time.time()` resolution on some platforms (notably older Windows) can be as coarse as 10–15 ms — for operations taking microseconds, many measurements will read `0.0`; use `time.perf_counter()`
+- C) There is no pitfall — `time.time()` has nanosecond resolution on all modern operating systems
+- D) The loop must use `timeit.repeat()` instead; `time.time()` is not safe to call in a loop
+
+**Answer: B**
+
+- A) Incorrect — `time.time()` returns wall-clock (real elapsed) time, not CPU time. `time.process_time()` measures CPU time excluding sleep. The issue here is resolution, not the time domain.
+- B) Correct — `time.time()` delegates to the OS system clock, which on some platforms (Windows legacy, some embedded systems) has 10–15 ms granularity. A 50×50 matrix multiply takes ~1–10 µs — far below 10 ms — so many measurements appear as `0.0`. `time.perf_counter()` uses the highest-resolution hardware counter available and is the correct choice for sub-millisecond benchmarking.
+- C) Incorrect — nanosecond resolution is not guaranteed by `time.time()`. It is only guaranteed by `time.perf_counter()` on Python ≥ 3.3 on supported hardware.
+- D) Incorrect — `time.time()` is safe to call in a loop. `timeit.repeat()` is a convenience wrapper that also handles warmup and GC disabling, but it's not the only correct approach.
+
+---
+
+## Q32 — arr.tolist() in a Tight Loop
+
+> **Week reference:** Week 13
+
+```python
+import numpy as np
+
+arr = np.arange(10**6, dtype=np.float64)
+total = 0.0
+
+for x in arr.tolist():
+    total += x
+
+print(total)
+```
+
+**What is the HPC pitfall in this code?**
+
+- A) No pitfall — iterating over a Python list is faster than iterating over a NumPy array directly
+- B) `arr.tolist()` converts the entire 8 MB array into ~24 MB of Python float objects before the loop starts, then the loop runs at slow Python speed; `np.sum(arr)` is ~100× faster
+- C) The loop will silently overflow float64 before reaching 10^6 elements
+- D) `arr.tolist()` is not supported for float64 arrays and raises `TypeError`
+
+**Answer: B**
+
+- A) Incorrect — a Python list of Python floats is *slower* than iterating `arr` directly. Iterating a NumPy array also yields Python float objects (one boxed object per element), so the per-element overhead is similar. The real harm of `.tolist()` is the upfront allocation of the entire Python list in memory.
+- B) Correct — `arr.tolist()` allocates a Python list containing 10^6 Python float objects. Each Python float is ~24 bytes on CPython 64-bit, totalling ~24 MB (vs 8 MB for the NumPy buffer). The subsequent loop iterates at ~50–100 ns/element in Python. `np.sum(arr)` uses vectorized C code and processes the same array in ~1 ms — roughly 100× faster — without any extra allocation.
+- C) Incorrect — float64 range is ±1.8×10^308. The sum 0+1+2+...+(10^6-1) = ~5×10^11, far below float64's maximum. No overflow occurs.
+- D) Incorrect — `.tolist()` is supported for all numeric NumPy dtypes including float64. It returns a standard Python list.
+
+---
+
+## Q33 — Cold Cache vs Warm Cache in Profiling
+
+> **Week reference:** Week 2 / Week 13
+
+```python
+import cProfile
+import numpy as np
+
+arr = np.random.rand(5000, 5000)   # ~200 MB
+
+def row_sums():
+    return arr.sum(axis=1)
+
+cProfile.run('row_sums()', sort='cumulative')
+```
+
+**Why might the profiling result for this single call to `row_sums()` be misleading for production performance estimates?**
+
+- A) `cProfile` adds so much overhead that it slows NumPy C extensions by 10–100×
+- B) The first call reads 200 MB from RAM (cold cache); subsequent calls hit L3 cache and are faster — a single profiled call captures worst-case (cold) latency, not steady-state throughput
+- C) `arr.sum(axis=1)` is not visible in `cProfile` output because it is a C extension; you see only the Python wrapper overhead
+- D) The result is always accurate because `cProfile` measures wall-clock time
+
+**Answer: B**
+
+- A) Incorrect — `cProfile` instruments Python function calls, not C extension internals. Its overhead is ~1 µs per Python call. For a bulk C operation like `np.sum`, the instrumentation overhead is negligible relative to the computation.
+- B) Correct — a 5000×5000 float64 array is 200 MB. The first call fetches 200 MB from DRAM at ~20–50 GB/s (cold), taking ~4–10 ms. If the same data is re-accessed immediately (warm, fitting in L3), it runs at ~100–500 GB/s — 5–25× faster. Profiling a single cold call overstates the steady-state cost for workloads where data is reused. Always warm up (call once, then measure) to get representative numbers.
+- C) Incorrect — `cProfile` does show C extension calls under their Python wrapper names (e.g., `<built-in method numpy.core._multiarray_umath.ndarray.sum>`). The call does appear in the profile; the issue is not invisibility.
+- D) Incorrect — wall-clock time is accurate for what it measures (elapsed real time of that one call), but accurate measurement of a single cold-cache call does not generalize to steady-state performance. "Accurate" and "representative" are different things.
 
 ---

@@ -35,6 +35,11 @@
 - [Q26 — Atomic Add on multiprocessing.Value](#q26--atomic-add-on-multiprocessingvalue)
 - [Q27 — Wrong Reduction: Mutable Default Accumulator](#q27--wrong-reduction-mutable-default-accumulator)
 - [Q28 — Two-Level Reduction: What Does Each Phase Return?](#q28--two-level-reduction-what-does-each-phase-return)
+- [Q29 — Pool Reuse After with Block](#q29--pool-reuse-after-with-block)
+- [Q30 — reduce() With Initializer: Does 0 Ruin max?](#q30--reduce-with-initializer-does-0-ruin-max)
+- [Q31 — pool.map vs pool.starmap for Multi-Arg Functions](#q31--poolmap-vs-poolstarmap-for-multi-arg-functions)
+- [Q32 — Two-Phase Sum Reduction Correctness](#q32--two-phase-sum-reduction-correctness)
+- [Q33 — SharedMemory Name Collision](#q33--sharedmemory-name-collision)
 
 ---
 
@@ -993,5 +998,175 @@ phase2 = reduce(operator.mul, phase1)   # BUG: wrong operator
 - B) Incorrect — `3*1*2*4=24`, not 1. The product coincidentally equalling the minimum is false here.
 - C) Incorrect — `partial_min` calls Python's built-in `min`, which returns the minimum element, not the first element. `phase1=[3,1,2,4]`, not `[8,7,5,9]`.
 - D) Incorrect — `reduce(operator.mul, ...)` computes a product, not a sum. `3*1*2*4=24`, not 10.
+
+---
+
+## Q29 — Pool Reuse After with Block
+
+> **Week reference:** Week 6
+
+```python
+from multiprocessing import Pool
+
+def square(x):
+    return x * x
+
+with Pool(4) as p:
+    results = p.map(square, range(5))
+
+extra = p.map(square, range(3))   # pool used after with block exits
+print(extra)
+```
+
+**What happens when `p.map(square, range(3))` is called after the `with` block?**
+
+- A) Prints `[0, 1, 4]` — the pool stays alive after the `with` block exits
+- B) Raises `ValueError` or `RuntimeError` — the pool is terminated when the `with` block exits and cannot accept new tasks
+- C) Creates a new pool automatically — `Pool` detects it was closed and restarts itself
+- D) Prints `[None, None, None]` — terminated pools return `None` for all tasks
+
+**Answer: B**
+
+- A) Incorrect — the `with Pool(...)` context manager calls `pool.__exit__()` on exit, which calls `pool.terminate()` then `pool.join()`. The pool is dead; worker processes are gone.
+- B) Correct — calling `.map()` on a terminated pool raises `ValueError: Pool not running`. The fix is to either keep the work inside the `with` block or store the pool reference and call `.close()` / `.join()` manually when done.
+- C) Incorrect — Python pools have no self-restart logic. Once terminated, the `Pool` object is permanently in a closed state. You would need to create a new `Pool(4)` explicitly.
+- D) Incorrect — no tasks are dispatched; an exception is raised before any result can be produced.
+
+---
+
+## Q30 — reduce() With Initializer: Does 0 Ruin max?
+
+> **Week reference:** Week 6
+
+```python
+from functools import reduce
+
+values = [3, 5, 2, 8, 1]
+
+result_max = reduce(lambda a, b: a if a > b else b, values, 0)
+print(result_max)
+```
+
+**What is printed?**
+
+- A) `0` — the initializer 0 is kept because the lambda returns `a` when `a > b`, and 0 never beats any value so it is chosen first
+- B) `8` — the initializer 0 is only the starting accumulator; since 0 < all values, it is immediately replaced
+- C) `8` — `reduce` with an initializer ignores the initializer for non-empty iterables
+- D) `TypeError` — `reduce` does not accept an initializer with a lambda function
+
+**Answer: B**
+
+- A) Incorrect — the lambda returns `a if a > b else b`, i.e. the larger of the two. Starting with accumulator 0 and comparing against 3: `0 > 3` is False, so `b=3` is returned. The accumulator immediately becomes 3, not 0.
+- B) Correct — trace through: acc=0 vs 3 → 0>3? No → acc=3. acc=3 vs 5 → 3>5? No → acc=5. acc=5 vs 2 → 5>2? Yes → acc=5. acc=5 vs 8 → 5>8? No → acc=8. acc=8 vs 1 → 8>1? Yes → acc=8. Final: 8. The initializer 0 is below all values so it is harmless here. Caution: if values were all negative (e.g., `[-3, -1]`), starting with 0 would incorrectly return 0.
+- C) Incorrect — `reduce` never ignores the initializer. It is always used as the initial accumulator value and participates in the first comparison.
+- D) Incorrect — `functools.reduce(function, iterable, initializer)` fully supports a lambda and an initializer. The three-argument form is well-documented.
+
+---
+
+## Q31 — pool.map vs pool.starmap for Multi-Arg Functions
+
+> **Week reference:** Week 6
+
+```python
+from multiprocessing import Pool
+
+def power(base, exp):
+    return base ** exp
+
+with Pool(2) as p:
+    try:
+        r1 = p.map(power, [(2, 3), (4, 2)])
+    except TypeError as e:
+        r1 = "TypeError"
+
+    r2 = p.starmap(power, [(2, 3), (4, 2)])
+
+print(r1, r2)
+```
+
+**What is printed?**
+
+- A) `TypeError [8, 16]` — `map` passes each tuple as a single argument; `starmap` unpacks correctly
+- B) `[8, 16] [8, 16]` — `map` automatically unpacks tuples into multiple arguments
+- C) `TypeError TypeError` — neither `map` nor `starmap` handles two-argument functions
+- D) `[8, 16] [8, 16]` — both are equivalent for tuple inputs
+
+**Answer: A**
+
+- A) Correct — `pool.map(f, iterable)` calls `f(item)` for each item: `power((2, 3))` passes the tuple as a single argument to a function expecting two → `TypeError: power() missing 1 required positional argument: 'exp'`. `pool.starmap(f, iterable)` calls `f(*item)`: `power(*(2, 3))` = `power(2, 3)` = 8. Output: `TypeError [8, 16]`.
+- B) Incorrect — `map` does NOT unpack iterables into multiple arguments. It passes each element as-is. To unpack, use `starmap`.
+- C) Incorrect — `starmap` is specifically designed for multi-argument functions via tuple unpacking. `power(*(2, 3))` = `power(2, 3)` works correctly.
+- D) Incorrect — `map` and `starmap` are not equivalent for tuple inputs. `map` passes the tuple as one argument; `starmap` unpacks it.
+
+---
+
+## Q32 — Two-Phase Sum Reduction Correctness
+
+> **Week reference:** Week 6
+
+```python
+from multiprocessing import Pool
+
+def chunk_sum(chunk):
+    return sum(chunk)
+
+data = list(range(1, 9))          # [1, 2, 3, 4, 5, 6, 7, 8]
+chunks = [data[i:i+2] for i in range(0, len(data), 2)]
+# chunks = [[1,2], [3,4], [5,6], [7,8]]
+
+with Pool(4) as p:
+    partial_sums = p.map(chunk_sum, chunks)
+
+total = sum(partial_sums)
+print(total)
+```
+
+**What is printed?**
+
+- A) `28` — the last chunk `[7, 8]` is dropped because `Pool(4)` assigns 3 chunks to 3 workers
+- B) `36` — correct two-phase map-reduce: partial sums are `[3, 7, 11, 15]`, total is 36
+- C) `10` — only the first two partial sums are combined
+- D) `ValueError` — `Pool(4)` cannot process exactly 4 chunks with `map`
+
+**Answer: B**
+
+- A) Incorrect — `Pool.map` distributes all items in the iterable to workers regardless of how many workers there are. 4 chunks are dispatched to 4 workers (or fewer if some workers handle multiple tasks). No chunk is dropped.
+- B) Correct — chunks = `[[1,2],[3,4],[5,6],[7,8]]`. `chunk_sum` returns `[3, 7, 11, 15]`. `sum([3, 7, 11, 15]) = 36`. Verify: `sum(range(1, 9)) = 1+2+...+8 = 36 ✓`. This is the canonical two-phase parallel sum pattern.
+- C) Incorrect — `sum(partial_sums)` sums all four partial sums, not just the first two. `3+7 = 10` would be wrong; the full reduction gives 36.
+- D) Incorrect — `Pool.map` works correctly when the number of tasks equals the number of workers. In fact, `Pool(4)` with 4 tasks is an ideal case: each worker gets exactly one task.
+
+---
+
+## Q33 — SharedMemory Name Collision
+
+> **Week reference:** Week 6
+
+```python
+from multiprocessing.shared_memory import SharedMemory
+
+shm1 = SharedMemory(create=True, size=64, name='myblock')
+
+try:
+    shm2 = SharedMemory(create=True, size=64, name='myblock')
+except Exception as e:
+    print(type(e).__name__)
+finally:
+    shm1.close()
+    shm1.unlink()
+```
+
+**What is printed?**
+
+- A) `FileExistsError` — a shared memory segment named `'myblock'` already exists; `create=True` fails
+- B) `ValueError` — the `size` parameter conflicts with the existing segment's size
+- C) Nothing — the second call silently attaches to the existing block instead of creating
+- D) `MemoryError` — creating two segments with the same name exhausts the shared memory pool
+
+**Answer: A**
+
+- A) Correct — `SharedMemory(create=True, name='myblock')` requests the OS to create a new named shared memory object. If one with that name already exists, the OS rejects it and Python raises `FileExistsError`. To attach to an existing segment, use `create=False`.
+- B) Incorrect — `ValueError` would occur if the `size` is invalid (e.g., 0 or negative). A name collision raises `FileExistsError`, regardless of whether the sizes match.
+- C) Incorrect — `create=True` explicitly means "create new, fail if exists." Silent attachment behaviour requires `create=False`. The semantics mirror `O_CREAT | O_EXCL` in POSIX `shm_open`.
+- D) Incorrect — there is no shared memory pool that gets exhausted by a name conflict. The OS simply rejects the duplicate create request; no memory is allocated for `shm2`.
 
 ---

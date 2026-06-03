@@ -36,6 +36,11 @@
 - [Q26 — uint16 overflow wrap to zero](#q26-uint16-overflow-wrap-to-zero)
 - [Q27 — np.iinfo() max for int16](#q27-npiinfo-max-for-int16)
 - [Q28 — inf minus inf produces NaN](#q28-inf-minus-inf-produces-nan)
+- [Q29 — float32 machine epsilon trap](#q29-float32-machine-epsilon-trap)
+- [Q30 — NaN self-comparison](#q30-nan-self-comparison)
+- [Q31 — int8 array overflow (silent wrap)](#q31-int8-array-overflow-silent-wrap)
+- [Q32 — float32 eps > float64 eps](#q32-float32-eps--float64-eps)
+- [Q33 — float16 overflow to inf](#q33-float16-overflow-to-inf)
 
 ---
 
@@ -752,5 +757,144 @@ print(a - b)
 - B) Incorrect — `inf - inf` is not infinity; it is an indeterminate form. `inf + inf` would give inf, but subtraction of equal infinities is undefined
 - C) Correct — IEEE 754 defines `inf - inf` as NaN (indeterminate form). NumPy will also issue a RuntimeWarning: invalid value encountered in subtract
 - D) Incorrect — floating-point operations on infinities never raise Python exceptions; they follow IEEE 754 rules and produce NaN or inf with optional RuntimeWarnings
+
+---
+
+## Q29 — float32 machine epsilon trap
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+
+a = np.float32(1.0)
+b = np.float32(1e-8)
+print(a + b == np.float32(1.0))
+```
+
+**What is printed?**
+
+- A) `False` — float32 is precise enough to distinguish 1.0 + 1e-8 from 1.0
+- B) `True` — 1e-8 is smaller than float32's machine epsilon (~1.19e-7), so it is lost in the addition
+- C) `True` — floating-point addition always rounds up when adding a small positive to an integer value
+- D) `False` — float32 stores 1e-8 exactly as a subnormal and adds it without loss
+
+**Answer: B**
+
+- A) Incorrect — float32 machine epsilon ε ≈ 2^-23 ≈ 1.19e-7. The ULP (unit in the last place) at 1.0 in float32 is approximately ε. Since 1e-8 ≈ ε/12, adding it to 1.0 rounds back to exactly 1.0. The comparison is True, not False.
+- B) Correct — float32 has 23 mantissa bits → ε ≈ 1.19e-7. Because 1e-8 < ε, it falls below the precision of 1.0 in float32 and is lost. `np.float32(1.0) + np.float32(1e-8) == np.float32(1.0)` evaluates to `True`.
+- C) Incorrect — IEEE 754 rounds to nearest, not always up. Rounding up (toward +∞) is just one of five rounding modes; the default is round-to-nearest-even, which rounds 1e-8 to 0 at the scale of 1.0 in float32.
+- D) Incorrect — 1e-8 can be represented as a float32 subnormal (its magnitude is well above float32's minimum ~1.18e-38), but the issue is not representation of 1e-8 in isolation. It is the precision available when added to 1.0, where the mantissa bits are already fully used by the integer part.
+
+---
+
+## Q30 — NaN self-comparison
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+
+x = np.float64('nan')
+print(x == x)
+print(x != x)
+print(np.isnan(x))
+```
+
+**What is printed?**
+
+- A) `True`, `False`, `True` — NaN equals itself; `np.isnan` confirms
+- B) `False`, `True`, `True` — IEEE 754: NaN is not equal to anything including itself; `np.isnan` is the correct check
+- C) `False`, `False`, `True` — NaN comparisons are neither equal nor unequal
+- D) `True`, `True`, `True` — NumPy overrides IEEE 754 to make NaN reflexive
+
+**Answer: B**
+
+- A) Incorrect — IEEE 754 mandates `NaN != NaN`. `x == x` is `False` for any NaN. This is the single most important IEEE 754 rule about NaN and the motivation for `np.isnan()`.
+- B) Correct — `x == x` → `False` (IEEE 754: all comparisons with NaN return False). `x != x` → `True` (the only value for which `v != v` is True). `np.isnan(x)` → `True` (the intended NaN check). This trio is the standard exam pattern.
+- C) Incorrect — `x != x` IS `True` for NaN, not `False`. The `!=` operator checks if the two values are not equal; since `==` is always False for NaN, `!=` is always True.
+- D) Incorrect — NumPy does not override IEEE 754 semantics for NaN comparisons. `x == x` returns a NumPy bool False, not True.
+
+---
+
+## Q31 — int8 array overflow (silent wrap)
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+
+a = np.array([127], dtype=np.int8)
+b = np.array([1],   dtype=np.int8)
+print((a + b)[0])
+```
+
+**What is printed?**
+
+- A) `128` — NumPy promotes int8 to a larger type automatically to avoid overflow
+- B) `-128` — int8 array arithmetic wraps (two's complement): 127 + 1 = -128
+- C) `OverflowError` is raised
+- D) `0` — overflow resets to zero in NumPy integer arrays
+
+**Answer: B**
+
+- A) Incorrect — NumPy does NOT automatically promote dtypes when adding two same-dtype arrays. `int8 + int8` stays int8. Promotion only happens when mixing dtypes (e.g., int8 + int16 → int16).
+- B) Correct — int8 range is -128 to 127. Adding 1 to 127 produces 128, which in 8-bit two's complement wraps to -128 (bit pattern 10000000). NumPy raises no warning or exception — this is silent overflow, a classic HPC pitfall.
+- C) Incorrect — NumPy integer overflow is always silent; no exception is raised. If you need overflow detection, check values manually or use Python's arbitrary-precision `int`.
+- D) Incorrect — reset to zero would be a saturation behaviour. NumPy uses two's complement wrapping, not saturation arithmetic. The bit pattern 01111111 + 00000001 = 10000000 = -128.
+
+---
+
+## Q32 — float32 eps > float64 eps
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+
+print(np.finfo(np.float32).eps > np.finfo(np.float64).eps)
+```
+
+**What is printed?**
+
+- A) `True` — float32 has wider machine epsilon (lower precision) than float64
+- B) `False` — float32 has narrower machine epsilon (higher precision) than float64
+- C) `True` — a larger dtype always has larger machine epsilon
+- D) `False` — machine epsilon is the same for all IEEE 754 floating-point types
+
+**Answer: A**
+
+- A) Correct — float32 machine epsilon ε32 = 2^-23 ≈ 1.19e-7. float64 machine epsilon ε64 = 2^-52 ≈ 2.22e-16. Since ε32 >> ε64, the comparison is `True`. float32 is less precise: its epsilon is ~536 million times larger than float64's.
+- B) Incorrect — this reverses the relationship. A larger machine epsilon means more rounding per operation, not more precision. float32 has the larger (worse) epsilon.
+- C) Incorrect — the relationship is inverted: more bits → smaller epsilon → higher precision. float64 has more bits and therefore *smaller* epsilon than float32.
+- D) Incorrect — machine epsilon differs between types: float16 ε ≈ 9.77e-4, float32 ε ≈ 1.19e-7, float64 ε ≈ 2.22e-16. These span 12 orders of magnitude.
+
+---
+
+## Q33 — float16 overflow to inf
+
+> **Week reference:** Week 2
+
+```python
+import numpy as np
+
+a = np.float16(60000.0)
+b = np.float16(10000.0)
+print(a + b)
+```
+
+**What is printed?**
+
+- A) `70000.0` — float16 can represent numbers above 65504
+- B) `65504.0` — the result is clamped to float16's maximum finite value
+- C) `inf` — exceeding float16's maximum (~65504) produces positive infinity per IEEE 754
+- D) `nan` — overflow in float16 produces NaN instead of infinity
+
+**Answer: C**
+
+- A) Incorrect — float16's maximum finite value is 65504. The result 70000 > 65504, so it cannot be represented as a finite float16.
+- B) Incorrect — IEEE 754 does not clamp on overflow; it produces `inf` (or `-inf` for negative overflow). Saturation arithmetic (clamping to max) is not the default IEEE 754 behaviour.
+- C) Correct — float16 max finite value = (2 - 2^-10) × 2^15 = 65504. 60000 + 10000 = 70000 > 65504 → overflow → `inf`. NumPy will also issue a RuntimeWarning: overflow encountered in float16 scalars.
+- D) Incorrect — NaN signals an invalid operation (e.g., `0/0`, `inf - inf`, `sqrt(-1)`). Overflow is a different condition that produces `inf`, not NaN.
 
 ---
